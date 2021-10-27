@@ -1,46 +1,13 @@
 import tensorflow as tf
-
-
-
-W1 = tf.Variable(
-			tf.constant([
-                [2, 2],
-                [2, 2],
-                [2, 2],
-                [2, 2]
-            ]),
-			name='W1')
-
-
-inp = tf.constant([
-                    [1, 2, 3, 4],
-                    [1, 2, 3, 4]
-                ])
-
-print(W1)
-print(inp)
-
-m = tf.matmul(inp, W1)
-
-print(m)
+import model
 
 # each column in the weight matrix is a neuron, the values are its weights
-# eat ass
 
 
+ds = model.mnist_dataset()
+ds = ds.batch(100)
 
-layer = tf.keras.layers.Dense(2, activation='relu')
-x = tf.constant([[1., 2., 3.]])
+mod = model.Model()
 
-with tf.GradientTape() as tape:
-  # Forward pass
-  y = layer(x)
-  loss = tf.reduce_mean(y**2)
-
-# Calculate gradients with respect to every trainable variable
-grad = tape.gradient(loss, layer.trainable_variables)
-print(layer.trainable_variables)
-
-x = tf.constant([[1., 2., 3.]])
-y = tf.map_fn(lambda x: round(x, 2))
-print(y)
+x, y = next(iter(ds))
+mod.predict(x)

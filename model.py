@@ -8,7 +8,7 @@ def mnist_dataset():
     y_train = y_train.astype(np.int64)
     train_dataset = tf.data.Dataset.from_tensor_slices(
       (x_train, y_train))
-    return train_dataset.take(1000)
+    return train_dataset
 
 
 class Model:
@@ -17,17 +17,21 @@ class Model:
         layer_lens = [784, 128, 10]
 
         W1 = tf.Variable(
-            tf.random.normal([784, 128], stddev=5)
+            tf.random.normal([784, 128], stddev=5),
+            name="W1"
         )
         B1 = tf.Variable(
-            tf.random.normal([1, 128])
+            tf.random.normal([1, 128]),
+            name="B1"
         )
 
         W2 = tf.Variable(
-            tf.random.normal([128, 10], stddev=5)
+            tf.random.normal([128, 10], stddev=5),
+            name="W2"
         )
         B2 = tf.Variable(
-            tf.random.normal([1, 10])
+            tf.random.normal([1, 10]),
+            name="B2"
         )
 
         self.params = [
@@ -35,16 +39,15 @@ class Model:
             (W2, B2)
         ]
 
-        self.params_list = [W1, B1, W2, B2]
+        self.trainable_variables = [W1, B1, W2, B2]
 
     def predict(self, input):
-        input = tf.reshape(input, [1, 784])
+        input = tf.reshape(input, [tf.shape(input)[0], 1, 784])
         for w, b in self.params:
             output = tf.matmul(input, w) + b
             output = tf.nn.sigmoid(output)
             input = output
-
-        return tf.reshape(output, (10,))
+        return output
 
     def compute_loss(self, preds, targets):
         return tf.keras.losses.SparseCategoricalCrossentropy()(targets, preds)
@@ -58,26 +61,32 @@ class Model:
             loss = self.compute_loss(preds, batch_targets)
 
         grads = tape.gradient(loss, self.params_list)
-        tf.keras.optimizers.RMSprop(learning_rate=0.002).apply_gradients(zip(grads, self.params_list))
+        tf.keras.optimizers.RMSprop(learning_rate=0.05).apply_gradients(zip(grads, self.params_list))
         return loss
 
+if __name__ == '__main__':
+    # mod = Model()
+    # ds = mnist_dataset()
+    # ds = ds.batch(100)
+    #
+    # for i in range(25):
+    #     for batch in ds:
+    #         loss = mod.step_fn(batch)
+    #     print('end of epoch ' + str(i))
+    #     print('loss: ' + str(loss))
+    #
+    #
+    # it = iter(ds.unbatch())
+    # for i in range(5):
+    #     smplx, smply = next(it)
+    #     t = mod.predict(smplx)
+    #     t = tf.math.round(t)
+    #     print(t)
+    #     print(smply)
+    #     print()
 
-mod = Model()
-ds = mnist_dataset()
-ds = ds.batch(100)
-
-for i in range(60):
-    for batch in ds:
-        loss = mod.step_fn(batch)
-    print('end of epoch ' + str(i))
-    print('loss: ' + str(loss))
-
-
-it = iter(ds.unbatch())
-for i in range(5):
-    smplx, smply = next(it)
-    t = mod.predict(smplx)
-    t = tf.math.round(t)
-    print(t)
-    print(smply)
-    print()
+    mod = Model()
+    ds = mnist_dataset()
+    ds = ds.batch(4)
+    smplx, smply = next(iter(ds))
+    print(mod.predict(smplx))
