@@ -40,3 +40,7 @@ with tf.GradientTape() as tape:
 # Calculate gradients with respect to every trainable variable
 grad = tape.gradient(loss, layer.trainable_variables)
 print(layer.trainable_variables)
+
+x = tf.constant([[1., 2., 3.]])
+y = tf.map_fn(lambda x: round(x, 2))
+print(y)
