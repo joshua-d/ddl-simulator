@@ -1,13 +1,13 @@
 import tensorflow as tf
-import model
+import keras_model
 
 # each column in the weight matrix is a neuron, the values are its weights
 
 
-ds = model.mnist_dataset()
+ds = keras_model.mnist_dataset()
 ds = ds.batch(100)
 
-mod = model.Model()
+mod = keras_model.build_model()
 
 x, y = next(iter(ds))
 mod.predict(x)

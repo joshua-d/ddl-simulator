@@ -1,6 +1,5 @@
 import tensorflow as tf
 import multiprocessing
-import model
 import keras_model
 
 
@@ -60,6 +59,9 @@ with strategy.scope():
     train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(
         name='train_accuracy')
 
+for v in multi_worker_model.trainable_variables:
+    print(v.device)
+
 
 @tf.function
 def train_step(iterator):
@@ -81,12 +83,12 @@ def train_step(iterator):
         train_accuracy.update_state(batch_targets, predictions)
         return loss
 
-    per_replica_losses = strategy.run(step_fn, args=(next(iterator),))
+    per_replica_losses = strategy.run(step_fn, args=(next(iterator),))  # calls step fn on each replica on this worker, each replica processes a different batch
     return strategy.reduce(
-      tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)
+      tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)  # sum of losses across replicas
 
 
-global_batch_size = 16
+global_batch_size = 100
 
 def dataset_fn(input_context):
     batch_size = input_context.get_per_replica_batch_size(global_batch_size)
@@ -98,17 +100,17 @@ def dataset_fn(input_context):
 
 @tf.function
 def per_worker_dataset_fn():
-    return strategy.distribute_datasets_from_function(dataset_fn)  # calls dataset_fn on each worker
+    return strategy.distribute_datasets_from_function(dataset_fn)
 
 
 coordinator = tf.distribute.experimental.coordinator.ClusterCoordinator(strategy)
 
-per_worker_dataset = coordinator.create_per_worker_dataset(per_worker_dataset_fn)
+per_worker_dataset = coordinator.create_per_worker_dataset(per_worker_dataset_fn)  # calls dataset_fn on each worker
 per_worker_iterator = iter(per_worker_dataset)
 
 
-num_epoches = 100
-steps_per_epoch = 5
+num_epoches = 10
+steps_per_epoch = 100
 for i in range(num_epoches):
     train_accuracy.reset_states()
     for _ in range(steps_per_epoch):
@@ -117,3 +119,12 @@ for i in range(num_epoches):
     coordinator.join()
     print ("Finished epoch %d, accuracy is %f." % (i, train_accuracy.result().numpy()))
 
+
+ds = keras_model.mnist_dataset()
+ds = ds.batch(10)
+
+b = next(iter(ds))
+x, y = b
+
+print(multi_worker_model.predict(x))
+print(y)
