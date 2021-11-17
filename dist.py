@@ -88,7 +88,7 @@ def train_step(iterator):
       tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)  # sum of losses across replicas
 
 
-global_batch_size = 100
+global_batch_size = 10
 
 def dataset_fn(input_context):
     batch_size = input_context.get_per_replica_batch_size(global_batch_size)
@@ -120,8 +120,30 @@ for i in range(num_epoches):
     print ("Finished epoch %d, accuracy is %f." % (i, train_accuracy.result().numpy()))
 
 
-ds = keras_model.mnist_dataset()
+ds = keras_model.mnist_dataset().take(100)
 ds = ds.batch(10)
+
+
+eval_model = keras_model.build_model()
+
+eval_model.compile(
+    optimizer=tf.keras.optimizers.RMSprop(learning_rate=0.1),
+    loss=tf.keras.losses.SparseCategoricalCrossentropy(),
+    metrics=[tf.keras.metrics.SparseCategoricalAccuracy()],
+)
+
+K1 = eval_model.layers[1].kernel
+B1 = eval_model.layers[1].bias
+K2 = eval_model.layers[2].kernel
+B2 = eval_model.layers[2].bias
+
+K1.assign(multi_worker_model.layers[1].kernel.value())
+B1.assign(multi_worker_model.layers[1].bias.value())
+K2.assign(multi_worker_model.layers[2].kernel.value())
+B2.assign(multi_worker_model.layers[2].bias.value())
+
+eval_model.evaluate(ds)
+
 
 b = next(iter(ds))
 x, y = b
