@@ -1,4 +1,5 @@
 import tensorflow as tf
+from tensorflow import keras
 import keras_model
 
 # each column in the weight matrix is a neuron, the values are its weights
@@ -26,3 +27,7 @@ v2 = tf.constant([[2, 3, 4],
 
 r = (v1 + v2) / 2
 print(r)
+
+
+
+v = tf.distribute.experimental.coordinator.ClusterCoordinator.
