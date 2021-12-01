@@ -20,3 +20,13 @@ def build_model():
     ])
 
     return model
+
+
+def build_model_with_seed(seed):
+    model = tf.keras.models.Sequential([
+        tf.keras.layers.Flatten(input_shape=(28, 28)),
+        tf.keras.layers.Dense(128, activation='sigmoid', kernel_initializer=initializers.RandomNormal(seed=seed), bias_initializer=initializers.Zeros()),
+        tf.keras.layers.Dense(10, kernel_initializer=initializers.RandomNormal(seed=seed), bias_initializer=initializers.Zeros())
+    ])
+
+    return model

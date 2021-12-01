@@ -9,9 +9,9 @@ import datetime
 
 learning_rate = 0.1
 
-num_epoches = 10
+num_epoches = 20
 global_batch_size = 10
-num_samples = 60000
+num_samples = 5000
 
 def dataset_fn(input_context):
     dataset = keras_model.mnist_dataset()
