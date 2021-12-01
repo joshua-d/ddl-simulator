@@ -1,6 +1,8 @@
 import tensorflow as tf
 import multiprocessing
 import keras_model
+import time
+import datetime
 
 
 # tf.debugging.set_log_device_placement(True)
@@ -54,9 +56,11 @@ tf.distribute.Server(
 strategy = tf.distribute.experimental.ParameterServerStrategy(cluster_resolver)
 
 
+learning_rate = 0.1
+
 with strategy.scope():
     multi_worker_model = keras_model.build_model()
-    optimizer = tf.keras.optimizers.RMSprop(learning_rate=0.1)
+    optimizer = tf.keras.optimizers.RMSprop(learning_rate=learning_rate)
     train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(
         name='train_accuracy')
 
@@ -86,9 +90,9 @@ def train_step(iterator):
       tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)
 
 
-num_epoches = 5
+num_epoches = 10
 global_batch_size = 10
-num_samples = 10000
+num_samples = 60000
 
 def dataset_fn(input_context):
     dataset = keras_model.mnist_dataset()
@@ -122,6 +126,9 @@ def train():
     incomplete_steps = []
     num_complete_steps = 0
 
+    print('Beginning training')
+    start_time = time.time()
+
     for i in range(num_epoches):
         train_accuracy.reset_states()
         for _ in range(steps_per_epoch):
@@ -133,8 +140,20 @@ def train():
                 if step._status.value == 'READY':
                     incomplete_steps.remove(step)
                     num_complete_steps += 1
+
                     if train_accuracy.result().numpy() >= accuracy_threshold:
-                        print('Accuracy threshold reached, %d steps' % num_complete_steps)
+                        time_elapsed = time.time() - start_time
+                        print('Accuracy threshold reached, %d steps, %f seconds' % (num_complete_steps, time_elapsed))
+
+                        now = datetime.datetime.now()
+                        time_str = str(now.time())
+                        time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
+
+                        with open('eval_logs/ps_eval_' + time_stamp + '.txt', 'w') as outfile:
+                            outfile.write('%d %d %f\n' % (num_samples, global_batch_size, learning_rate))
+                            outfile.write('%d %d %f\n' % (i, num_complete_steps, time_elapsed))
+                            outfile.close()
+
                         return
 
         print ("Finished epoch %d, accuracy is %f." % (i+1, train_accuracy.result().numpy()))
