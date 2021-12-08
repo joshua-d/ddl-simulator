@@ -12,6 +12,13 @@ def mnist_dataset():
   return train_dataset
 
 
+def test_dataset(num_samples):
+    _, (x_test, y_test) = tf.keras.datasets.mnist.load_data()
+    x_test = x_test / np.float32(255)
+    y_test = y_test.astype(np.int64)
+    return (x_test[0:num_samples], y_test[0:num_samples])
+
+
 def build_model():
     model = tf.keras.models.Sequential([
         tf.keras.layers.Flatten(input_shape=(28, 28)),

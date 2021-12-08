@@ -123,37 +123,36 @@ per_worker_iterator = iter(per_worker_dataset)
 
 def train():
 
-    num_complete_steps = 0
-
     print('Beginning training')
     start_time = time.time()
 
     for i in range(num_epoches):
-
+        epoch = i+1
         train_accuracy.reset_state()
+
         for _ in range(steps_per_epoch):
             coordinator.schedule(train_step, args=(per_worker_iterator,))
 
         coordinator.join()
-        num_complete_steps += steps_per_epoch
 
         if train_accuracy.result().numpy() >= accuracy_threshold:
             time_elapsed = time.time() - start_time
-            print('Accuracy threshold reached, %d steps, %f seconds' % (num_complete_steps, time_elapsed))
+            print('Accuracy threshold reached: %d epochs, %f seconds' % (epoch, time_elapsed))
 
             now = datetime.datetime.now()
             time_str = str(now.time())
             time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
 
             with open('eval_logs/ps_eval_' + time_stamp + '.txt', 'w') as outfile:
-                outfile.write('%d %d %f\n' % (num_samples, global_batch_size, learning_rate))
-                outfile.write('%d %d %f\n' % (i+1, num_complete_steps, time_elapsed))
-                outfile.write('%f\n' % train_accuracy.result().numpy())
+                outfile.write('num samples: %d, batch size: %d, learning rate: %f\n' % (num_samples, global_batch_size, learning_rate))
+                outfile.write('%f seconds\n' % time_elapsed)
+                outfile.write('%f accuracy\n' % train_accuracy.result().numpy())
+                outfile.write('%f' % (epoch))
                 outfile.close()
 
             return
                 
 
-        print ("Finished epoch %d, accuracy is %f." % (i+1, train_accuracy.result().numpy()))
+        print ("Finished epoch %d, accuracy is %f." % (epoch, train_accuracy.result().numpy()))
 
 train()
