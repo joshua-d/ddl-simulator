@@ -9,7 +9,7 @@ import multiprocessing
 
 learning_rate = 0.1
 
-num_epoches = 4
+num_epoches = 20
 global_batch_size = 10
 
 num_train_samples = 5000
@@ -17,7 +17,7 @@ num_test_samples = 5000
 
 def dataset_fn(input_context):
     dataset = keras_model.mnist_dataset()
-    dataset = dataset.shuffle(num_train_samples).take(num_train_samples).repeat(num_epoches)
+    dataset = dataset.take(num_train_samples).repeat(num_epoches)
     dataset = dataset.shard(input_context.num_input_pipelines,
                             input_context.input_pipeline_id)
 
@@ -104,14 +104,10 @@ strategy_2 = tf.distribute.experimental.ParameterServerStrategy(cluster_resolver
 with strategy_1.scope():
     multi_worker_model_1 = keras_model.build_model_with_seed(model_seed)
     optimizer_1 = tf.keras.optimizers.RMSprop(learning_rate=learning_rate)
-    train_accuracy_1 = tf.keras.metrics.SparseCategoricalAccuracy(
-        name='train_accuracy_1')
 
 with strategy_2.scope():
     multi_worker_model_2 = keras_model.build_model_with_seed(model_seed)
     optimizer_2 = tf.keras.optimizers.RMSprop(learning_rate=learning_rate)
-    train_accuracy_2 = tf.keras.metrics.SparseCategoricalAccuracy(
-        name='train_accuracy_2')
 
 
 @tf.function
@@ -131,7 +127,6 @@ def train_step_1(iterator):
         grads = tape.gradient(loss, multi_worker_model_1.trainable_variables)
         optimizer_1.apply_gradients(
             zip(grads, multi_worker_model_1.trainable_variables))
-        train_accuracy_1.update_state(batch_targets, predictions)
         return loss
 
     per_replica_losses = strategy_1.run(step_fn, args=(next(iterator),))
@@ -155,7 +150,6 @@ def train_step_2(iterator):
         grads = tape.gradient(loss, multi_worker_model_2.trainable_variables)
         optimizer_2.apply_gradients(
             zip(grads, multi_worker_model_2.trainable_variables))
-        train_accuracy_2.update_state(batch_targets, predictions)
         return loss
 
     per_replica_losses = strategy_2.run(step_fn, args=(next(iterator),))
@@ -224,16 +218,13 @@ def aggregate_top(w_K1, w_B1, w_K2, w_B2):
 def train():
 
     x_test, y_test = keras_model.test_dataset(num_test_samples)
+    accuracies = []
 
     print('Beginning training')
     start_time = time.time()
 
-    accuracies = []
-
     for i in range(num_epoches):
         epoch = i+1
-        train_accuracy_1.reset_states()
-        train_accuracy_2.reset_states()
 
         w1_step = coordinator_1.schedule(train_step_1, args=(per_worker_iterator_1,))
         w2_step = coordinator_2.schedule(train_step_2, args=(per_worker_iterator_2,))
@@ -265,8 +256,7 @@ def train():
             # print('train acc 1 %f' % train_accuracy_1.result().numpy())
             # print('train acc 2 %f' % train_accuracy_2.result().numpy())
 
-        print("Finished epoch %d, accuracy is %f." % (i+1, train_accuracy_1.result().numpy()))
-        print("2 Finished epoch %d, accuracy is %f." % (i+1, train_accuracy_2.result().numpy()))
+        print("Finished epoch %d" % epoch)
 
         predictions = top_level_model.predict(x_test)
 

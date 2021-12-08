@@ -11,11 +11,13 @@ learning_rate = 0.1
 
 num_epoches = 20
 global_batch_size = 10
-num_samples = 5000
+
+num_train_samples = 5000
+num_test_samples = 5000
 
 def dataset_fn(input_context):
     dataset = keras_model.mnist_dataset()
-    dataset = dataset.take(num_samples).shuffle(num_samples).repeat(num_epoches)
+    dataset = dataset.take(num_train_samples).repeat(num_epoches)
     dataset = dataset.shard(input_context.num_input_pipelines,
                             input_context.input_pipeline_id)
 
@@ -23,8 +25,10 @@ def dataset_fn(input_context):
     dataset = dataset.batch(batch_size)
     return dataset
 
-steps_per_epoch = int(num_samples / global_batch_size)
-accuracy_threshold = 0.90
+steps_per_epoch = int(num_train_samples / global_batch_size)
+accuracy_threshold = 0.9
+
+model_seed = int(time.time())
 
 
 
@@ -76,11 +80,8 @@ tf.distribute.Server(
 strategy = tf.distribute.experimental.ParameterServerStrategy(cluster_resolver)
 
 with strategy.scope():
-    multi_worker_model = keras_model.build_model()
+    multi_worker_model = keras_model.build_model_with_seed(model_seed)
     optimizer = tf.keras.optimizers.RMSprop(learning_rate=learning_rate)
-    train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(
-        name='train_accuracy')
-
 
 
 @tf.function
@@ -100,13 +101,10 @@ def train_step(iterator):
         grads = tape.gradient(loss, multi_worker_model.trainable_variables)
         optimizer.apply_gradients(
             zip(grads, multi_worker_model.trainable_variables))
-        train_accuracy.update_state(batch_targets, predictions)
 
     per_replica_losses = strategy.run(step_fn, args=(next(iterator),))
     return strategy.reduce(
       tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)
-
-
 
 
 @tf.function
@@ -123,36 +121,52 @@ per_worker_iterator = iter(per_worker_dataset)
 
 def train():
 
+    x_test, y_test = keras_model.test_dataset(num_test_samples)
+    accuracies = []
+
     print('Beginning training')
     start_time = time.time()
 
     for i in range(num_epoches):
         epoch = i+1
-        train_accuracy.reset_state()
 
         for _ in range(steps_per_epoch):
             coordinator.schedule(train_step, args=(per_worker_iterator,))
 
         coordinator.join()
+        print('Finished epoch %d' % epoch)
 
-        if train_accuracy.result().numpy() >= accuracy_threshold:
-            time_elapsed = time.time() - start_time
-            print('Accuracy threshold reached: %d epochs, %f seconds' % (epoch, time_elapsed))
+        predictions = multi_worker_model.predict(x_test)
 
-            now = datetime.datetime.now()
-            time_str = str(now.time())
-            time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
+        num_correct = 0
+        for prediction, target in zip(predictions, y_test):
+            answer = 0
+            answer_val = prediction[0]
+            for poss_ans_ind in range(len(prediction)):
+                if prediction[poss_ans_ind] > answer_val:
+                    answer = poss_ans_ind
+                    answer_val = prediction[poss_ans_ind]
+            if answer == target:
+                num_correct += 1
 
-            with open('eval_logs/ps_eval_' + time_stamp + '.txt', 'w') as outfile:
-                outfile.write('num samples: %d, batch size: %d, learning rate: %f\n' % (num_samples, global_batch_size, learning_rate))
-                outfile.write('%f seconds\n' % time_elapsed)
-                outfile.write('%f accuracy\n' % train_accuracy.result().numpy())
-                outfile.write('%f' % (epoch))
-                outfile.close()
+        test_accuracy = float(num_correct) / num_test_samples
+        print('Test accuracy: %f' % test_accuracy)
 
-            return
-                
+        accuracies.append(test_accuracy)
 
-        print ("Finished epoch %d, accuracy is %f." % (epoch, train_accuracy.result().numpy()))
+
+    time_elapsed = time.time() - start_time
+    now = datetime.datetime.now()
+    time_str = str(now.time())
+    time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
+
+    with open('eval_logs/ps_eval_' + time_stamp + '.txt', 'w') as outfile:
+        outfile.write('num train samples: %d, num test samples: %d, batch size: %d, learning rate: %f\n'
+                        % (num_train_samples, num_test_samples, global_batch_size, learning_rate))
+        outfile.write('%f seconds\n\n' % time_elapsed)
+        for accuracy in accuracies:
+            outfile.write('%f\n' % accuracy)
+        outfile.close()
+
 
 train()

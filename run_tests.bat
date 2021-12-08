@@ -8,3 +8,13 @@ python ps_eval.py
 python ps_eval.py
 python ps_eval.py
 python ps_eval.py
+python man_eval.py
+python man_eval.py
+python man_eval.py
+python man_eval.py
+python man_eval.py
+python man_eval.py
+python man_eval.py
+python man_eval.py
+python man_eval.py
+python man_eval.py
