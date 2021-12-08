@@ -3,7 +3,6 @@ import multiprocessing
 import keras_model
 import time
 import datetime
-import multiprocessing
 
 
 
@@ -17,7 +16,7 @@ num_test_samples = 5000
 
 def dataset_fn(input_context):
     dataset = keras_model.mnist_dataset()
-    dataset = dataset.take(num_train_samples).repeat(num_epoches)
+    dataset = dataset.take(num_train_samples).shuffle(num_train_samples).repeat(num_epoches)
     dataset = dataset.shard(input_context.num_input_pipelines,
                             input_context.input_pipeline_id)
 
