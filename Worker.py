@@ -21,8 +21,8 @@ class Worker:
     def send_gradients(self, gradients):
         for ps_id in self.param_locations:
             send_list = []
-            for param_id in self.param_locations[ps_id]: # need to change this part
-                send_list.append({param_id: gradients[param_id]})
+            for param_id in self.param_locations[ps_id]:
+                send_list.append((gradients[param_id], param_id))
             self.cluster.parameter_servers[ps_id].on_receive(send_list)
 
     def train(self):

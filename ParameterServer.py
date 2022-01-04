@@ -13,9 +13,8 @@ class ParameterServer:
         return vals_dict
 
     def on_receive(self, gradients):
-        params_list = []
-        for param_id in gradients:
-            params_list.append(self.params[param_id])
-        grads_list = gradients.values()
+        apply_list = []
+        for grad, param_id in gradients:
+            apply_list.append((grad, self.params[param_id]))
 
-        self.optimizer.apply_gradients(zip(grads_list, params_list))
+        self.optimizer.apply_gradients(apply_list)

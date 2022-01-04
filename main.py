@@ -34,7 +34,7 @@ def model_builder():
     return model, params, forward_pass
 
 
-
+# this just used to create the vars on the parameter server
 initial_model = keras_model.build_model()
 
 params = {
@@ -44,10 +44,8 @@ params = {
     'B2': initial_model.layers[2].bias
 }
 
-
-
-
 ps = ParameterServer(params, tf.keras.optimizers.RMSprop(learning_rate=0.1))
+
 
 cl = Cluster()
 cl.parameter_servers = {
@@ -58,8 +56,34 @@ ds = keras_model.mnist_dataset().batch(10)
 param_locations = {
     'ps1': ['K1', 'B1', 'K2', 'B2']
 }
-w1 = Worker(cl, model_builder, iter(ds.take(100)), param_locations)
-w2 = Worker(cl, model_builder, iter(ds.skip(100).take(100)), param_locations)
+w1 = Worker(cl, model_builder, iter(ds.take(1000)), param_locations)
+w2 = Worker(cl, model_builder, iter(ds.skip(1000).take(1000)), param_locations)
 
-w1.train()
-w1.train()
+
+def eval_once():
+    num_test_samples = 300
+    x_test, y_test = keras_model.test_dataset(num_test_samples)
+    predictions = initial_model.predict(x_test)
+
+    num_correct = 0
+    for prediction, target in zip(predictions, y_test):
+        answer = 0
+        answer_val = prediction[0]
+        for poss_ans_ind in range(len(prediction)):
+            if prediction[poss_ans_ind] > answer_val:
+                answer = poss_ans_ind
+                answer_val = prediction[poss_ans_ind]
+        if answer == target:
+            num_correct += 1
+
+    test_accuracy = float(num_correct) / num_test_samples
+    print('Test accuracy: %f' % test_accuracy)
+
+
+eval_once()
+
+for _ in range(1000):
+    w1.train()
+    w2.train()
+
+eval_once()
