@@ -197,21 +197,18 @@ w2_K2 = multi_worker_model_2.layers[2].kernel
 w2_B2 = multi_worker_model_2.layers[2].bias
 
 
+def request_top(w_K1, w_B1, w_K2, w_B2):
+    w_K1.assign(top_K1.value())
+    w_B1.assign(top_B1.value())
+    w_K2.assign(top_K2.value())
+    w_B2.assign(top_B2.value())
+
+
 def aggregate_top(w_K1, w_B1, w_K2, w_B2):
-    K1_val = (top_K1.value() + w_K1.value()) / 2
-    B1_val = (top_B1.value() + w_B1.value()) / 2
-    K2_val = (top_K2.value() + w_K2.value()) / 2
-    B2_val = (top_B2.value() + w_B2.value()) / 2
-
-    top_K1.assign(K1_val)
-    top_B1.assign(B1_val)
-    top_K2.assign(K2_val)
-    top_B2.assign(B2_val)
-
-    w_K1.assign(K1_val)
-    w_B1.assign(B1_val)
-    w_K2.assign(K2_val)
-    w_B2.assign(B2_val)
+    top_K1.assign(w_K1.value())
+    top_B1.assign(w_B1.value())
+    top_K2.assign(w_K2.value())
+    top_B2.assign(w_B2.value())
 
 
 def train():
@@ -239,6 +236,7 @@ def train():
                 if num_steps_this_epoch == steps_per_epoch:
                     w1_done = True
                 else:
+                    request_top(w1_K1, w1_B1, w1_K2, w1_B2)
                     w1_step = coordinator_1.schedule(train_step_1, args=(per_worker_iterator_1,))
                     num_steps_this_epoch += 1
 
@@ -248,12 +246,10 @@ def train():
                 if num_steps_this_epoch == steps_per_epoch:
                     w2_done = True
                 else:
+                    request_top(w2_K1, w2_B1, w2_K2, w2_B2)
                     w2_step = coordinator_2.schedule(train_step_2, args=(per_worker_iterator_2,)) 
                     num_steps_this_epoch += 1
 
-            # print('step %d' % num_steps_this_epoch)
-            # print('train acc 1 %f' % train_accuracy_1.result().numpy())
-            # print('train acc 2 %f' % train_accuracy_2.result().numpy())
 
         print("Finished epoch %d" % epoch)
 
@@ -288,15 +284,6 @@ def train():
         for accuracy in accuracies:
             outfile.write('%f\n' % accuracy)
         outfile.close()
-        
-
-                
-# next up - time doesnt matter, eval agg model after each epoch for plotting
-# also change ps_eval to do this
-        
-# maybe shuffle ds before take
-
-# above has been done for this, need to reflect changes in ps_eval
 
         
 
