@@ -1,3 +1,4 @@
+import threading
 
 
 class ParameterServer:
@@ -5,6 +6,8 @@ class ParameterServer:
     def __init__(self, params, optimizer):
         self.params = params
         self.optimizer = optimizer
+
+        self.params_lock = threading.Lock()
 
     def on_request(self):
         vals_dict = {}

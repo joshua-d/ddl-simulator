@@ -5,11 +5,12 @@ from ParameterServer import ParameterServer
 from Cluster import Cluster
 import time
 import datetime
+import threading
 
 
 learning_rate = 0.1
 
-num_epoches = 10
+num_epoches = 20
 global_batch_size = 10
 
 num_train_samples = 5000
@@ -82,26 +83,7 @@ param_locations = {
 
 w1 = Worker(cl, model_builder, iter(dataset_fn()), param_locations)
 w2 = Worker(cl, model_builder, iter(dataset_fn()), param_locations)
-
-
-def eval_once():
-    num_test_samples = 300
-    x_test, y_test = keras_model.test_dataset(num_test_samples)
-    predictions = initial_model.predict(x_test)
-
-    num_correct = 0
-    for prediction, target in zip(predictions, y_test):
-        answer = 0
-        answer_val = prediction[0]
-        for poss_ans_ind in range(len(prediction)):
-            if prediction[poss_ans_ind] > answer_val:
-                answer = poss_ans_ind
-                answer_val = prediction[poss_ans_ind]
-        if answer == target:
-            num_correct += 1
-
-    test_accuracy = float(num_correct) / num_test_samples
-    print('Test accuracy: %f' % test_accuracy)
+cl.workers = [w1, w2]
 
 
 
@@ -117,10 +99,17 @@ def train():
     for i in range(num_epoches):
         epoch = i+1
 
-        # schedule steps - need threading
-        for _ in range(int(steps_per_epoch / 2)):
-            w1.train_step()
-            w2.train_step()
+        cl.steps_completed = 0
+        cl.steps_scheduled = steps_per_epoch
+
+        w1_thread = threading.Thread(target=w1.train, daemon=True)
+        w2_thread = threading.Thread(target=w2.train, daemon=True)
+
+        w1_thread.start()
+        w2_thread.start()
+
+        w1_thread.join()
+        w2_thread.join()
 
         print('Finished epoch %d' % epoch)
 
@@ -148,7 +137,7 @@ def train():
     time_str = str(now.time())
     time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
 
-    with open('eval_logs/ps_eval_' + time_stamp + '.txt', 'w') as outfile:
+    with open('eval_logs/custom_ps_' + time_stamp + '.txt', 'w') as outfile:
         outfile.write('num train samples: %d, num test samples: %d, batch size: %d, learning rate: %f\n'
                         % (num_train_samples, num_test_samples, global_batch_size, learning_rate))
         outfile.write('%f seconds\n\n' % time_elapsed)
