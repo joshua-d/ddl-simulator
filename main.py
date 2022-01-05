@@ -3,6 +3,28 @@ import keras_model
 from Worker import Worker
 from ParameterServer import ParameterServer
 from Cluster import Cluster
+import time
+import datetime
+
+
+learning_rate = 0.1
+
+num_epoches = 10
+global_batch_size = 10
+
+num_train_samples = 5000
+num_test_samples = 5000
+
+
+# still no cross-worker data sharding, emulates manual-aggr-eval system
+def dataset_fn():
+    dataset = keras_model.mnist_dataset()
+    dataset = dataset.take(num_train_samples).shuffle(num_train_samples).repeat(num_epoches)
+    dataset = dataset.batch(global_batch_size)
+    return dataset
+
+
+steps_per_epoch = int(num_train_samples / global_batch_size)
 
 
 def model_builder():
@@ -37,33 +59,29 @@ def model_builder():
 # this just used to create the vars on the parameter server
 initial_model = keras_model.build_model()
 
-params_1 = {
+params = {
     'K1': initial_model.layers[1].kernel,
-    'B1': initial_model.layers[1].bias
-}
-
-params_2 = {
+    'B1': initial_model.layers[1].bias,
     'K2': initial_model.layers[2].kernel,
     'B2': initial_model.layers[2].bias
 }
 
-ps_1 = ParameterServer(params_1, tf.keras.optimizers.RMSprop(learning_rate=0.1))
-ps_2 = ParameterServer(params_2, tf.keras.optimizers.RMSprop(learning_rate=0.1))
+ps = ParameterServer(params, tf.keras.optimizers.RMSprop(learning_rate=learning_rate))
 
 
 cl = Cluster()
 cl.parameter_servers = {
-    'ps1': ps_1,
-    'ps2': ps_2
+    'ps1': ps
 }
 
-ds = keras_model.mnist_dataset().batch(10)
+
 param_locations = {
-    'ps1': ['K1', 'B1'],
-    'ps2': ['K2', 'B2']
+    'ps1': ['K1', 'B1', 'K2', 'B2']
 }
-w1 = Worker(cl, model_builder, iter(ds.take(1000)), param_locations)
-w2 = Worker(cl, model_builder, iter(ds.skip(1000).take(1000)), param_locations)
+
+
+w1 = Worker(cl, model_builder, iter(dataset_fn()), param_locations)
+w2 = Worker(cl, model_builder, iter(dataset_fn()), param_locations)
 
 
 def eval_once():
@@ -86,10 +104,57 @@ def eval_once():
     print('Test accuracy: %f' % test_accuracy)
 
 
-eval_once()
 
-for _ in range(1000):
-    w1.train()
-    w2.train()
 
-eval_once()
+def train():
+
+    x_test, y_test = keras_model.test_dataset(num_test_samples)
+    accuracies = []
+
+    print('Beginning training')
+    start_time = time.time()
+
+    for i in range(num_epoches):
+        epoch = i+1
+
+        # schedule steps - need threading
+        for _ in range(int(steps_per_epoch / 2)):
+            w1.train_step()
+            w2.train_step()
+
+        print('Finished epoch %d' % epoch)
+
+        predictions = initial_model.predict(x_test)
+
+        num_correct = 0
+        for prediction, target in zip(predictions, y_test):
+            answer = 0
+            answer_val = prediction[0]
+            for poss_ans_ind in range(len(prediction)):
+                if prediction[poss_ans_ind] > answer_val:
+                    answer = poss_ans_ind
+                    answer_val = prediction[poss_ans_ind]
+            if answer == target:
+                num_correct += 1
+
+        test_accuracy = float(num_correct) / num_test_samples
+        print('Test accuracy: %f' % test_accuracy)
+
+        accuracies.append(test_accuracy)
+
+
+    time_elapsed = time.time() - start_time
+    now = datetime.datetime.now()
+    time_str = str(now.time())
+    time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
+
+    with open('eval_logs/ps_eval_' + time_stamp + '.txt', 'w') as outfile:
+        outfile.write('num train samples: %d, num test samples: %d, batch size: %d, learning rate: %f\n'
+                        % (num_train_samples, num_test_samples, global_batch_size, learning_rate))
+        outfile.write('%f seconds\n\n' % time_elapsed)
+        for accuracy in accuracies:
+            outfile.write('%f\n' % accuracy)
+        outfile.close()
+
+
+train()

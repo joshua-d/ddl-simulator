@@ -25,7 +25,7 @@ class Worker:
                 send_list.append((gradients[param_id], param_id))
             self.cluster.parameter_servers[ps_id].on_receive(send_list)
 
-    def train(self):
+    def train_step(self):
         self.request_params()
         gradients = self.forward_pass(next(self.dataset_iterator))
         self.send_gradients(gradients)

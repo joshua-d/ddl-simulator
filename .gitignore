@@ -130,3 +130,7 @@ dmypy.json
 
 # Pycharm
 .idea/
+
+# Custom
+eval_logs/
+old_logs/
