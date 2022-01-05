@@ -37,24 +37,30 @@ def model_builder():
 # this just used to create the vars on the parameter server
 initial_model = keras_model.build_model()
 
-params = {
+params_1 = {
     'K1': initial_model.layers[1].kernel,
-    'B1': initial_model.layers[1].bias,
+    'B1': initial_model.layers[1].bias
+}
+
+params_2 = {
     'K2': initial_model.layers[2].kernel,
     'B2': initial_model.layers[2].bias
 }
 
-ps = ParameterServer(params, tf.keras.optimizers.RMSprop(learning_rate=0.1))
+ps_1 = ParameterServer(params_1, tf.keras.optimizers.RMSprop(learning_rate=0.1))
+ps_2 = ParameterServer(params_2, tf.keras.optimizers.RMSprop(learning_rate=0.1))
 
 
 cl = Cluster()
 cl.parameter_servers = {
-    'ps1': ps
+    'ps1': ps_1,
+    'ps2': ps_2
 }
 
 ds = keras_model.mnist_dataset().batch(10)
 param_locations = {
-    'ps1': ['K1', 'B1', 'K2', 'B2']
+    'ps1': ['K1', 'B1'],
+    'ps2': ['K2', 'B2']
 }
 w1 = Worker(cl, model_builder, iter(ds.take(1000)), param_locations)
 w2 = Worker(cl, model_builder, iter(ds.skip(1000).take(1000)), param_locations)
