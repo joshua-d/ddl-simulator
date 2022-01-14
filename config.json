@@ -1,0 +1,14 @@
+{
+    "structure": "tree-like",
+    "levels": 1,
+    "num_ps": 3,
+    "num_workers": 2,
+
+    "training_style": "async",
+
+    "learning_rate": 0.1,
+    "batch_size": 10,
+
+    "num_train_samples": 5000,
+    "num_test_samples": 5000
+}

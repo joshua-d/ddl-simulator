@@ -1,11 +1,14 @@
 import tensorflow as tf
 import keras_model
-from Worker import Worker
-from ParameterServer import ParameterServer
-from Cluster import Cluster
 import time
 import datetime
 import threading
+import json
+
+from Worker import Worker
+from ParameterServer import ParameterServer
+from Cluster import Cluster
+
 
 
 learning_rate = 0.1
@@ -15,6 +18,16 @@ global_batch_size = 10
 
 num_train_samples = 5000
 num_test_samples = 5000
+
+
+config = {}
+config_file_path = "config.json"
+def load_config():
+    global config
+    with open(config_file_path) as config_file:
+        config = json.load(config_file)
+        config_file.close()
+
 
 
 # still no cross-worker data sharding, emulates manual-aggr-eval system
@@ -57,33 +70,9 @@ def model_builder():
     return model, params, forward_pass
 
 
-# this just used to create the vars on the parameter server
-initial_model = keras_model.build_model()
-
-params = {
-    'K1': initial_model.layers[1].kernel,
-    'B1': initial_model.layers[1].bias,
-    'K2': initial_model.layers[2].kernel,
-    'B2': initial_model.layers[2].bias
-}
-
-ps = ParameterServer(params, tf.keras.optimizers.RMSprop(learning_rate=learning_rate))
 
 
-cl = Cluster()
-cl.parameter_servers = {
-    'ps1': ps
-}
 
-
-param_locations = {
-    'ps1': ['K1', 'B1', 'K2', 'B2']
-}
-
-
-w1 = Worker(cl, model_builder, iter(dataset_fn()), param_locations)
-w2 = Worker(cl, model_builder, iter(dataset_fn()), param_locations)
-cl.workers = [w1, w2]
 
 
 
@@ -146,4 +135,10 @@ def train():
         outfile.close()
 
 
-train()
+def main():
+    load_config()
+    cl = Cluster(model_builder, config)
+    for ps in cl.parameter_servers.values():
+        print(ps.params.keys())
+
+main()
