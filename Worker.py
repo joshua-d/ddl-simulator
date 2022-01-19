@@ -5,17 +5,16 @@ from tensorflow._api.v2 import data
 
 class Worker:
 
-    def __init__(self, cluster, model_builder, dataset_iterator, param_locations):
+    def __init__(self, cluster, model_builder, dataset_iterator):
         self.cluster = cluster
         self.model, self.params, self.forward_pass = model_builder()
         self.dataset_iterator = dataset_iterator
-        self.param_locations = param_locations
 
         self.num_steps_completed = 0
         self.stop_training = False
 
     def request_params(self):
-        for ps_id in self.param_locations:
+        for ps_id in self.cluster.param_locations:
             ps = self.cluster.parameter_servers[ps_id]
             ps.params_lock.acquire() # TODO - this locking logic can be done better, should also encapsulate it in ps interface
             params = ps.on_request()
@@ -25,9 +24,9 @@ class Worker:
 
 
     def send_gradients(self, gradients):
-        for ps_id in self.param_locations:
+        for ps_id in self.cluster.param_locations:
             send_list = []
-            for param_id in self.param_locations[ps_id]:
+            for param_id in self.cluster.param_locations[ps_id]:
                 send_list.append((gradients[param_id], param_id))
             
             ps = self.cluster.parameter_servers[ps_id]

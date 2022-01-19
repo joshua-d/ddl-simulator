@@ -31,7 +31,7 @@ def load_config():
 
 
 # still no cross-worker data sharding, emulates manual-aggr-eval system
-def dataset_fn():
+def dataset_fn(worker_id):
     dataset = keras_model.mnist_dataset()
     dataset = dataset.take(num_train_samples).shuffle(num_train_samples).repeat(num_epoches)
     dataset = dataset.batch(global_batch_size)
@@ -71,13 +71,7 @@ def model_builder():
 
 
 
-
-
-
-
-
-
-def train():
+def train(cluster):
 
     x_test, y_test = keras_model.test_dataset(num_test_samples)
     accuracies = []
@@ -88,11 +82,11 @@ def train():
     for i in range(num_epoches):
         epoch = i+1
 
-        cl.steps_completed = 0
-        cl.steps_scheduled = steps_per_epoch
+        cluster.steps_completed = 0
+        cluster.steps_scheduled = steps_per_epoch
 
-        w1_thread = threading.Thread(target=w1.train, daemon=True)
-        w2_thread = threading.Thread(target=w2.train, daemon=True)
+        w1_thread = threading.Thread(target=cluster.workers[0].train, daemon=True)
+        w2_thread = threading.Thread(target=cluster.workers[1].train, daemon=True)
 
         w1_thread.start()
         w2_thread.start()
@@ -102,7 +96,7 @@ def train():
 
         print('Finished epoch %d' % epoch)
 
-        predictions = initial_model.predict(x_test)
+        predictions = cluster.get_test_model().predict(x_test)
 
         num_correct = 0
         for prediction, target in zip(predictions, y_test):
@@ -137,8 +131,10 @@ def train():
 
 def main():
     load_config()
-    cl = Cluster(model_builder, config)
-    for ps in cl.parameter_servers.values():
-        print(ps.params.keys())
+
+    cluster = Cluster(model_builder, dataset_fn, config)
+
+    train(cluster)
+    
 
 main()
