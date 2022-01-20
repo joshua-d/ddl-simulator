@@ -3,6 +3,7 @@ import threading
 
 from ParameterServer import ParameterServer
 from Worker import Worker
+from DatasetIterator import DatasetIterator
 
 
 # For now assuming cluster is the outermost name for the system, i. e. only one cluster per simulator run
@@ -65,7 +66,8 @@ class Cluster:
         self.workers = []
 
         for i in range(num_workers):
-            dataset_iterator = iter(self.dataset_fn(i))
+            dataset, batch_size = self.dataset_fn(i)
+            dataset_iterator = DatasetIterator(dataset, batch_size)
             self.workers.append(Worker(self, self.model_builder, dataset_iterator))
 
 
