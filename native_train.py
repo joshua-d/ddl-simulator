@@ -114,7 +114,7 @@ def train():
         outfile.write('num train samples: %d, num test samples: %d, batch size: %d, learning rate: %f\n'
                         % (num_train_samples, num_test_samples, global_batch_size, learning_rate))
         outfile.write('%f seconds\n\n' % time_elapsed)
-        outfile.write('%d epochs before stop, %f accuracy delta\n')
+        outfile.write('%d epochs before stop, %f accuracy delta\n'% (epochs_before_stop, acc_delta))
         outfile.write('%d epochs, best accuracy: %f\n\n' % (epoch, best_acc))
         for accuracy in accuracies:
             outfile.write('%f\n' % accuracy)
