@@ -8,7 +8,7 @@ import datetime
 
 learning_rate = 0.1
 
-num_epoches = 20
+num_epoches = 2000
 global_batch_size = 10
 
 num_train_samples = 5000
@@ -16,7 +16,7 @@ num_test_samples = 5000
 
 def dataset_fn(input_context):
     dataset = keras_model.mnist_dataset()
-    dataset = dataset.take(num_train_samples).shuffle(num_train_samples).repeat(num_epoches)
+    dataset = dataset.shuffle(num_train_samples*10).take(num_train_samples).shuffle(num_train_samples, reshuffle_each_iteration=True).repeat(num_epoches)
     dataset = dataset.shard(input_context.num_input_pipelines,
                             input_context.input_pipeline_id)
 
@@ -25,7 +25,6 @@ def dataset_fn(input_context):
     return dataset
 
 steps_per_epoch = int(num_train_samples / global_batch_size)
-accuracy_threshold = 0.9
 
 model_seed = int(time.time())
 
@@ -126,6 +125,12 @@ def train():
     print('Beginning training')
     start_time = time.time()
 
+    best_acc = 0
+    acc_delta = 0.0001
+    epochs_before_stop = 400
+    epochs_under_delta = 0
+    min_epochs = 200
+
     for i in range(num_epoches):
         epoch = i+1
 
@@ -154,15 +159,35 @@ def train():
         accuracies.append(test_accuracy)
 
 
+        # Stop if accuracy has not risen 0.0001 above best acc in 400 epochs
+
+        if epoch > min_epochs: 
+            if test_accuracy > best_acc and test_accuracy - best_acc > acc_delta:
+                best_acc = test_accuracy
+                epochs_under_delta = 0
+            else:
+                epochs_under_delta += 1
+
+            if epochs_under_delta >= epochs_before_stop:
+                break
+
+
     time_elapsed = time.time() - start_time
     now = datetime.datetime.now()
     time_str = str(now.time())
     time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
 
+    best_acc = 0
+    for acc in accuracies:
+        if acc > best_acc:
+            best_acc = acc
+
     with open('eval_logs/ps_eval_' + time_stamp + '.txt', 'w') as outfile:
         outfile.write('num train samples: %d, num test samples: %d, batch size: %d, learning rate: %f\n'
                         % (num_train_samples, num_test_samples, global_batch_size, learning_rate))
         outfile.write('%f seconds\n\n' % time_elapsed)
+        outfile.write('%d epochs before stop, %f accuracy delta\n' % (epochs_before_stop, acc_delta))
+        outfile.write('%d epochs, best accuracy: %f\n\n' % (epoch, best_acc))
         for accuracy in accuracies:
             outfile.write('%f\n' % accuracy)
         outfile.close()
