@@ -54,8 +54,9 @@ def train():
     start_time = time.time()
 
     best_acc = 0
-    acc_delta = 0.0001
-    epochs_before_stop = 400
+    best_acc_epoch = 0
+    acc_delta = 0.005
+    epochs_before_stop = 100
     epochs_under_delta = 0
     min_epochs = 200
 
@@ -92,6 +93,7 @@ def train():
         if epoch > min_epochs: 
             if test_accuracy > best_acc and test_accuracy - best_acc > acc_delta:
                 best_acc = test_accuracy
+                best_acc_epoch = epoch
                 epochs_under_delta = 0
             else:
                 epochs_under_delta += 1
@@ -105,17 +107,13 @@ def train():
     time_str = str(now.time())
     time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
 
-    best_acc = 0
-    for acc in accuracies:
-        if acc > best_acc:
-            best_acc = acc
-
     with open('eval_logs/native_train_' + time_stamp + '.txt', 'w') as outfile:
+        outfile.write('784-128-64-10\n')
         outfile.write('num train samples: %d, num test samples: %d, batch size: %d, learning rate: %f\n'
                         % (num_train_samples, num_test_samples, global_batch_size, learning_rate))
         outfile.write('%f seconds\n\n' % time_elapsed)
-        outfile.write('%d epochs before stop, %f accuracy delta\n'% (epochs_before_stop, acc_delta))
-        outfile.write('%d epochs, best accuracy: %f\n\n' % (epoch, best_acc))
+        outfile.write('%d epochs before stop, %f accuracy delta, %d min epochs\n' % (epochs_before_stop, acc_delta, min_epochs))
+        outfile.write('%d epochs, best accuracy: %f, epoch: %d\n\n' % (epoch, best_acc, best_acc_epoch))
         for accuracy in accuracies:
             outfile.write('%f\n' % accuracy)
         outfile.close()
