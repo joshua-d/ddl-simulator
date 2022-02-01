@@ -3,8 +3,11 @@ import multiprocessing
 import keras_model
 import time
 import datetime
+import portpicker
 
 
+num_workers = 4
+num_ps = 1
 
 learning_rate = 0.1
 
@@ -14,6 +17,9 @@ global_batch_size = 10
 num_train_samples = 5000
 num_test_samples = 5000
 
+model_form = '784-128-64-10'
+
+# num train samples per worker - workers may have a different set of train samples
 def dataset_fn(input_context):
     dataset = keras_model.mnist_dataset()
     dataset = dataset.shuffle(num_train_samples*10).take(num_train_samples).shuffle(num_train_samples, reshuffle_each_iteration=True).repeat(num_epoches)
@@ -32,48 +38,38 @@ model_seed = int(time.time())
 
 # Set up cluster
 
-cluster_dict = {
-    'worker': ['localhost:12345', 'localhost:23456'],
-    'ps': ['localhost:34567']
-}
+worker_ports = [portpicker.pick_unused_port() for _ in range(num_workers)]
+ps_ports = [portpicker.pick_unused_port() for _ in range(num_ps)]
 
-num_workers = 2
+cluster_dict = {}
+cluster_dict["worker"] = ["localhost:%s" % port for port in worker_ports]
+if num_ps > 0:
+    cluster_dict["ps"] = ["localhost:%s" % port for port in ps_ports]
+
+cluster_spec = tf.train.ClusterSpec(cluster_dict)
+
 worker_config = tf.compat.v1.ConfigProto()
 if multiprocessing.cpu_count() < num_workers + 1:
     worker_config.inter_op_parallelism_threads = num_workers + 1
 
+for i in range(num_workers):
+    tf.distribute.Server(
+        cluster_spec,
+        job_name="worker",
+        task_index=i,
+        config=worker_config,
+        protocol="grpc")
 
-cluster_spec = tf.train.ClusterSpec(cluster_dict)
-
-cluster_resolver = tf.distribute.cluster_resolver.SimpleClusterResolver(
-      cluster_spec, rpc_layer="grpc")
-
-
-# Create in-process servers
-
-# PS 1
-tf.distribute.Server(
+for i in range(num_ps):
+    tf.distribute.Server(
         cluster_spec,
         job_name="ps",
-        task_index=0,
+        task_index=i,
         protocol="grpc")
 
-# Worker 1
-w1 = tf.distribute.Server(
-        cluster_spec,
-        job_name="worker",
-        task_index=0,
-        config=worker_config,
-        protocol="grpc")
 
-# Worker 2
-tf.distribute.Server(
-        cluster_spec,
-        job_name="worker",
-        task_index=1,
-        config=worker_config,
-        protocol="grpc")
-
+cluster_resolver = tf.distribute.cluster_resolver.SimpleClusterResolver(
+    cluster_spec, rpc_layer="grpc")
 
 strategy = tf.distribute.experimental.ParameterServerStrategy(cluster_resolver)
 
@@ -126,8 +122,9 @@ def train():
     start_time = time.time()
 
     best_acc = 0
-    acc_delta = 0.0001
-    epochs_before_stop = 400
+    best_acc_epoch = 0
+    acc_delta = 0.005
+    epochs_before_stop = 100
     epochs_under_delta = 0
     min_epochs = 200
 
@@ -159,11 +156,12 @@ def train():
         accuracies.append(test_accuracy)
 
 
-        # Stop if accuracy has not risen 0.0001 above best acc in 400 epochs
+        # Stop if accuracy has not risen 0.0002 above best acc in 200 epochs - 1 sample in 200 epochs
 
         if epoch > min_epochs: 
             if test_accuracy > best_acc and test_accuracy - best_acc > acc_delta:
                 best_acc = test_accuracy
+                best_acc_epoch = epoch
                 epochs_under_delta = 0
             else:
                 epochs_under_delta += 1
@@ -177,17 +175,14 @@ def train():
     time_str = str(now.time())
     time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
 
-    best_acc = 0
-    for acc in accuracies:
-        if acc > best_acc:
-            best_acc = acc
-
     with open('eval_logs/ps_eval_' + time_stamp + '.txt', 'w') as outfile:
+        outfile.write('%d workers, %d ps\n' % (num_workers, num_ps))
+        outfile.write(model_form + '\n')
         outfile.write('num train samples: %d, num test samples: %d, batch size: %d, learning rate: %f\n'
                         % (num_train_samples, num_test_samples, global_batch_size, learning_rate))
         outfile.write('%f seconds\n\n' % time_elapsed)
-        outfile.write('%d epochs before stop, %f accuracy delta\n' % (epochs_before_stop, acc_delta))
-        outfile.write('%d epochs, best accuracy: %f\n\n' % (epoch, best_acc))
+        outfile.write('%d epochs before stop, %f accuracy delta, %d min epochs\n' % (epochs_before_stop, acc_delta, min_epochs))
+        outfile.write('%d epochs, best accuracy: %f, epoch: %d\n\n' % (epoch, best_acc, best_acc_epoch))
         for accuracy in accuracies:
             outfile.write('%f\n' % accuracy)
         outfile.close()
