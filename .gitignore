@@ -134,3 +134,4 @@ dmypy.json
 # Custom
 eval_logs/
 old_logs/
+run_tests.bat
