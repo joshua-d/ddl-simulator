@@ -47,7 +47,9 @@ def model_builder():
         'K1': model.layers[1].kernel,
         'B1': model.layers[1].bias,
         'K2': model.layers[2].kernel,
-        'B2': model.layers[2].bias
+        'B2': model.layers[2].bias,
+        'K3': model.layers[3].kernel,
+        'B3': model.layers[3].bias
     }
     def forward_pass(batch):
         batch_inputs, batch_targets = batch
@@ -63,7 +65,9 @@ def model_builder():
             'K1': grads_list[0],
             'B1': grads_list[1],
             'K2': grads_list[2],
-            'B2': grads_list[3]
+            'B2': grads_list[3],
+            'K3': grads_list[4],
+            'B3': grads_list[5]
         }
         return gradients
 
@@ -80,8 +84,9 @@ def train(cluster):
     start_time = time.time()
 
     best_acc = 0
-    acc_delta = 0.0001
-    epochs_before_stop = 400
+    best_acc_epoch = 0
+    acc_delta = 0.005
+    epochs_before_stop = 100
     epochs_under_delta = 0
     min_epochs = 200
 
@@ -95,12 +100,18 @@ def train(cluster):
 
         w1_thread = threading.Thread(target=cluster.workers[0].train, daemon=True)
         w2_thread = threading.Thread(target=cluster.workers[1].train, daemon=True)
+        w3_thread = threading.Thread(target=cluster.workers[2].train, daemon=True)
+        w4_thread = threading.Thread(target=cluster.workers[3].train, daemon=True)
 
         w1_thread.start()
         w2_thread.start()
+        w3_thread.start()
+        w4_thread.start()
 
         w1_thread.join()
         w2_thread.join()
+        w3_thread.join()
+        w4_thread.join()
 
         print('Finished epoch %d' % epoch)
 
@@ -131,6 +142,7 @@ def train(cluster):
         if epoch > min_epochs: 
             if test_accuracy > best_acc and test_accuracy - best_acc > acc_delta:
                 best_acc = test_accuracy
+                best_acc_epoch = epoch
                 epochs_under_delta = 0
             else:
                 epochs_under_delta += 1
@@ -146,17 +158,14 @@ def train(cluster):
     time_str = str(now.time())
     time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
 
-    best_acc = 0
-    for acc in accuracies:
-        if acc > best_acc:
-            best_acc = acc
-
     with open('eval_logs/custom_ps_' + time_stamp + '.txt', 'w') as outfile:
+        outfile.write('%d workers, %d ps\n' % (config['num_workers'], config['num_ps']))
+        outfile.write('784-128-64-10\n')
         outfile.write('num train samples: %d, num test samples: %d, batch size: %d, learning rate: %f\n'
                         % (num_train_samples, num_test_samples, global_batch_size, learning_rate))
         outfile.write('%f seconds\n\n' % time_elapsed)
-        outfile.write('%d epochs before stop, %f accuracy delta\n')
-        outfile.write('%d epochs, best accuracy: %f\n\n' % (epoch, best_acc))
+        outfile.write('%d epochs before stop, %f accuracy delta, %d min epochs\n' % (epochs_before_stop, acc_delta, min_epochs))
+        outfile.write('%d epochs, best accuracy: %f, epoch: %d\n\n' % (epoch, best_acc, best_acc_epoch))
         for accuracy in accuracies:
             outfile.write('%f\n' % accuracy)
         outfile.close()

@@ -2,7 +2,7 @@
     "structure": "tree-like",
     "levels": 1,
     "num_ps": 1,
-    "num_workers": 2,
+    "num_workers": 4,
 
     "training_style": "async",
 
