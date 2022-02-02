@@ -108,7 +108,7 @@ def train():
     time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
 
     with open('eval_logs/native_train_' + time_stamp + '.txt', 'w') as outfile:
-        outfile.write('784-128-64-10\n')
+        outfile.write('784-128-10\n')
         outfile.write('num train samples: %d, num test samples: %d, batch size: %d, learning rate: %f\n'
                         % (num_train_samples, num_test_samples, global_batch_size, learning_rate))
         outfile.write('%f seconds\n\n' % time_elapsed)
