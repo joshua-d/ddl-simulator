@@ -12,7 +12,7 @@ from tts import tts
 
 learning_rate = 0.1
 
-num_epoches = 600
+# num_epoches = 600
 global_batch_size = 10
 
 num_train_samples = 5000
@@ -48,8 +48,8 @@ def model_builder():
         'B1': model.layers[1].bias,
         'K2': model.layers[2].kernel,
         'B2': model.layers[2].bias,
-        'K3': model.layers[3].kernel,
-        'B3': model.layers[3].bias
+        # 'K3': model.layers[3].kernel,
+        # 'B3': model.layers[3].bias
     }
     def forward_pass(batch):
         batch_inputs, batch_targets = batch
@@ -66,8 +66,8 @@ def model_builder():
             'B1': grads_list[1],
             'K2': grads_list[2],
             'B2': grads_list[3],
-            'K3': grads_list[4],
-            'B3': grads_list[5]
+            # 'K3': grads_list[4],
+            # 'B3': grads_list[5]
         }
         return gradients
 
@@ -160,7 +160,7 @@ def train(cluster):
 
     with open('eval_logs/custom_ps_' + time_stamp + '.txt', 'w') as outfile:
         outfile.write('%d workers, %d ps\n' % (config['num_workers'], config['num_ps']))
-        outfile.write('784-128-64-10\n')
+        outfile.write('784-128-10\n')
         outfile.write('num train samples: %d, num test samples: %d, batch size: %d, learning rate: %f\n'
                         % (num_train_samples, num_test_samples, global_batch_size, learning_rate))
         outfile.write('%f seconds\n\n' % time_elapsed)

@@ -7,7 +7,7 @@ import datetime
 
 learning_rate = 0.1
 
-num_epoches = 600
+# num_epoches = 2000
 global_batch_size = 10
 
 num_train_samples = 5000

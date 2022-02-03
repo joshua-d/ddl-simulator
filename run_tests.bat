@@ -1,10 +1,3 @@
-python ps_eval.py
-python ps_eval.py
-python ps_eval.py
-python ps_eval.py
-python ps_eval.py
-python ps_eval.py
-python ps_eval.py
-python ps_eval.py
-python ps_eval.py
-python ps_eval.py
+python native_train.py
+python native_train.py
+python native_train.py

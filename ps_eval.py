@@ -6,7 +6,7 @@ import datetime
 import portpicker
 
 
-num_workers = 4
+num_workers = 2
 num_ps = 1
 
 learning_rate = 0.1
@@ -17,7 +17,7 @@ global_batch_size = 10
 num_train_samples = 5000
 num_test_samples = 5000
 
-model_form = '784-128-64-10'
+model_form = '784-128-10'
 
 # num train samples per worker - workers may have a different set of train samples
 def dataset_fn(input_context):
