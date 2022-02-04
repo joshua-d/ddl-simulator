@@ -5,8 +5,11 @@ from tensorflow._api.v2 import data
 
 class Worker:
 
-    def __init__(self, cluster, model_builder, dataset_iterator):
+    # TODO should simulate independent machines - think about bandwidth feature - shouldn't pass in whole cluster
+    # Maybe make a messaging interface - worker calls 'send to ps', interface calls ps.on_receive
+    def __init__(self, cluster, id, model_builder, dataset_iterator):
         self.cluster = cluster
+        self.id = id
         self.model, self.params, self.forward_pass = model_builder()
         self.dataset_iterator = dataset_iterator
 

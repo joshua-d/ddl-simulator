@@ -4,7 +4,11 @@ import threading
 class ParameterServer:
 
     def __init__(self, params, optimizer):
+        # TODO document this!
+
+        # { param_id: tf.Variable }
         self.params = params
+         
         self.optimizer = optimizer
 
         self.params_lock = threading.Lock()

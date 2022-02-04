@@ -7,7 +7,9 @@ import time
 import datetime
 
 from ParameterServer import ParameterServer
+from SyncParameterServer import SyncParameterServer
 from Worker import Worker
+from SyncWorker import SyncWorker
 from DatasetIterator import DatasetIterator
 
 
@@ -54,6 +56,7 @@ class Cluster:
     def _create_parameter_servers(self):
         num_ps = self._check_config_item('num_ps')
         learning_rate = self._check_config_item('learning_rate')
+        training_style = self._check_config_item('training_style')
 
         _, params, _ = self.model_builder()
 
@@ -69,17 +72,25 @@ class Cluster:
 
         for i in range(num_ps):
             ps_id = 'ps%d' % i
-            self.parameter_servers[ps_id] = ParameterServer(params_objs[i], tf.keras.optimizers.RMSprop(learning_rate=learning_rate))
+            if training_style == 'async':
+                self.parameter_servers[ps_id] = ParameterServer(params_objs[i], tf.keras.optimizers.RMSprop(learning_rate=learning_rate))
+            elif training_style == 'sync':
+                self.parameter_servers[ps_id] = SyncParameterServer(params_objs[i], tf.keras.optimizers.RMSprop(learning_rate=learning_rate), self.workers)
+
             self.param_locations[ps_id] = list(params_objs[i].keys())
 
     
     def _create_workers(self):
         num_workers = self._check_config_item('num_workers')
+        training_style = self._check_config_item('training_style')
 
         for i in range(num_workers):
             dataset, batch_size = self.dataset_fn(i)
             dataset_iterator = DatasetIterator(dataset, batch_size)
-            self.workers.append(Worker(self, self.model_builder, dataset_iterator))
+            if training_style == 'async':
+                self.workers.append(Worker(self, i, self.model_builder, dataset_iterator))
+            elif training_style == 'sync':
+                self.workers.append(SyncWorker(self, i, self.model_builder, dataset_iterator))
 
     # TODO maybe rename to get
     def _check_config_item(self, item):
