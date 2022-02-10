@@ -1,32 +1,29 @@
 from Worker import Worker
 import threading
 
+# TODO strictly assumes there is only 1 PS
+
 class SyncWorker(Worker):
 
-    def __init__(self, cluster, id, model_builder, dataset_iterator):
-        super().__init__(cluster, id, model_builder, dataset_iterator)
-        self.ready_for_next_step = True
-
-        self.ready_for_next_step_lock = threading.Lock()
-
-    def train_step(self):
-        self.request_params()
-        gradients = self.forward_pass(next(self.dataset_iterator))
-        self.send_gradients(gradients)
+    def send_gradients(self, gradients):
+        for ps_id in self.cluster.param_locations:
+            send_list = []
+            for param_id in self.cluster.param_locations[ps_id]:
+                send_list.append((gradients[param_id], param_id))
+            
+            ps = self.cluster.parameter_servers[ps_id]
+            ps.on_receive(send_list)
+        
 
     def train(self):
+        print_lock = self.cluster.parameter_servers['ps0'].print_lock
+        
         self.stop_training = False
         while not self.stop_training:
-            if self.ready_for_next_step:
-                self.ready_for_next_step_lock.acquire()
-                self.ready_for_next_step = False
-                self.ready_for_next_step_lock.release()
 
-                self.train_step()
-                print('Worker %d completed step ' % (self.id))
+            # with print_lock:
+            #     print('Worker %d completing step' % (self.id), flush=True)
 
-                self.cluster.steps_completed_lock.acquire()
-                self.cluster.steps_completed += 1
-                if self.cluster.steps_completed >= self.cluster.steps_scheduled:
-                    self.stop_training = True  # TODO maybe stop for all workers? trying to throw out in prog step - schedule seems like a good system
-                self.cluster.steps_completed_lock.release()
+            self.train_step()
+
+            

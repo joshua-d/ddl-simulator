@@ -13,6 +13,8 @@ from SyncWorker import SyncWorker
 from DatasetIterator import DatasetIterator
 
 
+# TODO don't just pass config obj into Cluster, have a fn parse it into class fields
+
 # For now assuming cluster is the outermost name for the system, i. e. only one cluster per simulator run
 class Cluster:
 
@@ -75,7 +77,7 @@ class Cluster:
             if training_style == 'async':
                 self.parameter_servers[ps_id] = ParameterServer(params_objs[i], tf.keras.optimizers.RMSprop(learning_rate=learning_rate))
             elif training_style == 'sync':
-                self.parameter_servers[ps_id] = SyncParameterServer(params_objs[i], tf.keras.optimizers.RMSprop(learning_rate=learning_rate), self.workers)
+                self.parameter_servers[ps_id] = SyncParameterServer(params_objs[i], tf.keras.optimizers.RMSprop(learning_rate=learning_rate), self.workers, self)
 
             self.param_locations[ps_id] = list(params_objs[i].keys())
 
@@ -188,8 +190,9 @@ class Cluster:
         time_str = str(now.time())
         time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
 
-        with open('eval_logs/custom_ps_' + time_stamp + '.txt', 'w') as outfile:
+        with open('eval_logs/custom_ps_%s_%s.txt' % (self.config['training_style'], time_stamp), 'w') as outfile:
             outfile.write('%d workers, %d ps\n' % (self.config['num_workers'], self.config['num_ps']))
+            outfile.write('%s training\n' % self.config['training_style'])
             outfile.write('784-128-10\n')
             outfile.write('num train samples: %d, num test samples: %d, batch size: %d, learning rate: %f\n'
                             % (num_train_samples, num_test_samples, batch_size, self.config['learning_rate']))

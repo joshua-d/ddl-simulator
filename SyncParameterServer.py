@@ -1,9 +1,12 @@
 from ParameterServer import ParameterServer
+import threading
 
 
+# TODO this is currently built to have its functions called by a worker thread - eventually,
+# its own thread would probably be better
 class SyncParameterServer(ParameterServer):
 
-    def __init__(self, params, optimizer, workers):
+    def __init__(self, params, optimizer, workers, cluster):
         super().__init__(params, optimizer)
         
         self.workers = workers
@@ -11,49 +14,57 @@ class SyncParameterServer(ParameterServer):
         self.workers_received = 0
         self.current_grads = []
 
+        self.sync_cond = threading.Condition()
+
+        self.cluster = cluster
+
+        # TODO debug
+        self.print_lock = threading.Lock()
+
     
+    # TODO may make more sense to have parallelism handling in SyncWorker - same function though
+    # TODO in the future, params_lock for PS and sync_cond for SyncPS could be same thing because condition can function as a lock
+    # This fn now holds the logic for counting steps and stopping training
     def on_receive(self, gradients):
-        self.current_grads.append(gradients)
-        self.workers_received += 1
+        with self.sync_cond:
 
-        if self.workers_received == len(self.workers):
-            # All workers have completed their step this round - aggregate!
-            print('PS received grads from all workers')
+            self.current_grads.append(gradients)
+            self.workers_received += 1
 
-            grads_by_param_id = {}
+            if self.workers_received == len(self.workers):
+                # All workers have completed their step this round - apply in order received
 
-            for param_id in self.params:
-                grads_by_param_id[param_id] = []
+                # with self.print_lock:
+                #     print('PS received grads from all workers - applying grads', flush=True)
 
-            for gradients in self.current_grads:
-                for grad, param_id in gradients:
-                    grads_by_param_id[param_id].append(grad)
+                for grads_list in self.current_grads:
+                    apply_list = []
+                    for grad, param_id in grads_list:
+                        apply_list.append((grad, self.params[param_id]))
+                    self.optimizer.apply_gradients(apply_list)
 
-            # average grads for each param
-            aggr_grad_by_param_id = {}
-            for param_id in self.params:
+                # print('Done.')
 
-                for grad_idx in range(len(grads_by_param_id[param_id])):
-                    if grad_idx == 0:
-                        aggr_grad = grads_by_param_id[param_id][grad_idx]
-                    else:
-                        aggr_grad += grads_by_param_id[param_id][grad_idx]
+                self.workers_received = 0
+                self.current_grads = []
 
-                aggr_grad = aggr_grad / len(grads_by_param_id[param_id])
-                aggr_grad_by_param_id[param_id] = aggr_grad
+                self.cluster.steps_completed += len(self.workers)
+                if self.cluster.steps_completed >= self.cluster.steps_scheduled:
+                    for worker in self.workers:
+                        worker.stop_training = True
 
-            # make apply list and apply grads to params
+                self.sync_cond.notify_all()
+                
+            else:
+                self.sync_cond.wait()
+
+
+    def apply_current_and_reset(self):
+        for grads_list in self.current_grads:
             apply_list = []
-            for param_id in self.params:
-                grad = aggr_grad_by_param_id[param_id]
+            for grad, param_id in grads_list:
                 apply_list.append((grad, self.params[param_id]))
-
             self.optimizer.apply_gradients(apply_list)
 
-            self.workers_received = 0
-            self.current_grads = []
-
-            for worker in self.workers:
-                worker.ready_for_next_step_lock.acquire()
-                worker.ready_for_next_step = True
-                worker.ready_for_next_step_lock.release()
+        self.workers_received = 0
+        self.current_grads = []

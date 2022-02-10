@@ -1,6 +1,4 @@
 {
-    "structure": "tree-like",
-    "levels": 1,
     "num_ps": 1,
     "num_workers": 4,
 
