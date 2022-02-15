@@ -1,6 +1,8 @@
 from Worker import Worker
 import threading
 
+# TODO not implemented with new Network
+
 # TODO strictly assumes there is only 1 PS
 
 class SyncWorker(Worker):

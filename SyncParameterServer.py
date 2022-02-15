@@ -2,12 +2,14 @@ from ParameterServer import ParameterServer
 import threading
 
 
+# TODO not implemented with new Network
+
 # TODO this is currently built to have its functions called by a worker thread - eventually,
 # its own thread would probably be better
 class SyncParameterServer(ParameterServer):
 
-    def __init__(self, params, optimizer, workers, cluster):
-        super().__init__(params, optimizer)
+    def __init__(self, params, optimizer, network, workers, cluster):
+        super().__init__(params, optimizer, network)
         
         self.workers = workers
 

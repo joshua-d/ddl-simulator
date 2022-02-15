@@ -1,41 +1,40 @@
-
-
 from tensorflow._api.v2 import data
+import threading
 
 
 class Worker:
 
-    # TODO should simulate independent machines - think about bandwidth feature - shouldn't pass in whole cluster
-    # Maybe make a messaging interface - worker calls 'send to ps', interface calls ps.on_receive
-    def __init__(self, cluster, id, model_builder, dataset_iterator):
-        self.cluster = cluster
+    def __init__(self, id, model_builder, dataset_iterator, param_locations, network, cluster):
         self.id = id
         self.model, self.params, self.forward_pass = model_builder()
         self.dataset_iterator = dataset_iterator
 
-        self.num_steps_completed = 0
+        # { param_id: ps_id }
+        self.param_locations = param_locations
+
+        self.network = network
+        self.cluster = cluster # TODO don't really want to have to do this, but need it for steps_completed stuff
+
+        self.params_queue = []
+        self.params_queue_cond = threading.Condition()
+
         self.stop_training = False
 
-    def request_params(self):
-        for ps_id in self.cluster.param_locations:
-            ps = self.cluster.parameter_servers[ps_id]
-            ps.params_lock.acquire() # TODO - this locking logic can be done better, should also encapsulate it in ps interface
-            params = ps.on_request()
-            for param_id in params:
-                self.params[param_id].assign(params[param_id])
-            ps.params_lock.release()
+    def request_params(self): # TODO consider renaming params_msgs here and in Network
+        params_msgs = self.network.request_params_and_wait(self)
+        for vals_by_param_id in params_msgs:
+            for param_id in vals_by_param_id:
+                self.params[param_id].assign(vals_by_param_id[param_id])
 
 
     def send_gradients(self, gradients):
-        for ps_id in self.cluster.param_locations:
+        for ps_id in self.param_locations:
             send_list = []
-            for param_id in self.cluster.param_locations[ps_id]:
+            for param_id in self.param_locations[ps_id]:
                 send_list.append((gradients[param_id], param_id))
             
-            ps = self.cluster.parameter_servers[ps_id]
-            ps.params_lock.acquire()
-            ps.on_receive(send_list)
-            ps.params_lock.release()
+            self.network.send_gradients(ps_id, send_list)
+
 
 
     def train_step(self):
@@ -43,12 +42,13 @@ class Worker:
         gradients = self.forward_pass(next(self.dataset_iterator))
         self.send_gradients(gradients)
 
-    def train(self):
+    def start(self):
         self.stop_training = False
+
         while not self.stop_training:
             self.train_step()
-            self.cluster.steps_completed_lock.acquire()
-            self.cluster.steps_completed += 1
-            if self.cluster.steps_completed >= self.cluster.steps_scheduled:
-                self.stop_training = True  # TODO maybe stop for all workers? trying to throw out in prog step - schedule seems like a good system
-            self.cluster.steps_completed_lock.release()
+            with self.cluster.steps_completed_lock:
+                self.cluster.steps_completed += 1
+                if self.cluster.steps_completed >= self.cluster.steps_scheduled:
+                    self.stop_training = True  # TODO maybe stop for all workers? trying to throw out in prog, step-schedule seems like a good system
+                    break

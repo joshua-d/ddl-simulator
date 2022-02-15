@@ -2,7 +2,7 @@
     "num_ps": 1,
     "num_workers": 4,
 
-    "training_style": "sync",
+    "training_style": "async",
 
     "learning_rate": 0.1,
     "batch_size": 10,
