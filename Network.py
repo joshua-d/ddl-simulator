@@ -15,13 +15,17 @@ class Network:
                 ps.grads_queue_cond.notify()
         
         # Wait for all PSs to send params back
+        return self.wait_for_params(worker)
+
+
+    def wait_for_params(self, worker):
         with worker.params_queue_cond:
             worker.params_queue_cond.wait_for(lambda: len(worker.params_queue) == self.cluster.num_ps)
 
             # All params are in, move them out of queue and return to worker
             params_msgs = worker.params_queue
             worker.params_queue = []
-        
+
         return params_msgs
 
 
@@ -58,3 +62,9 @@ class Network:
         with worker.params_queue_cond:
             worker.params_queue.append(vals_by_param_id)
             worker.params_queue_cond.notify()
+
+
+    def flush_worker_params_queues(self):
+        for worker in self.cluster.workers:
+            with worker.params_queue_cond:
+                worker.params_queue = []

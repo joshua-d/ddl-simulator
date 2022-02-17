@@ -1,31 +1,36 @@
 from Worker import Worker
 import threading
 
-# TODO not implemented with new Network
 
 # TODO strictly assumes there is only 1 PS
 
 class SyncWorker(Worker):
 
-    def send_gradients(self, gradients):
-        for ps_id in self.cluster.param_locations:
-            send_list = []
-            for param_id in self.cluster.param_locations[ps_id]:
-                send_list.append((gradients[param_id], param_id))
-            
-            ps = self.cluster.parameter_servers[ps_id]
-            ps.on_receive(send_list)
+    def wait_for_and_assign_params(self):
+        params_msgs = self.network.wait_for_params(self)
+        for vals_by_param_id in params_msgs:
+            for param_id in vals_by_param_id:
+                self.params[param_id].assign(vals_by_param_id[param_id])
+
+    def train_step(self):
+        with self.network.cluster.print_lock:
+            print('Worker %d waiting for params' % self.id, flush=True)
+        self.wait_for_and_assign_params()
+        gradients = self.forward_pass(next(self.dataset_iterator))
+        with self.network.cluster.print_lock:
+            print('Worker %d sending grads' % self.id, flush=True)
+        self.send_gradients(gradients)
         
 
-    def train(self):
-        print_lock = self.cluster.parameter_servers['ps0'].print_lock
-        
+    def start(self):
         self.stop_training = False
+
         while not self.stop_training:
-
-            # with print_lock:
-            #     print('Worker %d completing step' % (self.id), flush=True)
-
             self.train_step()
+            with self.cluster.steps_completed_lock:
+                self.cluster.steps_completed += 1
+                if self.cluster.steps_completed >= self.cluster.steps_scheduled:
+                    self.stop_training = True  # TODO maybe stop for all workers? trying to throw out in prog, step-schedule seems like a good system
+                    break
 
             

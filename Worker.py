@@ -52,3 +52,5 @@ class Worker:
                 if self.cluster.steps_completed >= self.cluster.steps_scheduled:
                     self.stop_training = True  # TODO maybe stop for all workers? trying to throw out in prog, step-schedule seems like a good system
                     break
+
+# TODO worker checks for steps completed after performing step - num steps completed slightly above than scheduled

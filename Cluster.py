@@ -74,9 +74,9 @@ class Cluster:
         for i in range(self.num_ps):
             ps_id = 'ps%d' % i
             if self.training_style == 'async':
-                self.parameter_servers[ps_id] = ParameterServer(params_objs[i], tf.keras.optimizers.RMSprop(learning_rate=self.learning_rate), self.network)
+                self.parameter_servers[ps_id] = ParameterServer(ps_id, params_objs[i], tf.keras.optimizers.RMSprop(learning_rate=self.learning_rate), self.network)
             elif self.training_style == 'sync':
-                self.parameter_servers[ps_id] = SyncParameterServer(params_objs[i], tf.keras.optimizers.RMSprop(learning_rate=self.learning_rate), self.network, self.workers, self)
+                self.parameter_servers[ps_id] = SyncParameterServer(ps_id, params_objs[i], tf.keras.optimizers.RMSprop(learning_rate=self.learning_rate), self.network, self.num_workers)
 
             self.param_locations[ps_id] = list(params_objs[i].keys())
 
@@ -119,7 +119,6 @@ class Cluster:
         for vals_by_param_id in params_msgs:
             for param_id in vals_by_param_id:
                 self.test_model_params[param_id].assign(vals_by_param_id[param_id])
-            
 
         return self.test_model
 
@@ -262,6 +261,9 @@ class Cluster:
             print('Finished epoch %d' % epoch)
             
             predictions = self.get_test_model().predict(x_test)
+
+            if self.training_style == 'sync':
+                self.parameter_servers['ps0'].reset_round()
 
             num_correct = 0
             for prediction, target in zip(predictions, y_test):
