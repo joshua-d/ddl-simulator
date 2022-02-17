@@ -44,8 +44,6 @@ class SyncParameterServer(ParameterServer):
 
             # If all workers have sent in grads, send out params
             if self.round_num_grads_received == self.num_workers:
-                with self.network.cluster.print_lock:
-                    print('All grads received, sending params', flush=True)
                 self.round_num_grads_received = 0
                 vals_by_param_id = self.get_params()
                 for wk_id in range(self.num_workers): # ***ASSUMES WORKER IDS ARE INDEX IN CLUSTER.WORKERS***

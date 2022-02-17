@@ -13,12 +13,8 @@ class SyncWorker(Worker):
                 self.params[param_id].assign(vals_by_param_id[param_id])
 
     def train_step(self):
-        with self.network.cluster.print_lock:
-            print('Worker %d waiting for params' % self.id, flush=True)
         self.wait_for_and_assign_params()
         gradients = self.forward_pass(next(self.dataset_iterator))
-        with self.network.cluster.print_lock:
-            print('Worker %d sending grads' % self.id, flush=True)
         self.send_gradients(gradients)
         
 
