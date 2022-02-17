@@ -123,93 +123,6 @@ class Cluster:
         return self.test_model
 
 
-    # TODO implement configurable stopping/training conditions/callbacks
-    def train(self):
-
-        x_test, y_test = keras_model.test_dataset(self.num_test_samples)
-        accuracies = []
-
-        print('Beginning training')
-        start_time = time.time()
-
-        best_acc = 0
-        best_acc_epoch = 0
-        acc_delta = 0.005
-        epochs_before_stop = 100
-        epochs_under_delta = 0
-        min_epochs = 200
-
-        epoch = 0
-        steps_per_epoch = int(self.num_train_samples / self.batch_size)
-
-        while True:
-            epoch += 1
-
-            self.steps_completed = 0
-            self.steps_scheduled = steps_per_epoch
-
-            self.worker_threads = []
-            for worker in self.workers:
-                worker_thread = threading.Thread(target=worker.train, daemon=True)
-                self.worker_threads.append(worker_thread)
-
-            for wt in self.worker_threads:
-                wt.start()
-
-            for wt in self.worker_threads:
-                wt.join()
-
-            print('Finished epoch %d' % epoch)
-
-            predictions = self.get_test_model().predict(x_test)
-
-            num_correct = 0
-            for prediction, target in zip(predictions, y_test):
-                answer = 0
-                answer_val = prediction[0]
-                for poss_ans_ind in range(len(prediction)):
-                    if prediction[poss_ans_ind] > answer_val:
-                        answer = poss_ans_ind
-                        answer_val = prediction[poss_ans_ind]
-                if answer == target:
-                    num_correct += 1
-
-            test_accuracy = float(num_correct) / self.num_test_samples
-            print('Test accuracy: %f' % test_accuracy)
-
-            accuracies.append(test_accuracy)
-
-            # stop conditions 
-            if epoch > min_epochs: 
-                if test_accuracy > best_acc and test_accuracy - best_acc > acc_delta:
-                    best_acc = test_accuracy
-                    best_acc_epoch = epoch
-                    epochs_under_delta = 0
-                else:
-                    epochs_under_delta += 1
-
-                if epochs_under_delta >= epochs_before_stop:
-                    break
-
-        time_elapsed = time.time() - start_time
-        now = datetime.datetime.now()
-        time_str = str(now.time())
-        time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
-
-        with open('eval_logs/custom_ps_%s_%s.txt' % (self.config['training_style'], time_stamp), 'w') as outfile:
-            outfile.write('%d workers, %d ps\n' % (self.config['num_workers'], self.config['num_ps']))
-            outfile.write('%s training\n' % self.config['training_style'])
-            outfile.write('784-128-10\n')
-            outfile.write('num train samples: %d, num test samples: %d, batch size: %d, learning rate: %f\n'
-                            % (self.num_train_samples, self.num_test_samples, self.batch_size, self.config['learning_rate']))
-            outfile.write('%f seconds\n\n' % time_elapsed)
-            outfile.write('%d epochs before stop, %f accuracy delta, %d min epochs\n' % (epochs_before_stop, acc_delta, min_epochs))
-            outfile.write('%d epochs, best accuracy: %f, epoch: %d\n\n' % (epoch, best_acc, best_acc_epoch))
-            for accuracy in accuracies:
-                outfile.write('%f\n' % accuracy)
-            outfile.close()
-
-
     def start(self):
         x_test, y_test = keras_model.test_dataset(self.num_test_samples)
         accuracies = []
@@ -219,8 +132,8 @@ class Cluster:
         acc_delta = 0.005
         epochs_before_stop = 100
         epochs_under_delta = 0
-        min_epochs = 200
-        acc_threshold = 0.95
+        min_epochs = 0
+        acc_threshold = 0.94
 
         epoch = 0
         steps_per_epoch = int(self.num_train_samples / self.batch_size)
@@ -304,12 +217,12 @@ class Cluster:
         time_str = str(now.time())
         time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
 
-        with open('eval_logs/custom_ps_%s_%s.txt' % (self.config['training_style'], time_stamp), 'w') as outfile:
-            outfile.write('%d workers, %d ps\n' % (self.config['num_workers'], self.config['num_ps']))
-            outfile.write('%s training\n' % self.config['training_style'])
+        with open('eval_logs/custom_ps_%s_%s.txt' % (self.training_style, time_stamp), 'w') as outfile:
+            outfile.write('%d workers, %d ps\n' % (self.num_workers, self.num_ps))
+            outfile.write('%s training\n' % self.training_style)
             outfile.write('784-128-10\n')
             outfile.write('num train samples: %d, num test samples: %d, batch size: %d, learning rate: %f\n'
-                            % (self.num_train_samples, self.num_test_samples, self.batch_size, self.config['learning_rate']))
+                            % (self.num_train_samples, self.num_test_samples, self.batch_size, self.learning_rate))
             outfile.write('%f seconds\n\n' % time_elapsed)
             outfile.write('%d epochs before stop, %f accuracy delta, %d min epochs\n' % (epochs_before_stop, acc_delta, min_epochs))
             outfile.write('%d epochs, best accuracy: %f, epoch: %d\n\n' % (epoch, best_acc, best_acc_epoch))
