@@ -4,26 +4,27 @@ import time
 import datetime
 import threading
 import json
+import sys
 
 from Cluster import Cluster
 
-from tts import tts
+
+model_seed = 1  # model seed and shuffle seed (in dataset_fn) for consistent tests
 
 
-config = {}
 config_file_path = "config.json"
+
 def load_config():
-    global config
     with open(config_file_path) as config_file:
         config = json.load(config_file)
         config_file.close()
+    return config
 
 
-
-# still no cross-worker data sharding, emulates manual-aggr-eval system
+# cross worker data sharding does happen here
 def dataset_fn(worker_id, num_train_samples):
     dataset = keras_model.mnist_dataset()
-    dataset = dataset.shuffle(num_train_samples*10).take(num_train_samples)
+    dataset = dataset.shuffle(len(dataset), seed=(model_seed + worker_id)).take(num_train_samples)
 
     return dataset
 
@@ -31,7 +32,7 @@ def dataset_fn(worker_id, num_train_samples):
 
 
 def model_builder():
-    model = keras_model.build_model()
+    model = keras_model.build_model_with_seed(model_seed)
     params = {
         'K1': model.layers[1].kernel,
         'B1': model.layers[1].bias,
@@ -65,7 +66,11 @@ def model_builder():
 
 
 def main():
-    load_config()
+    config = load_config()
+
+    if len(sys.argv) > 1 and sys.argv[1] == 's':
+        config['training_style'] = 'sync'
+        print('******* SYNC TRAINING ********')
 
     cluster = Cluster(model_builder, dataset_fn, config)
 

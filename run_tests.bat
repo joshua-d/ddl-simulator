@@ -1,39 +1,20 @@
 python main.py
-cd ../RO-ddl-simulator
+python main.py s
 python main.py
-cd ../ddl-simulator
+python main.py s
 python main.py
-cd ../RO-ddl-simulator
+python main.py s
 python main.py
-cd ../ddl-simulator
+python main.py s
 python main.py
-cd ../RO-ddl-simulator
+python main.py s
 python main.py
-cd ../ddl-simulator
+python main.py s
 python main.py
-cd ../RO-ddl-simulator
+python main.py s
 python main.py
-cd ../ddl-simulator
+python main.py s
 python main.py
-cd ../RO-ddl-simulator
+python main.py s
 python main.py
-cd ../ddl-simulator
-python main.py
-cd ../RO-ddl-simulator
-python main.py
-cd ../ddl-simulator
-python main.py
-cd ../RO-ddl-simulator
-python main.py
-cd ../ddl-simulator
-python main.py
-cd ../RO-ddl-simulator
-python main.py
-cd ../ddl-simulator
-python main.py
-cd ../RO-ddl-simulator
-python main.py
-cd ../ddl-simulator
-python main.py
-cd ../RO-ddl-simulator
-python main.py
+python main.py s

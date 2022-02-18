@@ -8,12 +8,17 @@ This is possible with shuffle and repeat, that may take up a lot of memory when 
 the dataset for many epochs
 """
 
+
+
 class DatasetIterator:
 
     def __init__(self, dataset, batch_size, reshuffle_each_iteration=True):
         self.dataset = dataset
         self.batch_size = batch_size
         self.reshuffle_each_iteration = reshuffle_each_iteration
+
+        # TODO consider making this configurable
+        self.shuffle_seed = 1
 
         self.iterator = iter(dataset.batch(batch_size))
         
@@ -24,7 +29,8 @@ class DatasetIterator:
         except StopIteration:
             if self.reshuffle_each_iteration:
                 next_dataset = self.dataset.take(len(self.dataset))
-                next_dataset = next_dataset.shuffle(len(next_dataset))
+                next_dataset = next_dataset.shuffle(len(next_dataset), seed=self.shuffle_seed)
+                self.shuffle_seed += 1
                 self.iterator = iter(next_dataset.batch(self.batch_size))
             else:
                 self.iterator = iter(self.dataset.batch(self.batch_size))

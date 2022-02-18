@@ -100,14 +100,16 @@ class Cluster:
         self.learning_rate = self._get_config_item(config, 'learning_rate')
         self.batch_size = self._get_config_item(config, 'batch_size')
         
+        # Num train samples per epoch - passed into dataset_fn
         self.num_train_samples = self._get_config_item(config, 'num_train_samples')
+
         self.num_test_samples = self._get_config_item(config, 'num_test_samples')
 
         if self.training_style == 'sync' and self.num_ps > 1:
             raise Exception('More than 1 PS with synchronous training is not supported')
 
     def _get_config_item(self, config, item):
-        if config[item] is None:
+        if item not in config:
             raise Exception('%s not in config' % item)
         else:
             return config[item]
@@ -127,13 +129,12 @@ class Cluster:
         x_test, y_test = keras_model.test_dataset(self.num_test_samples)
         accuracies = []
 
+        # Editable stopping condition vars
+        max_epochs = 400
+        acc_threshold = 0.95
+
         best_acc = 0
         best_acc_epoch = 0
-        acc_delta = 0.005
-        epochs_before_stop = 100
-        epochs_under_delta = 0
-        min_epochs = 0
-        acc_threshold = 0.94
 
         epoch = 0
         steps_per_epoch = int(self.num_train_samples / self.batch_size)
@@ -194,22 +195,14 @@ class Cluster:
 
             accuracies.append(test_accuracy)
 
-            # stop conditions 
-            if epoch > min_epochs: 
-                if test_accuracy > acc_threshold:
-                    best_acc = test_accuracy
-                    best_acc_epoch = epoch
-                    break
 
-                if test_accuracy > best_acc and test_accuracy - best_acc > acc_delta:
-                    best_acc = test_accuracy
-                    best_acc_epoch = epoch
-                    epochs_under_delta = 0
-                else:
-                    epochs_under_delta += 1
+            # STOPPING CONDITIONS 
+            if test_accuracy > best_acc:
+                best_acc = test_accuracy
+                best_acc_epoch = epoch
 
-                if epochs_under_delta >= epochs_before_stop:
-                    break
+            if test_accuracy > acc_threshold or epoch >= max_epochs:
+                break
 
 
         time_elapsed = time.time() - start_time
@@ -224,7 +217,7 @@ class Cluster:
             outfile.write('num train samples: %d, num test samples: %d, batch size: %d, learning rate: %f\n'
                             % (self.num_train_samples, self.num_test_samples, self.batch_size, self.learning_rate))
             outfile.write('%f seconds\n\n' % time_elapsed)
-            outfile.write('%d epochs before stop, %f accuracy delta, %d min epochs\n' % (epochs_before_stop, acc_delta, min_epochs))
+            outfile.write('%f acc threshold, %d max epochs\n' % (acc_threshold, max_epochs))
             outfile.write('%d epochs, best accuracy: %f, epoch: %d\n\n' % (epoch, best_acc, best_acc_epoch))
             for accuracy in accuracies:
                 outfile.write('%f\n' % accuracy)

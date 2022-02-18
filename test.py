@@ -1,9 +1,13 @@
 import tensorflow as tf
-import numpy as np
+import keras_model
 
 
-t1 = tf.constant([1, 2, 3])
-t2 = tf.constant([2, 3, 4])
+ds = keras_model.mnist_dataset().take(20)
 
-m = tf.reduce_mean([t1, t2])
-print(m)
+shuf1 = ds.shuffle(len(ds), seed=212)
+
+shuf2 = ds.shuffle(len(ds), seed=212)
+
+print(list(shuf1.as_numpy_iterator())[0])
+print('\n\n\n')
+print(list(shuf2.as_numpy_iterator())[0])
