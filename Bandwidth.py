@@ -40,6 +40,9 @@ class Bandwidth:
 
     def _init_msgs(self):
         pass
+        # for worker in self.cluster.workers:
+        #     for ps_id in self.cluster.parameter_servers:
+        #         self.msgs['w%sp%s' % (worker.id, ps_id)] = []
 
 
 
@@ -59,7 +62,7 @@ class Bandwidth:
 
         # Get points where bw changes and bandwidth at time
         change_points = []
-        num_sending_msgs = 0
+        num_sending_msgs = 1
 
         for comp_msg in overlapping_msgs:
             if comp_msg.start_time > time:
@@ -73,17 +76,23 @@ class Bandwidth:
         change_points.append((msg.end_time, 'f'))
 
         # Get amount sent
+        last_change_time = time # time at beginning of change point
         amount_sent = 0
+
         while len(change_points) > 0:
             current_bw = self.bandwidth / num_sending_msgs
-            current_send_time = change_points[0][0] - time
+            current_send_time = change_points[0][0] - last_change_time
 
             amount_sent += current_bw * current_send_time
 
-            if change_points.pop(0)[1] == 's':
+            next_change_point = change_points.pop(0)
+            if next_change_point[1] == 's':
                 num_sending_msgs += 1
             else:
                 num_sending_msgs -= 1
+
+            last_change_time = next_change_point[0]
+
 
 
         return msg.size - amount_sent
@@ -124,3 +133,20 @@ class Bandwidth:
 
 
         
+
+
+bw = Bandwidth(None, 10)
+
+bw.msgs[0] = [] # channel ids
+bw.msgs[1] = []
+
+m1 = Message(5, 0, 1, 0)
+bw.msgs[0].append(m1)
+
+m2 = Message(10, 0, 1.5, 1)
+bw.msgs[1].append(m2)
+
+
+res = bw.get_amt_sent_at_time(m2, 1.25)
+
+print(res)
