@@ -102,7 +102,6 @@ class Bandwidth:
     # Assumes that this msg's new end time will not extend past any other msg's prospective end time
     # Called on overlapping msgs in order from least end time to greatest end time
     # Considers only starts, not ends
-    # TODO don't forget to push msgs in this channel !!!!
 
     # Assumes that ends before this msg's end are final, but ignores ends after this end time
     def extend_msg_end_time(self, msg, new_msg_start_time):
@@ -169,8 +168,10 @@ class Bandwidth:
         time_left = amount_left / current_bw
         new_end_time = last_change_time + time_left
         msg.end_time = new_end_time
-        # TODO push back msgs in channel hereeeee !!!
-        return
+
+
+
+        
         
 
     # Assumes that all other messages are correct based on this msg having end time = inf
@@ -236,12 +237,11 @@ class Bandwidth:
         time_left = amount_left / current_bw
         new_end_time = last_change_time + time_left
         msg.end_time = new_end_time
-        # TODO push back msgs in channel hereeeee !!! - PROBABLY don't have to do this HERE because this is an added message
-        return
 
 
 
     # Assumes all messages already in self.msgs already have valid start and end time
+    # Assumes this message will have the next earliest start time of all channels - must add msgs in this order!
     def add_msg(self, channel_id, size):
         channel_msgs = self.msgs[channel_id]
 
@@ -252,7 +252,6 @@ class Bandwidth:
             start_time = 0
 
         added_msg = Message(size, start_time, math.inf, channel_id)
-        # channel_msgs.append(added_msg)
 
 
         # Get overlapping messages
@@ -263,7 +262,7 @@ class Bandwidth:
                 continue
 
             for comp_msg in self.msgs[comp_channel_id]:
-                if comp_msg.end_time > added_msg.start_time:  # comp msg ends before this one starts
+                if comp_msg.start_time <= added_msg.start_time and comp_msg.end_time > added_msg.start_time:  # comp msg is sending when this one starts
                     overlapping_msgs.append(comp_msg)
 
 
@@ -311,9 +310,9 @@ bw.msgs[1] = []
 
 
 bw.add_msg(0, 10)
-bw.add_msg(0, 10)
 bw.add_msg(1, 5)
 bw.add_msg(1, 10)
+bw.add_msg(0, 10)
 
 for msg_id in bw.msgs:
     print('Channel %d' % msg_id)
