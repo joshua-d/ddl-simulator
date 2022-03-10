@@ -28,12 +28,14 @@ class Worker:
 
 
     def send_gradients(self, gradients):
+
         for ps_id in self.param_locations:
             send_list = []
             for param_id in self.param_locations[ps_id]:
                 send_list.append((gradients[param_id], param_id))
             
-            self.network.send_gradients(ps_id, send_list)
+            self.bandwidth.send_gradients(self.id, ps_id, 20, lambda: self.network.send_gradients(ps_id, send_list))
+            
 
 
 

@@ -54,4 +54,5 @@ class ParameterServer:
             if len(waiting_workers_buffer) > 0:
                 vals_by_param_id = self.get_params() # TODO may need lock on here because cluster and self reading at same time?
                 for wk_id in waiting_workers_buffer:
-                    self.network.send_params(wk_id, vals_by_param_id)
+                    self.bandwidth.send_params(self.id, wk_id, 10, lambda: self.network.send_params(wk_id, vals_by_param_id))
+                    
