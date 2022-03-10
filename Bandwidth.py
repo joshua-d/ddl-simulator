@@ -78,6 +78,7 @@ class Bandwidth:
         # Get amount sent
         last_change_time = time # time at beginning of change point
         amount_sent = 0
+        current_bw = self.bandwidth / num_sending_msgs
 
         while len(change_points) > 0:
             current_bw = self.bandwidth / num_sending_msgs
@@ -163,6 +164,7 @@ class Bandwidth:
                 last_change_time = next_change_point[0]
 
         # no change points left, still some to send
+        current_bw = self.bandwidth / num_sending_msgs
         amount_left = msg.size - amount_sent
         time_left = amount_left / current_bw
         new_end_time = last_change_time + time_left
@@ -170,6 +172,72 @@ class Bandwidth:
         # TODO push back msgs in channel hereeeee !!!
         return
         
+
+    # Assumes that all other messages are correct based on this msg having end time = inf
+    # TODO this is basically the same as extend...
+    def set_msg_end_time(self, msg):
+
+        # Count initial current sending msgs at start time
+        num_sending_msgs = 1 # 1 for this msg
+
+        for comp_channel_id in self.msgs:
+            if comp_channel_id == msg.channel_id:
+                continue
+
+            for comp_msg in self.msgs[comp_channel_id]:
+                if comp_msg.start_time <= msg.start_time and comp_msg.end_time > msg.start_time:
+                    num_sending_msgs += 1
+
+
+        # Get change points
+        change_points = []
+
+        for comp_channel_id in self.msgs:
+            if comp_channel_id == msg.channel_id:
+                continue
+
+            for comp_msg in self.msgs[comp_channel_id]:
+                if comp_msg.start_time > msg.start_time:
+                    change_points.append((comp_msg.start_time, 's'))
+
+                if comp_msg.end_time > msg.start_time:
+                    change_points.append((comp_msg.end_time, 'e'))
+
+
+        # calc end time
+        last_change_time = msg.start_time
+        amount_sent = 0
+        current_bw = self.bandwidth / num_sending_msgs
+
+        while len(change_points) > 0:
+            current_bw = self.bandwidth / num_sending_msgs
+            current_send_time = change_points[0][0] - last_change_time
+
+            amount_able_to_send = current_bw * current_send_time
+
+            if amount_sent + amount_able_to_send > msg.size:
+                # reached an end point before next change point
+                break
+
+            else:
+                amount_sent += amount_able_to_send
+
+                next_change_point = change_points.pop(0)
+                if next_change_point[1] == 's':
+                    num_sending_msgs += 1
+                else:
+                    num_sending_msgs -= 1
+
+                last_change_time = next_change_point[0]
+
+        # no change points left, still some to send
+        current_bw = self.bandwidth / num_sending_msgs
+        amount_left = msg.size - amount_sent
+        time_left = amount_left / current_bw
+        new_end_time = last_change_time + time_left
+        msg.end_time = new_end_time
+        # TODO push back msgs in channel hereeeee !!! - PROBABLY don't have to do this HERE because this is an added message
+        return
 
 
 
@@ -180,9 +248,10 @@ class Bandwidth:
         if len(channel_msgs) > 0:
             start_time = channel_msgs[-1].end_time  # TODO consider adding buffer here
         else:
-            start_time = random.uniform(0, 0.100)  # TODO edit rand start time
+            # start_time = random.uniform(0, 0.100)  # TODO edit rand start time
+            start_time = 0
 
-        added_msg = Message(size, start_time, math.inf)
+        added_msg = Message(size, start_time, math.inf, channel_id)
         # channel_msgs.append(added_msg)
 
 
@@ -205,6 +274,20 @@ class Bandwidth:
             self.extend_msg_end_time(overlapping_msg, start_time)
 
 
+        # Set added msg's real end time
+        self.set_msg_end_time(added_msg)
+
+        # add added_msg to channel
+        self.msgs[channel_id].append(added_msg)
+
+        # Correct end times of msgs that end after real end time
+        # TODO I think I can just use set_msg_end_time as is?
+        for overlapping_msg in overlapping_msgs:
+            if overlapping_msg.end_time > added_msg.end_time:
+                self.set_msg_end_time(overlapping_msg)
+
+        
+
         
 
 
@@ -213,13 +296,27 @@ bw = Bandwidth(None, 10)
 bw.msgs[0] = [] # channel ids
 bw.msgs[1] = []
 
-m1 = Message(10, 0, 1, 0)
-bw.msgs[0].append(m1)
-
-# m2 = Message(10, 0, 1.5, 1)
-# bw.msgs[1].append(m2)
+# m1 = Message(10, 0, 1, 0)
+# bw.msgs[0].append(m1)
 
 
-bw.extend_msg_end_time(m1, 0.75)
+# bw.extend_msg_end_time(m1, 0)
 
-print(m1.end_time)
+# am = Message(10, 0, math.inf, 1)
+
+# bw.set_msg_end_time(am)
+
+# print(m1.end_time)
+# print(am.end_time)
+
+
+bw.add_msg(0, 10)
+bw.add_msg(0, 10)
+bw.add_msg(1, 5)
+bw.add_msg(1, 10)
+
+for msg_id in bw.msgs:
+    print('Channel %d' % msg_id)
+    for msg in bw.msgs[msg_id]:
+        print('start: %f, end: %f' % (msg.start_time, msg.end_time))
+    print()
