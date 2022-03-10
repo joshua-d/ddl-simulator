@@ -12,6 +12,8 @@ class Message:
         self.start_time = start_time
         self.end_time = end_time
         self.channel_id = channel_id
+        
+        self.needs_extending = False
 
 
 class Bandwidth:
@@ -49,34 +51,26 @@ class Bandwidth:
     # Assumes all msgs are currently correct, time is between msg.start_time and msg.end_time
     def get_amt_sent_at_time(self, msg, time):
 
-        # Get overlapping msgs with end times after time
-        overlapping_msgs = []
+        # Get change points
+        change_points = []
+        num_sending_msgs = 1
 
         for comp_channel_id in self.msgs:
             if comp_channel_id == msg.channel_id:
                 continue
 
             for comp_msg in self.msgs[comp_channel_id]:
-                if comp_msg.end_time > time and comp_msg.start_time < msg.end_time:
-                    overlapping_msgs.append(comp_msg)
+                if comp_msg.start_time > msg.start_time and comp_msg.start_time < time:
+                    change_points.append((comp_msg.start_time, 's'))
+                elif comp_msg.start_time <= msg.start_time and comp_msg.end_time > msg.start_time:
+                    num_sending_msgs += 1
+                    if comp_msg.end_time < time:
+                        change_points.append((comp_msg.end_time, 'e'))
 
-        # Get points where bw changes and bandwidth at time
-        change_points = []
-        num_sending_msgs = 1
-
-        for comp_msg in overlapping_msgs:
-            if comp_msg.start_time > time:
-                change_points.append((comp_msg.start_time, 's'))
-            else:
-                num_sending_msgs += 1
-
-            if comp_msg.end_time < msg.end_time:
-                change_points.append((comp_msg.end_time, 'e'))
-
-        change_points.append((msg.end_time, 'f'))
+        change_points.append((time, 'f'))
 
         # Get amount sent
-        last_change_time = time # time at beginning of change point
+        last_change_time = msg.start_time
         amount_sent = 0
         current_bw = self.bandwidth / num_sending_msgs
 
@@ -95,19 +89,18 @@ class Bandwidth:
             last_change_time = next_change_point[0]
 
 
-
-        return msg.size - amount_sent
+        return amount_sent
 
 
     # Assumes that this msg's new end time will not extend past any other msg's prospective end time
     # Called on overlapping msgs in order from least end time to greatest end time
-    # Considers only starts, not ends
-
-    # Assumes that ends before this msg's end are final, but ignores ends after this end time
+    # Doesn't consider end points of msgs that still need extending (needs_extending) -
+    #   if a msg needs_extending, it's prospective end point is further than this one's, so its end point need not be
+    #   considered as a change point
     def extend_msg_end_time(self, msg, new_msg_start_time):
-        amount_sent = self.get_amt_sent_at_time(msg, new_msg_start_time)
 
         # TODO could probably benefit from some sort of start time mapping here !!!!
+        # TODO could combine these 2 sections into one with logic similar to get_amt
 
         # Count initial current sending msgs at new_msg_start_time
         num_sending_msgs = 2 # 1 for this msg, 1 for new msg
@@ -132,7 +125,7 @@ class Bandwidth:
                 if comp_msg.start_time > new_msg_start_time:
                     change_points.append((comp_msg.start_time, 's'))
 
-                if comp_msg.end_time > new_msg_start_time and comp_msg.end_time < msg.end_time:
+                if comp_msg.end_time > new_msg_start_time and not comp_msg.needs_extending:
                     change_points.append((comp_msg.end_time, 'e'))
 
 
@@ -167,7 +160,9 @@ class Bandwidth:
         amount_left = msg.size - amount_sent
         time_left = amount_left / current_bw
         new_end_time = last_change_time + time_left
+
         msg.end_time = new_end_time
+        msg.needs_extending = False
 
 
 
@@ -264,6 +259,7 @@ class Bandwidth:
             for comp_msg in self.msgs[comp_channel_id]:
                 if comp_msg.start_time <= added_msg.start_time and comp_msg.end_time > added_msg.start_time:  # comp msg is sending when this one starts
                     overlapping_msgs.append(comp_msg)
+                    comp_msg.needs_extending = True
 
 
         # Correct end times of overlapping messages
@@ -294,25 +290,22 @@ bw = Bandwidth(None, 10)
 
 bw.msgs[0] = [] # channel ids
 bw.msgs[1] = []
+bw.msgs[2] = []
 
-# m1 = Message(10, 0, 1, 0)
+# m1 = Message(10, 0, 2, 0)
 # bw.msgs[0].append(m1)
 
+# m2 = Message(20, 0, 3, 1)
+# bw.msgs[1].append(m2)
 
-# bw.extend_msg_end_time(m1, 0)
-
-# am = Message(10, 0, math.inf, 1)
-
-# bw.set_msg_end_time(am)
-
-# print(m1.end_time)
-# print(am.end_time)
+# print(bw.get_amt_sent_at_time(m2, 2.5))
 
 
-bw.add_msg(0, 10)
-bw.add_msg(1, 5)
+
+bw.add_msg(0, 5)
 bw.add_msg(1, 10)
-bw.add_msg(0, 10)
+bw.add_msg(2, 15)
+
 
 for msg_id in bw.msgs:
     print('Channel %d' % msg_id)
