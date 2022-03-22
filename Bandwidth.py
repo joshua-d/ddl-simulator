@@ -16,6 +16,14 @@ class Message:
         self.needs_extending = False
 
 
+class Channel:
+    def __init__(self, id):
+        self.id = id
+        self.msgs = []
+        self.time = 0
+        self.next_msg_idx = 0
+
+
 class Bandwidth:
 
     def __init__(self, cluster, bandwidth):
@@ -27,25 +35,16 @@ class Bandwidth:
         self.msg_start_times = {}
         self.msg_end_times = {}
 
-
-        # List of Messages by channel ID
-        self.msgs = {}
-
-        self._init_msgs()
-
-    def send_gradients(self, wk_id, ps_id, bytes, callback):
-        pass
-
-    def send_params(self, ps_id, wk_id, bytes, callback):
-        pass
+        # Channels by channel id
+        self.channels = {}
+        self._init_channels()
 
 
-    def _init_msgs(self):
-        pass
-        # for worker in self.cluster.workers:
-        #     for ps_id in self.cluster.parameter_servers:
-        #         self.msgs['w%sp%s' % (worker.id, ps_id)] = []
-
+    def _init_channels(self):
+        for worker in self.cluster.workers:
+            for ps_id in self.cluster.parameter_servers:
+                channel_id = 'w%sp%s' % (worker.id, ps_id)
+                self.channels[channel_id] = Channel(channel_id)
 
 
     # Assumes all msgs are currently correct, time is between msg.start_time and msg.end_time
@@ -55,11 +54,11 @@ class Bandwidth:
         change_points = []
         num_sending_msgs = 1
 
-        for comp_channel_id in self.msgs:
+        for comp_channel_id in self.channels:
             if comp_channel_id == msg.channel_id:
                 continue
 
-            for comp_msg in self.msgs[comp_channel_id]:
+            for comp_msg in self.channels[comp_channel_id].msgs:
                 if comp_msg.start_time > msg.start_time and comp_msg.start_time < time:
                     change_points.append((comp_msg.start_time, 's'))
                 elif comp_msg.start_time <= msg.start_time and comp_msg.end_time > msg.start_time:
@@ -105,11 +104,11 @@ class Bandwidth:
         # Count initial current sending msgs at new_msg_start_time
         num_sending_msgs = 2 # 1 for this msg, 1 for new msg
 
-        for comp_channel_id in self.msgs:
+        for comp_channel_id in self.channels:
             if comp_channel_id == msg.channel_id:
                 continue
 
-            for comp_msg in self.msgs[comp_channel_id]:
+            for comp_msg in self.channels[comp_channel_id].msgs:
                 if comp_msg.start_time <= new_msg_start_time and comp_msg.end_time > new_msg_start_time:
                     num_sending_msgs += 1
 
@@ -117,11 +116,11 @@ class Bandwidth:
         # Get change points
         change_points = []
 
-        for comp_channel_id in self.msgs:
+        for comp_channel_id in self.channels:
             if comp_channel_id == msg.channel_id:
                 continue
 
-            for comp_msg in self.msgs[comp_channel_id]:
+            for comp_msg in self.channels[comp_channel_id].msgs:
                 if comp_msg.start_time > new_msg_start_time:
                     change_points.append((comp_msg.start_time, 's'))
 
@@ -165,10 +164,6 @@ class Bandwidth:
         msg.needs_extending = False
 
 
-
-        
-        
-
     # Assumes that all other messages are correct based on this msg having end time = inf
     # TODO this is basically the same as extend...
     def set_msg_end_time(self, msg):
@@ -176,11 +171,11 @@ class Bandwidth:
         # Count initial current sending msgs at start time
         num_sending_msgs = 1 # 1 for this msg
 
-        for comp_channel_id in self.msgs:
+        for comp_channel_id in self.channels:
             if comp_channel_id == msg.channel_id:
                 continue
 
-            for comp_msg in self.msgs[comp_channel_id]:
+            for comp_msg in self.channels[comp_channel_id].msgs:
                 if comp_msg.start_time <= msg.start_time and comp_msg.end_time > msg.start_time:
                     num_sending_msgs += 1
 
@@ -188,11 +183,11 @@ class Bandwidth:
         # Get change points
         change_points = []
 
-        for comp_channel_id in self.msgs:
+        for comp_channel_id in self.channels:
             if comp_channel_id == msg.channel_id:
                 continue
 
-            for comp_msg in self.msgs[comp_channel_id]:
+            for comp_msg in self.channels[comp_channel_id].msgs:
                 if comp_msg.start_time > msg.start_time:
                     change_points.append((comp_msg.start_time, 's'))
 
@@ -234,14 +229,14 @@ class Bandwidth:
         msg.end_time = new_end_time
 
 
-
     # Assumes all messages already in self.msgs already have valid start and end time
     # Assumes this message will have the next earliest start time of all channels - must add msgs in this order!
     def add_msg(self, channel_id, size):
-        channel_msgs = self.msgs[channel_id]
+        channel_msgs = self.channels[channel_id].msgs
 
         if len(channel_msgs) > 0:
             start_time = channel_msgs[-1].end_time  # TODO consider adding buffer here
+            start_time += 1
         else:
             # start_time = random.uniform(0, 0.100)  # TODO edit rand start time
             start_time = 0
@@ -252,11 +247,11 @@ class Bandwidth:
         # Get overlapping messages
         overlapping_msgs = []
 
-        for comp_channel_id in self.msgs:
+        for comp_channel_id in self.channels:
             if comp_channel_id == channel_id:
                 continue
 
-            for comp_msg in self.msgs[comp_channel_id]:
+            for comp_msg in self.channels[comp_channel_id].msgs:
                 if comp_msg.start_time <= added_msg.start_time and comp_msg.end_time > added_msg.start_time:  # comp msg is sending when this one starts
                     overlapping_msgs.append(comp_msg)
                     comp_msg.needs_extending = True
@@ -273,7 +268,7 @@ class Bandwidth:
         self.set_msg_end_time(added_msg)
 
         # add added_msg to channel
-        self.msgs[channel_id].append(added_msg)
+        self.channels[channel_id].msgs.append(added_msg)
 
         # Correct end times of msgs that end after real end time
         # TODO I think I can just use set_msg_end_time as is?
@@ -281,34 +276,63 @@ class Bandwidth:
             if overlapping_msg.end_time > added_msg.end_time:
                 self.set_msg_end_time(overlapping_msg)
 
-        
 
-        
-
-
-bw = Bandwidth(None, 10)
-
-bw.msgs[0] = [] # channel ids
-bw.msgs[1] = []
-bw.msgs[2] = []
-
-# m1 = Message(10, 0, 2, 0)
-# bw.msgs[0].append(m1)
-
-# m2 = Message(20, 0, 3, 1)
-# bw.msgs[1].append(m2)
-
-# print(bw.get_amt_sent_at_time(m2, 2.5))
+    def prepare_next_msgs(self, num_msgs):
+        pass
 
 
-
-bw.add_msg(0, 5)
-bw.add_msg(1, 10)
-bw.add_msg(2, 15)
+    def get_channel_id(self, wk_id, ps_id):
+        return 'w%sp%s' % (wk_id, ps_id)
 
 
-for msg_id in bw.msgs:
-    print('Channel %d' % msg_id)
-    for msg in bw.msgs[msg_id]:
+    def send_msg(self, wk_id, ps_id):
+        channel_id = self.get_channel_id(wk_id, ps_id)
+        channel = self.channels[channel_id]
+
+        msg_end_time = channel.msgs[channel.next_msg_idx].end_time
+
+        wait_time = msg_end_time - channel.time
+
+        channel.time = msg_end_time
+        channel.next_msg_idx += 1 # TODO maybe mark message as used
+
+        return wait_time
+
+
+
+
+
+class TestWorker:
+    def __init__(self, id):
+        self.id = id
+
+class TestCluster:
+    def __init__(self, workers, ps_ids):
+        self.workers = workers
+        self.parameter_servers = ps_ids
+
+
+wks = []
+for i in range(4):
+    wks.append(TestWorker(i))
+
+ps_ids = []
+for i in range(1):
+    ps_ids.append(i)
+
+cl = TestCluster(wks, ps_ids)
+
+bw = Bandwidth(cl, 10)
+
+bw.add_msg('w0p0', 5)
+bw.add_msg('w1p0', 5)
+bw.add_msg('w2p0', 5)
+bw.add_msg('w0p0', 10)
+
+
+
+for channel_id in bw.channels:
+    print('Channel %s' % channel_id)
+    for msg in bw.channels[channel_id].msgs:
         print('start: %f, end: %f' % (msg.start_time, msg.end_time))
     print()

@@ -1,6 +1,6 @@
 
 
-class Network:
+class NodeCommunication:
 
     def __init__(self, cluster):
         self.cluster = cluster
@@ -38,7 +38,7 @@ class Network:
             ps.grads_queue_cond.notify()
 
 
-    def wait_for_worker_request(self, ps):
+    def wait_for_worker_msg(self, ps):
 
         # Wait for worker to request params or send grads
         with ps.grads_queue_cond:

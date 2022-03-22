@@ -11,7 +11,7 @@ from SyncParameterServer import SyncParameterServer
 from Worker import Worker
 from SyncWorker import SyncWorker
 from DatasetIterator import DatasetIterator
-from Network import Network
+from NodeCommunication import NodeCommunication
 
 
 
@@ -42,7 +42,7 @@ class Cluster:
 
         self._parse_config(config)
 
-        self.network = Network(self)
+        self.nc = NodeCommunication(self)
 
         self._create_parameter_servers()
         self._create_workers()
@@ -74,9 +74,9 @@ class Cluster:
         for i in range(self.num_ps):
             ps_id = 'ps%d' % i
             if self.training_style == 'async':
-                self.parameter_servers[ps_id] = ParameterServer(ps_id, params_objs[i], tf.keras.optimizers.RMSprop(learning_rate=self.learning_rate), self.network)
+                self.parameter_servers[ps_id] = ParameterServer(ps_id, params_objs[i], tf.keras.optimizers.RMSprop(learning_rate=self.learning_rate), self.nc)
             elif self.training_style == 'sync':
-                self.parameter_servers[ps_id] = SyncParameterServer(ps_id, params_objs[i], tf.keras.optimizers.RMSprop(learning_rate=self.learning_rate), self.network, self.num_workers)
+                self.parameter_servers[ps_id] = SyncParameterServer(ps_id, params_objs[i], tf.keras.optimizers.RMSprop(learning_rate=self.learning_rate), self.nc, self.num_workers)
 
             self.param_locations[ps_id] = list(params_objs[i].keys())
 
@@ -87,9 +87,9 @@ class Cluster:
             dataset_iterator = DatasetIterator(dataset, self.batch_size)
             
             if self.training_style == 'async':
-                self.workers.append(Worker(i, self.model_builder, dataset_iterator, self.param_locations, self.network, self))
+                self.workers.append(Worker(i, self.model_builder, dataset_iterator, self.param_locations, self.nc, self))
             elif self.training_style == 'sync':
-                self.workers.append(SyncWorker(i, self.model_builder, dataset_iterator, self.param_locations, self.network, self))
+                self.workers.append(SyncWorker(i, self.model_builder, dataset_iterator, self.param_locations, self.nc, self))
 
 
     def _parse_config(self, config):
@@ -117,7 +117,7 @@ class Cluster:
 
     def get_test_model(self):
         # TODO this is pretty hacky - forces worker 0 to request params, getting latest
-        params_msgs = self.network.request_params_and_wait(self.workers[0])
+        params_msgs = self.nc.request_params_and_wait(self.workers[0])
         for vals_by_param_id in params_msgs:
             for param_id in vals_by_param_id:
                 self.test_model_params[param_id].assign(vals_by_param_id[param_id])

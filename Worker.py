@@ -4,7 +4,7 @@ import threading
 
 class Worker:
 
-    def __init__(self, id, model_builder, dataset_iterator, param_locations, network, cluster):
+    def __init__(self, id, model_builder, dataset_iterator, param_locations, nc, cluster):
         self.id = id
         self.model, self.params, self.forward_pass = model_builder()
         self.dataset_iterator = dataset_iterator
@@ -12,7 +12,7 @@ class Worker:
         # { param_id: ps_id }
         self.param_locations = param_locations
 
-        self.network = network
+        self.nc = nc
         self.cluster = cluster # TODO don't really want to have to do this, but need it for steps_completed stuff
 
         self.params_queue = []
@@ -21,7 +21,7 @@ class Worker:
         self.stop_training = False
 
     def request_params(self): # TODO consider renaming params_msgs here and in Network
-        params_msgs = self.network.request_params_and_wait(self)
+        params_msgs = self.nc.request_params_and_wait(self)
         for vals_by_param_id in params_msgs:
             for param_id in vals_by_param_id:
                 self.params[param_id].assign(vals_by_param_id[param_id])
@@ -34,7 +34,7 @@ class Worker:
             for param_id in self.param_locations[ps_id]:
                 send_list.append((gradients[param_id], param_id))
             
-            self.bandwidth.send_gradients(self.id, ps_id, 20, lambda: self.network.send_gradients(ps_id, send_list))
+            self.nc.send_gradients(ps_id, send_list)
             
 
 
