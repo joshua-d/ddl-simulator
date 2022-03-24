@@ -72,7 +72,7 @@ class Bandwidth:
     def _init_channels(self):
         for worker in self.cluster.workers:
             for ps_id in self.cluster.parameter_servers:
-                channel_id = 'w%sp%s' % (worker.id, ps_id)
+                channel_id = 'w%sps%s' % (worker.id, ps_id)
                 self.channels[channel_id] = Channel(channel_id)
 
 
@@ -315,6 +315,7 @@ class Bandwidth:
         # Set added msg's buffer
         if msg_type == MessageType.PARAMS:
             buffer = random.uniform(self.min_work_delay, self.max_work_delay)
+            # buffer = 0 # TESTING
         else:
             buffer = 0 # TODO consider adding work delay for PS to do grads
 
@@ -358,7 +359,7 @@ class Bandwidth:
 
 
     def _get_channel_id(self, wk_id, ps_id):
-        return 'w%sp%s' % (wk_id, ps_id)
+        return 'w%s%s' % (wk_id, ps_id)
 
 
     # Removes msgs before next_msg_idx of each channel and resets next_msg_idx
@@ -370,10 +371,12 @@ class Bandwidth:
 
 
     # Adds more messages up to the min channel having min_msgs_per_channel + num_msgs_to_gen msgs
-    # Calls remove_used_msgs when done to clean out old msgs
+    # Calls remove_used_msgs first to clean out old msgs
     def _prepare_msgs(self):
-        # Add msgs until full
 
+        self.remove_used_msgs()
+
+        # Add msgs until full
         least_msgs = 0
 
         while least_msgs < self.min_msgs_per_channel + self.num_msgs_to_gen:
@@ -401,9 +404,8 @@ class Bandwidth:
             least_msgs = math.inf
             for channel_id in self.channels:
                 if len(self.channels[channel_id].msgs) < least_msgs:
-                    len(self.channels[channel_id].msgs)
+                    least_msgs = len(self.channels[channel_id].msgs)
 
-        self.remove_used_msgs()
 
 
     # Called by thread when sending point is reached - updates state of the data structure
@@ -452,6 +454,10 @@ bw = Bandwidth(cl, 10)
 
 
 
+print(bw.send_msg(0, 'ps0'))
+print(bw.send_msg(0, 'ps0'))
+print(bw.send_msg(0, 'ps0'))
+# print(bw.send_msg(0, 'ps0'))
 
 
 for channel_id in bw.channels:
