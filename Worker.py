@@ -20,8 +20,9 @@ class Worker:
 
         self.stop_training = False
 
-    def request_params(self): # TODO consider renaming params_msgs here and in Network
-        params_msgs = self.nc.request_params_and_wait(self)
+
+    def wait_for_params(self): # TODO consider renaming params_msgs here and in Network
+        params_msgs = self.nc.wait_for_params(self)
         for vals_by_param_id in params_msgs:
             for param_id in vals_by_param_id:
                 self.params[param_id].assign(vals_by_param_id[param_id])
@@ -34,13 +35,11 @@ class Worker:
             for param_id in self.param_locations[ps_id]:
                 send_list.append((gradients[param_id], param_id))
             
-            self.nc.send_gradients(ps_id, send_list)
-            
-
+            self.nc.send_gradients(self.id, ps_id, send_list)
 
 
     def train_step(self):
-        self.request_params()
+        self.wait_for_params()
         gradients = self.forward_pass(next(self.dataset_iterator))
         self.send_gradients(gradients)
 

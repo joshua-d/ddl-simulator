@@ -16,7 +16,6 @@ class ParameterServer:
         self.nc = nc
 
         self.grads_queue = []
-        self.waiting_workers = []
         self.grads_queue_cond = threading.Condition()
 
         self.stop_listening = False
@@ -42,17 +41,23 @@ class ParameterServer:
 
     def start(self):
         self.stop_listening = False
+
+        # Start by broadcasting params
+        self.nc.broadcast_params(self.get_params())
         
         while not self.stop_listening:
-            grads_queue_buffer, waiting_workers_buffer = self.nc.wait_for_worker_request(self)
+            grads_queue_buffer = self.nc.wait_for_grads(self)
 
-            # If there are any gradients, they must be applied before worker param requests are fulfilled - TODO this is a custom policy
-            for grads in grads_queue_buffer:
+            waiting_workers = []
+
+            # Apply all grads before sending back - TODO this is a custom policy
+            for grads, wk_id in grads_queue_buffer:
                 self.apply_gradients(grads)
+                waiting_workers.append(wk_id)
 
             # Send params to any requesting workers
-            if len(waiting_workers_buffer) > 0:
+            if len(waiting_workers) > 0:
                 vals_by_param_id = self.get_params() # TODO may need lock on here because cluster and self reading at same time?
-                for wk_id in waiting_workers_buffer:
+                for wk_id in waiting_workers:
                     self.nc.send_params(wk_id, vals_by_param_id)
                     

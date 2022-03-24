@@ -1,5 +1,6 @@
 import tensorflow as tf
 import threading
+from Bandwidth import Bandwidth
 
 # Only imported for test dataset
 import keras_model
@@ -11,6 +12,7 @@ from SyncParameterServer import SyncParameterServer
 from Worker import Worker
 from SyncWorker import SyncWorker
 from DatasetIterator import DatasetIterator
+from Bandwidth import Bandwidth
 from NodeCommunication import NodeCommunication
 
 
@@ -42,6 +44,7 @@ class Cluster:
 
         self._parse_config(config)
 
+        self.bw = Bandwidth(self, 10) # TODO this is a placeholder bandwidth
         self.nc = NodeCommunication(self)
 
         self._create_parameter_servers()
