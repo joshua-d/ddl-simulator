@@ -1,17 +1,24 @@
 import random
 import math
+from enum import Enum
 
 
-wk_msg_size = 20
-ps_msg_size = 10
+class MessageType(Enum):
+    PARAMS = 0
+    GRADS = 1
 
+
+PARAMS_SIZE = 10
+GRADS_SIZE = 20
 
 class Message:
-    def __init__(self, size, start_time, end_time, channel_id):
+    def __init__(self, size, start_time, end_time, buffer, channel_id, msg_type):
         self.size = size
         self.start_time = start_time
         self.end_time = end_time
+        self.buffer = buffer
         self.channel_id = channel_id
+        self.type = msg_type
         
         self.needs_extending = False
 
@@ -22,6 +29,18 @@ class Channel:
         self.msgs = []
         self.time = 0
         self.next_msg_idx = 0
+
+        # Type and size of next msg to be added
+        self.prospective_msg_type = MessageType.PARAMS
+        self.prospective_msg_size = PARAMS_SIZE
+
+    def inc_pros_msg_type(self):
+        if self.prospective_msg_type == MessageType.PARAMS:
+            self.prospective_msg_type = MessageType.GRADS
+            self.prospective_msg_size = GRADS_SIZE
+        else:
+            self.prospective_msg_type = MessageType.PARAMS
+            self.prospective_msg_size = PARAMS_SIZE
 
 
 class Bandwidth:
@@ -39,6 +58,16 @@ class Bandwidth:
         self.channels = {}
         self._init_channels()
 
+        # Constant fields
+
+        self.min_msgs_per_channel = 2
+        self.num_msgs_to_gen = 2
+
+        self.min_work_delay = 0.010
+        self.max_work_delay = 0.020
+
+        self._init_msgs()
+
 
     def _init_channels(self):
         for worker in self.cluster.workers:
@@ -47,8 +76,48 @@ class Bandwidth:
                 self.channels[channel_id] = Channel(channel_id)
 
 
+    def _init_msgs(self):
+
+        # Init each channel with first params msg
+        for channel_id in self.channels:
+            self._add_msg(channel_id, PARAMS_SIZE, MessageType.PARAMS)
+            self.channels[channel_id].inc_pros_msg_type()
+
+        # Add msgs until full
+
+        least_msgs = 1
+
+        while least_msgs < self.min_msgs_per_channel + self.num_msgs_to_gen:
+            # Find channel with next earliest start time
+            earliest_start_time = math.inf
+            earliest_channel_id = None
+
+            for channel_id in self.channels:
+                channel = self.channels[channel_id]
+                latest_msg = channel.msgs[-1]
+                start_time = latest_msg.end_time + latest_msg.buffer
+                if start_time < earliest_start_time:
+                    earliest_start_time = start_time
+                    earliest_channel_id = channel_id
+
+            # Add msg to channel
+            channel = self.channels[earliest_channel_id]
+            msg_type = channel.prospective_msg_type
+            msg_size = channel.prospective_msg_size
+            channel.inc_pros_msg_type()
+
+            self._add_msg(earliest_channel_id, msg_size, msg_type)
+
+            # Check least msgs
+            least_msgs = math.inf
+            for channel_id in self.channels:
+                if len(self.channels[channel_id].msgs) < least_msgs:
+                    least_msgs = len(self.channels[channel_id].msgs)
+
+
+
     # Assumes all msgs are currently correct, time is between msg.start_time and msg.end_time
-    def get_amt_sent_at_time(self, msg, time):
+    def _get_amt_sent_at_time(self, msg, time):
 
         # Get change points
         change_points = []
@@ -96,7 +165,7 @@ class Bandwidth:
     # Doesn't consider end points of msgs that still need extending (needs_extending) -
     #   if a msg needs_extending, it's prospective end point is further than this one's, so its end point need not be
     #   considered as a change point
-    def extend_msg_end_time(self, msg, new_msg_start_time):
+    def _extend_msg_end_time(self, msg, new_msg_start_time):
 
         # TODO could probably benefit from some sort of start time mapping here !!!!
         # TODO could combine these 2 sections into one with logic similar to get_amt
@@ -130,7 +199,7 @@ class Bandwidth:
 
         # extend
         last_change_time = new_msg_start_time
-        amount_sent = self.get_amt_sent_at_time(msg, new_msg_start_time)
+        amount_sent = self._get_amt_sent_at_time(msg, new_msg_start_time)
         current_bw = self.bandwidth / num_sending_msgs
 
         while len(change_points) > 0:
@@ -166,7 +235,7 @@ class Bandwidth:
 
     # Assumes that all other messages are correct based on this msg having end time = inf
     # TODO this is basically the same as extend...
-    def set_msg_end_time(self, msg):
+    def _set_msg_end_time(self, msg):
 
         # Count initial current sending msgs at start time
         num_sending_msgs = 1 # 1 for this msg
@@ -231,17 +300,25 @@ class Bandwidth:
 
     # Assumes all messages already in self.msgs already have valid start and end time
     # Assumes this message will have the next earliest start time of all channels - must add msgs in this order!
-    def add_msg(self, channel_id, size):
-        channel_msgs = self.channels[channel_id].msgs
+    # Buffer is the delay between the end time of this msg and the start time of the next one
+    def _add_msg(self, channel_id, size, msg_type):
+        channel = self.channels[channel_id]
+        channel_msgs = channel.msgs
 
+        # Set added msg's start time
         if len(channel_msgs) > 0:
-            start_time = channel_msgs[-1].end_time  # TODO consider adding buffer here
-            start_time += 1
+            start_time = channel_msgs[-1].end_time + channel_msgs[-1].buffer
         else:
-            # start_time = random.uniform(0, 0.100)  # TODO edit rand start time
             start_time = 0
 
-        added_msg = Message(size, start_time, math.inf, channel_id)
+
+        # Set added msg's buffer
+        if msg_type == MessageType.PARAMS:
+            buffer = random.uniform(self.min_work_delay, self.max_work_delay)
+        else:
+            buffer = 0 # TODO consider adding work delay for PS to do grads
+
+        added_msg = Message(size, start_time, math.inf, buffer, channel_id, msg_type)
 
 
         # Get overlapping messages
@@ -261,32 +338,77 @@ class Bandwidth:
         overlapping_msgs.sort(key=lambda e: e.end_time)
 
         for overlapping_msg in overlapping_msgs:
-            self.extend_msg_end_time(overlapping_msg, start_time)
+            self._extend_msg_end_time(overlapping_msg, start_time)
 
 
         # Set added msg's real end time
-        self.set_msg_end_time(added_msg)
+        self._set_msg_end_time(added_msg)
 
         # add added_msg to channel
         self.channels[channel_id].msgs.append(added_msg)
 
         # Correct end times of msgs that end after real end time
-        # TODO I think I can just use set_msg_end_time as is?
+        # TODO I think I can just use _set_msg_end_time as is?
         for overlapping_msg in overlapping_msgs:
             if overlapping_msg.end_time > added_msg.end_time:
-                self.set_msg_end_time(overlapping_msg)
+                self._set_msg_end_time(overlapping_msg)
 
 
-    def prepare_next_msgs(self, num_msgs):
-        pass
 
 
-    def get_channel_id(self, wk_id, ps_id):
+
+    def _get_channel_id(self, wk_id, ps_id):
         return 'w%sp%s' % (wk_id, ps_id)
 
 
+    # Removes msgs before next_msg_idx of each channel and resets next_msg_idx
+    def remove_used_msgs(self):
+        for channel_id in self.channels:
+            channel = self.channels[channel_id]
+            channel.msgs = channel.msgs[channel.next_msg_idx:]
+            channel.next_msg_idx = 0
+
+
+    # Adds more messages up to the min channel having min_msgs_per_channel + num_msgs_to_gen msgs
+    # Calls remove_used_msgs when done to clean out old msgs
+    def _prepare_msgs(self):
+        # Add msgs until full
+
+        least_msgs = 0
+
+        while least_msgs < self.min_msgs_per_channel + self.num_msgs_to_gen:
+            # Find channel with next earliest start time
+            earliest_start_time = math.inf
+            earliest_channel_id = None
+
+            for channel_id in self.channels:
+                channel = self.channels[channel_id]
+                latest_msg = channel.msgs[-1]
+                start_time = latest_msg.end_time + latest_msg.buffer
+                if start_time < earliest_start_time:
+                    earliest_start_time = start_time
+                    earliest_channel_id = channel_id
+
+            # Add msg to channel
+            channel = self.channels[earliest_channel_id]
+            msg_type = channel.prospective_msg_type
+            msg_size = channel.prospective_msg_size
+            channel.inc_pros_msg_type()
+
+            self._add_msg(earliest_channel_id, msg_size, msg_type)
+
+            # Check least msgs
+            least_msgs = math.inf
+            for channel_id in self.channels:
+                if len(self.channels[channel_id].msgs) < least_msgs:
+                    len(self.channels[channel_id].msgs)
+
+        self.remove_used_msgs()
+
+
+    # Called by thread when sending point is reached - updates state of the data structure
     def send_msg(self, wk_id, ps_id):
-        channel_id = self.get_channel_id(wk_id, ps_id)
+        channel_id = self._get_channel_id(wk_id, ps_id)
         channel = self.channels[channel_id]
 
         msg_end_time = channel.msgs[channel.next_msg_idx].end_time
@@ -295,6 +417,10 @@ class Bandwidth:
 
         channel.time = msg_end_time
         channel.next_msg_idx += 1 # TODO maybe mark message as used
+
+        # Check if there are enough msgs left
+        if len(channel.msgs) - channel.next_msg_idx < self.min_msgs_per_channel:
+            self._prepare_msgs()
 
         return wait_time
 
@@ -324,10 +450,7 @@ cl = TestCluster(wks, ps_ids)
 
 bw = Bandwidth(cl, 10)
 
-bw.add_msg('w0p0', 5)
-bw.add_msg('w1p0', 5)
-bw.add_msg('w2p0', 5)
-bw.add_msg('w0p0', 10)
+
 
 
 
