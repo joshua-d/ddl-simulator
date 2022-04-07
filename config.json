@@ -1,12 +1,12 @@
 {
     "num_ps": 1,
-    "num_workers": 1,
+    "num_workers": 4,
 
     "training_style": "async",
 
     "learning_rate": 0.1,
     "batch_size": 10,
 
-    "num_train_samples": 100,
-    "num_test_samples": 100
+    "num_train_samples": 5000,
+    "num_test_samples": 5000
 }

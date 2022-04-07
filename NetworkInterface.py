@@ -83,7 +83,8 @@ class NodeCommunication:
         # Place params in param queue and notify worker
         with worker.params_queue_cond:
             worker.params_queue.append(vals_by_param_id)
-            print('length: %d' % len(worker.params_queue))
+            if (len(worker.params_queue) > 1):
+                print('id: %d length: %d' % (worker.id, len(worker.params_queue)))
             worker.params_queue_cond.notify()
 
 
@@ -91,3 +92,9 @@ class NodeCommunication:
         for worker in self.cluster.workers:
             with worker.params_queue_cond:
                 worker.params_queue = []
+
+
+    def flush_ps_grads_queues(self):
+        for ps in self.cluster.parameter_servers.values():
+            with ps.grads_queue_cond:
+                ps.grads_queue = []

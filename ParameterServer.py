@@ -46,9 +46,7 @@ class ParameterServer:
         self.ni.broadcast_params(self.get_params())
         
         while not self.stop_listening:
-            print('Waiting for grads')
             grads_queue_buffer = self.ni.wait_for_grads(self)
-            print('Got grads')
 
             waiting_workers = []
 

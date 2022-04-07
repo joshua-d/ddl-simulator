@@ -69,6 +69,8 @@ class NetworkEmulator:
 
                 self.timing_thread_waiting = False
 
+                # print(len(self.sending_msgs))
+
                 # TODO do I have to keep it locked here??? I think I do - r/w lock?
                 current_time = time.perf_counter()
                 avail_bw = self.bw / len(self.sending_msgs)
@@ -92,7 +94,6 @@ class NetworkEmulator:
             if len(sent_msgs) > 0:
                 with self.dtjq_cond:
                     for sent_msg in sent_msgs:
-                        print('dispatching sent msg')
                         self.dtjq.append(sent_msg.dtj_fn)
                     self.dtjq_cond.notify()
 
@@ -123,7 +124,6 @@ class NetworkEmulator:
 
             for dtj_fn in dtjq_buffer:
                 dtj_fn()
-                print('dt performed')
 
 
     def start(self):
