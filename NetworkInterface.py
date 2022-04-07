@@ -83,8 +83,6 @@ class NodeCommunication:
         # Place params in param queue and notify worker
         with worker.params_queue_cond:
             worker.params_queue.append(vals_by_param_id)
-            if (len(worker.params_queue) > 1):
-                print('id: %d length: %d' % (worker.id, len(worker.params_queue)))
             worker.params_queue_cond.notify()
 
 

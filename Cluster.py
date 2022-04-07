@@ -201,11 +201,6 @@ class Cluster:
             self.ni.nc.flush_ps_grads_queues()
 
             predictions = self.get_test_model().predict(x_test)
-            for worker in self.workers:
-                print(len(worker.params_queue))
-            print(len(self.ni.ne.sending_msgs))
-            print(len(self.ni.ne.dtjq))
-            print(len(self.parameter_servers['ps0'].grads_queue))
 
             if self.training_style == 'sync':
                 self.parameter_servers['ps0'].reset_round()

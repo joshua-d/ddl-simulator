@@ -30,11 +30,11 @@ class NetworkEmulator:
         self.sending_msgs_cond = Condition()
 
         # Sending msg timing thread
-        self.timing_thread = Thread(target=self.process_sending_msgs)
+        self.timing_thread = Thread(target=self.process_sending_msgs, daemon=True)
         self.timing_thread_waiting = True
 
         # Data transmission thread
-        self.dt_thread = Thread(target=self.process_dtjq)
+        self.dt_thread = Thread(target=self.process_dtjq, daemon=True)
         self.dt_thread_waiting = True
 
         # Network idle utility. CURRENTLY SINGLE USE - once announce is set to True, once the network
