@@ -2,6 +2,9 @@ from time import sleep
 from NetworkEmulator import NetworkEmulator
 
 
+PARAMS_SIZE = 1024*8
+GRADS_SIZE = 1024*8
+
 class NetworkInterface:
 
     def __init__(self, cluster, bandwidth):
@@ -10,18 +13,18 @@ class NetworkInterface:
         self.ne = NetworkEmulator(bandwidth)
 
     def wait_for_params(self, worker):
-        self.nc.wait_for_params(worker)
+        return self.nc.wait_for_params(worker)
 
     def send_gradients(self, wk_id, ps_id, grads):
         # TODO get size of actual grads
-        self.ne.send_msg(10, lambda: self.nc.send_gradients(wk_id, ps_id, grads))
+        self.ne.send_msg(GRADS_SIZE, lambda: self.nc.send_gradients(wk_id, ps_id, grads))
 
     def wait_for_grads(self, ps):
-        self.nc.wait_for_grads(ps)
+        return self.nc.wait_for_grads(ps)
 
     def send_params(self, wk_id, vals_by_param_id):
         # TODO get size of actual params
-        self.ne.send_msg(10, lambda: self.nc.send_params(wk_id, vals_by_param_id))
+        self.ne.send_msg(PARAMS_SIZE, lambda: self.nc.send_params(wk_id, vals_by_param_id))
 
     def broadcast_params(self, vals_by_param_id):
         for worker in self.cluster.workers:
@@ -80,6 +83,7 @@ class NodeCommunication:
         # Place params in param queue and notify worker
         with worker.params_queue_cond:
             worker.params_queue.append(vals_by_param_id)
+            print('length: %d' % len(worker.params_queue))
             worker.params_queue_cond.notify()
 
 

@@ -42,7 +42,7 @@ class Cluster:
 
         self._parse_config(config)
 
-        self.ni = NetworkInterface(self, 100) # TODO placeholder bandwidth
+        self.ni = NetworkInterface(self, 100_000_000) # TODO placeholder bandwidth
 
         self._create_parameter_servers()
         self._create_workers()
@@ -117,7 +117,7 @@ class Cluster:
 
     def get_test_model(self):
         params_msgs = []
-        for ps in self.parameter_servers:
+        for ps in self.parameter_servers.values():
             params_msgs.append(ps.get_params())
 
         for vals_by_param_id in params_msgs:
@@ -179,11 +179,25 @@ class Cluster:
 
             print('Finished epoch %d' % epoch)
             
-            for ps in self.parameter_servers:
+            for ps in self.parameter_servers.values():
                 ps.stop_listening = True
 
             for pst in ps_threads:
                 pst.join()
+
+            # at this point, ps thread terminated, all final msgs are on the network
+
+            self.ni.ne.announce_network_idle = True
+            with self.ni.ne.network_idle_cond:
+                while not self.ni.ne.network_idle:
+                    self.ni.ne.network_idle_cond.wait()
+
+            # reset network idle util
+            self.ni.ne.network_idle = False
+            self.ni.ne.announce_network_idle = False
+
+            # network messages have finished, flush worker params for next round
+            self.ni.nc.flush_worker_params_queues()
 
             predictions = self.get_test_model().predict(x_test)
 

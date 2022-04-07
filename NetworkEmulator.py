@@ -3,7 +3,7 @@ from threading import Thread, Condition
 import time
 
 
-TIMING_THREAD_PERIOD = 0.001 # 1ms
+TIMING_THREAD_PERIOD = 0.010 # 10ms
 
 
 class Message:
@@ -31,14 +31,24 @@ class NetworkEmulator:
 
         # Sending msg timing thread
         self.timing_thread = Thread(target=self.process_sending_msgs)
+        self.timing_thread_waiting = True
 
         # Data transmission thread
         self.dt_thread = Thread(target=self.process_dtjq)
+        self.dt_thread_waiting = True
+
+        # Network idle utility. CURRENTLY SINGLE USE - once announce is set to True, once the network
+        # becomes idle, network_idle will be set to true and the cond will notify.
+        # network_idle will not be changed from True after this point
+        self.network_idle = False
+        self.network_idle_cond = Condition()
+        self.announce_network_idle = False # if false, network_idle is not updated or announced
     
 
     def send_msg(self, msg_size, dtj_fn):
         with self.sending_msgs_cond:
             self.sending_msgs.append(Message(msg_size, dtj_fn, time.perf_counter()))
+            self.sending_msgs_cond.notify()
 
 
     # Starting point of timing thread
@@ -48,7 +58,16 @@ class NetworkEmulator:
 
             with self.sending_msgs_cond:
                 while len(self.sending_msgs) == 0:
+
+                    self.timing_thread_waiting = True
+                    if self.announce_network_idle and self.dt_thread_waiting:
+                        with self.network_idle_cond:
+                            self.network_idle = True
+                            self.network_idle_cond.notify_all()
+
                     self.sending_msgs_cond.wait()
+
+                self.timing_thread_waiting = False
 
                 # TODO do I have to keep it locked here??? I think I do - r/w lock?
                 current_time = time.perf_counter()
@@ -59,6 +78,7 @@ class NetworkEmulator:
                     msg = self.sending_msgs[msg_idx]
 
                     msg.amt_sent += (current_time - msg.last_checked) * avail_bw
+                    msg.last_checked = current_time
 
                     if msg.amt_sent >= msg.size:
                         # message has sent, remove from sending_msgs and add to sent_msgs
@@ -72,7 +92,8 @@ class NetworkEmulator:
             if len(sent_msgs) > 0:
                 with self.dtjq_cond:
                     for sent_msg in sent_msgs:
-                        self.dtjq_cond.append(sent_msg.dtj_fn)
+                        print('dispatching sent msg')
+                        self.dtjq.append(sent_msg.dtj_fn)
                     self.dtjq_cond.notify()
 
 
@@ -85,7 +106,16 @@ class NetworkEmulator:
 
             with self.dtjq_cond:
                 while len(self.dtjq) == 0:
+
+                    self.dt_thread_waiting = True
+                    if self.announce_network_idle and self.timing_thread_waiting:
+                        with self.network_idle_cond:
+                            self.network_idle = True
+                            self.network_idle_cond.notify_all()
+
                     self.dtjq_cond.wait()
+
+                self.dt_thread_waiting = False
 
                 # Move into buffer and unlock
                 dtjq_buffer = self.dtjq
@@ -93,8 +123,24 @@ class NetworkEmulator:
 
             for dtj_fn in dtjq_buffer:
                 dtj_fn()
+                print('dt performed')
 
 
     def start(self):
         self.timing_thread.start()
         self.dt_thread.start()
+
+
+
+    # For debugging use - sends all currently sending msgs right now
+    # NOT TESTED
+    def flush_messages(self):
+        with self.sending_msgs_cond:
+            msgs = self.sending_msgs
+            self.sending_msgs = []
+
+        with self.dtjq_cond:
+            for dtj_fn in self.dtjq:
+                dtj_fn()
+            for msg in msgs:
+                msg.dtj_fn()

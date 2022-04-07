@@ -22,7 +22,9 @@ class Worker:
 
 
     def wait_for_params(self): # TODO consider renaming params_msgs here and in Network
+        print('Waiting for params')
         params_msgs = self.ni.wait_for_params(self)
+        print('Got params')
         for vals_by_param_id in params_msgs:
             for param_id in vals_by_param_id:
                 self.params[param_id].assign(vals_by_param_id[param_id])
@@ -50,6 +52,8 @@ class Worker:
             self.train_step()
             with self.cluster.steps_completed_lock:
                 self.cluster.steps_completed += 1
+                if self.cluster.steps_completed % 100 == 0:
+                    print('Steps completed: %d' % self.cluster.steps_completed)
                 if self.cluster.steps_completed >= self.cluster.steps_scheduled:
                     self.stop_training = True  # TODO maybe stop for all workers? trying to throw out in prog, step-schedule seems like a good system
                     break
