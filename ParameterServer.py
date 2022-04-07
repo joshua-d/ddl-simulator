@@ -3,7 +3,7 @@ import threading
 
 class ParameterServer:
 
-    def __init__(self, id, params, optimizer, nc):
+    def __init__(self, id, params, optimizer, ni):
         # TODO document this!
 
         self.id = id
@@ -13,7 +13,7 @@ class ParameterServer:
          
         self.optimizer = optimizer
 
-        self.nc = nc
+        self.ni = ni
 
         self.grads_queue = []
         self.grads_queue_cond = threading.Condition()
@@ -43,10 +43,10 @@ class ParameterServer:
         self.stop_listening = False
 
         # Start by broadcasting params
-        self.nc.broadcast_params(self.get_params())
+        self.ni.broadcast_params(self.get_params())
         
         while not self.stop_listening:
-            grads_queue_buffer = self.nc.wait_for_grads(self)
+            grads_queue_buffer = self.ni.wait_for_grads(self)
 
             waiting_workers = []
 
@@ -59,5 +59,5 @@ class ParameterServer:
             if len(waiting_workers) > 0:
                 vals_by_param_id = self.get_params() # TODO may need lock on here because cluster and self reading at same time?
                 for wk_id in waiting_workers:
-                    self.nc.send_params(wk_id, vals_by_param_id)
+                    self.ni.send_params(wk_id, vals_by_param_id)
                     

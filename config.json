@@ -1,6 +1,6 @@
 {
     "num_ps": 1,
-    "num_workers": 8,
+    "num_workers": 2,
 
     "training_style": "async",
 

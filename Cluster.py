@@ -1,6 +1,5 @@
 import tensorflow as tf
 import threading
-from Bandwidth import Bandwidth
 
 # Only imported for test dataset
 import keras_model
@@ -12,8 +11,7 @@ from SyncParameterServer import SyncParameterServer
 from Worker import Worker
 from SyncWorker import SyncWorker
 from DatasetIterator import DatasetIterator
-from Bandwidth import Bandwidth
-from NodeCommunication import NodeCommunication
+from NetworkInterface import NetworkInterface
 
 
 
@@ -44,8 +42,7 @@ class Cluster:
 
         self._parse_config(config)
 
-        self.bw = Bandwidth(self, 10) # TODO this is a placeholder bandwidth
-        self.nc = NodeCommunication(self)
+        self.ni = NetworkInterface(self, 100) # TODO placeholder bandwidth
 
         self._create_parameter_servers()
         self._create_workers()
@@ -77,9 +74,9 @@ class Cluster:
         for i in range(self.num_ps):
             ps_id = 'ps%d' % i
             if self.training_style == 'async':
-                self.parameter_servers[ps_id] = ParameterServer(ps_id, params_objs[i], tf.keras.optimizers.RMSprop(learning_rate=self.learning_rate), self.nc)
+                self.parameter_servers[ps_id] = ParameterServer(ps_id, params_objs[i], tf.keras.optimizers.RMSprop(learning_rate=self.learning_rate), self.ni)
             elif self.training_style == 'sync':
-                self.parameter_servers[ps_id] = SyncParameterServer(ps_id, params_objs[i], tf.keras.optimizers.RMSprop(learning_rate=self.learning_rate), self.nc, self.num_workers)
+                self.parameter_servers[ps_id] = SyncParameterServer(ps_id, params_objs[i], tf.keras.optimizers.RMSprop(learning_rate=self.learning_rate), self.ni, self.num_workers)
 
             self.param_locations[ps_id] = list(params_objs[i].keys())
 
@@ -90,9 +87,9 @@ class Cluster:
             dataset_iterator = DatasetIterator(dataset, self.batch_size)
             
             if self.training_style == 'async':
-                self.workers.append(Worker(i, self.model_builder, dataset_iterator, self.param_locations, self.nc, self))
+                self.workers.append(Worker(i, self.model_builder, dataset_iterator, self.param_locations, self.ni, self))
             elif self.training_style == 'sync':
-                self.workers.append(SyncWorker(i, self.model_builder, dataset_iterator, self.param_locations, self.nc, self))
+                self.workers.append(SyncWorker(i, self.model_builder, dataset_iterator, self.param_locations, self.ni, self))
 
 
     def _parse_config(self, config):
@@ -119,8 +116,10 @@ class Cluster:
 
 
     def get_test_model(self):
-        # TODO this is pretty hacky - forces worker 0 to request params, getting latest
-        params_msgs = self.nc.request_params_and_wait(self.workers[0])
+        params_msgs = []
+        for ps in self.parameter_servers:
+            params_msgs.append(ps.get_params())
+
         for vals_by_param_id in params_msgs:
             for param_id in vals_by_param_id:
                 self.test_model_params[param_id].assign(vals_by_param_id[param_id])
@@ -143,19 +142,11 @@ class Cluster:
         steps_per_epoch = int(self.num_train_samples / self.batch_size)
 
 
-        ps_threads = []
-
-        for ps_id in self.parameter_servers:
-                ps = self.parameter_servers[ps_id]
-                ps_thread = threading.Thread(target=ps.start, daemon=True)
-                ps_threads.append(ps_thread)
-
-        for pst in ps_threads:
-            pst.start()
-
-
         print('Beginning training')
         start_time = time.time()
+
+        # TODO machine threads stop and start every epoch. Change this.
+        self.ni.start()
 
         while True:
             epoch += 1
@@ -172,11 +163,28 @@ class Cluster:
             for wt in worker_threads:
                 wt.start()
 
+            ps_threads = []
+
+            for ps_id in self.parameter_servers:
+                    ps = self.parameter_servers[ps_id]
+                    ps_thread = threading.Thread(target=ps.start, daemon=True)
+                    ps_threads.append(ps_thread)
+
+            for pst in ps_threads:
+                pst.start()
+
             for wt in worker_threads:
                 wt.join()
 
+
             print('Finished epoch %d' % epoch)
             
+            for ps in self.parameter_servers:
+                ps.stop_listening = True
+
+            for pst in ps_threads:
+                pst.join()
+
             predictions = self.get_test_model().predict(x_test)
 
             if self.training_style == 'sync':

@@ -1,6 +1,38 @@
 from time import sleep
+from NetworkEmulator import NetworkEmulator
 
 
+class NetworkInterface:
+
+    def __init__(self, cluster, bandwidth):
+        self.cluster = cluster
+        self.nc = NodeCommunication(cluster)
+        self.ne = NetworkEmulator(bandwidth)
+
+    def wait_for_params(self, worker):
+        self.nc.wait_for_params(worker)
+
+    def send_gradients(self, wk_id, ps_id, grads):
+        # TODO get size of actual grads
+        self.ne.send_msg(10, lambda: self.nc.send_gradients(wk_id, ps_id, grads))
+
+    def wait_for_grads(self, ps):
+        self.nc.wait_for_grads(ps)
+
+    def send_params(self, wk_id, vals_by_param_id):
+        # TODO get size of actual params
+        self.ne.send_msg(10, lambda: self.nc.send_params(wk_id, vals_by_param_id))
+
+    def broadcast_params(self, vals_by_param_id):
+        for worker in self.cluster.workers:
+            self.send_params(worker.id, vals_by_param_id)
+
+    
+    def start(self):
+        self.ne.start()
+
+
+# TODO consider removing cluster from NC's fields, pass in through NI
 class NodeCommunication:
 
     def __init__(self, cluster):
@@ -9,7 +41,8 @@ class NodeCommunication:
 
     def wait_for_params(self, worker):
         with worker.params_queue_cond:
-            worker.params_queue_cond.wait_for(lambda: len(worker.params_queue) == self.cluster.num_ps)
+            while len(worker.params_queue) != self.cluster.num_ps:
+                worker.params_queue_cond.wait()
 
             # All params are in, move them out of queue and return to worker
             params_msgs = worker.params_queue
@@ -31,7 +64,8 @@ class NodeCommunication:
 
         # Wait for worker to request params or send grads
         with ps.grads_queue_cond:
-            ps.grads_queue_cond.wait_for(len(ps.grads_queue) > 0)
+            while len(ps.grads_queue) == 0:
+                ps.grads_queue_cond.wait()
 
             # A request has come in, move everything out of queues and return to ps
             grads_queue_buffer = ps.grads_queue
@@ -47,11 +81,6 @@ class NodeCommunication:
         with worker.params_queue_cond:
             worker.params_queue.append(vals_by_param_id)
             worker.params_queue_cond.notify()
-
-
-    def broadcast_params(self, vals_by_param_id):
-        for worker in self.cluster.workers:
-            self.send_params(worker.id, vals_by_param_id)
 
 
     def flush_worker_params_queues(self):
