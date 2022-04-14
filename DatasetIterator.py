@@ -8,7 +8,7 @@ This is possible with shuffle and repeat, that may take up a lot of memory when 
 the dataset for many epochs
 """
 
-
+# TODO consider generating a bunch in advance
 
 class DatasetIterator:
 

@@ -48,8 +48,8 @@ class Worker:
     def train_step(self):
         self.wait_for_params()
         gradients = self.forward_pass(next(self.dataset_iterator))
-        if self.id == 0 or self.id == 1:
-            sleep(random.randint(20, 40) / 1000) # 20ms - 40ms
+        if self.cluster.delay_workers and self.id < 2:
+            sleep(random.randint(500, 1000) / 1000) # 500ms - 1000ms
         self.send_gradients(gradients)
 
 
@@ -58,16 +58,11 @@ class Worker:
 
         while not self.stop:
 
-            # Wait until there are steps scheduled
-            with self.steps_scheduled_cond:
-                while self.steps_scheduled == 0:
-                    self.steps_scheduled_cond.wait()
-
             # Do step
             self.train_step()
 
-            # Decrement steps scheduled
-            with self.steps_scheduled_cond: 
-                self.steps_scheduled -= 1
-                if self.steps_scheduled == 0:
-                    self.steps_scheduled_cond.notify_all()
+            # Increment steps completed
+            with self.cluster.steps_completed_cond:
+                self.cluster.steps_completed += 1
+                if self.cluster.steps_completed >= self.cluster.steps_scheduled:
+                    self.cluster.steps_completed_cond.notify()

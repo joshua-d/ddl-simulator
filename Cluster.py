@@ -14,6 +14,7 @@ from DatasetIterator import DatasetIterator
 from NetworkInterface import NetworkInterface
 
 
+BANDWIDTH = 300_000_000
 
 # For now assuming cluster is the outermost name for the system, i. e. only one cluster per simulator run
 class Cluster:
@@ -42,15 +43,19 @@ class Cluster:
 
         self._parse_config(config)
 
-        self.ni = NetworkInterface(self, 1_000_000_000) # TODO placeholder bandwidth
+        # TODO remove this, it's specific to this test
+        self.delay_workers = self.training_style == 'async'
+
+        self.ni = NetworkInterface(self, BANDWIDTH)
 
         self._create_parameter_servers()
         self._create_workers()
 
         self.test_model, self.test_model_params, _ = model_builder()
 
-        self.params_msgs_sent = 0
-        self.params_msgs_sent_cond = threading.Condition()
+        self.steps_completed = 0
+        self.steps_scheduled = 0
+        self.steps_completed_cond = threading.Condition()
 
 
 
@@ -128,7 +133,7 @@ class Cluster:
         accuracies = []
 
         # Editable stopping condition vars
-        max_epochs = 400
+        max_epochs = 100
         acc_threshold = 0.955
 
         best_acc = 0
@@ -159,39 +164,28 @@ class Cluster:
         for pst in ps_threads:
             pst.start()
 
-        # Start network emulator
-        self.ni.start()
 
         # Begin training
         print('Beginning training')
         start_time = time.time()
 
+        # Start network emulator
+        self.ni.start()
+
         while True:
             epoch += 1
 
-            # Schedule steps for each worker
-            steps_scheduled = steps_per_epoch
-            steps_per_worker = int(steps_scheduled / self.num_workers)
-            remainder = steps_scheduled % self.num_workers
-
-            if self.training_style == 'sync':
-                remainder = 0 # TODO can't have a fractional round - not supported
-
-            for worker in self.workers:
-                with worker.steps_scheduled_cond:
-                    worker.steps_scheduled = steps_per_worker
-                    if remainder > 0:
-                        worker.steps_scheduled += 1
-                        remainder -= 1
-                    worker.steps_scheduled_cond.notify()
-
-
-            # Wait until workers are done
-            for worker in self.workers:
-                with worker.steps_scheduled_cond:
-                    while worker.steps_scheduled > 0:
-                        worker.steps_scheduled_cond.wait()
+            # Schedule steps for this epoch
+            self.steps_scheduled = steps_per_epoch
             
+            # Wait for workers to complete scheduled steps
+            with self.steps_completed_cond:
+                while self.steps_completed < self.steps_scheduled:
+                    self.steps_completed_cond.wait()
+                # print("Steps completed: %d" % self.steps_completed)
+                self.steps_completed = 0
+                self.steps_scheduled = 0
+
 
             print('Finished epoch %d' % epoch)
 
@@ -234,6 +228,7 @@ class Cluster:
             outfile.write('%d workers, %d ps\n' % (self.num_workers, self.num_ps))
             outfile.write('%s training\n' % self.training_style)
             outfile.write('784-128-10\n')
+            outfile.write('%d bandwidth\n' % BANDWIDTH)
             outfile.write('num train samples: %d, num test samples: %d, batch size: %d, learning rate: %f\n'
                             % (self.num_train_samples, self.num_test_samples, self.batch_size, self.learning_rate))
             outfile.write('%f seconds\n\n' % time_elapsed)
