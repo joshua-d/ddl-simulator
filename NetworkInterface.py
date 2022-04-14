@@ -12,6 +12,12 @@ class NetworkInterface:
         self.nc = NodeCommunication(cluster)
         self.ne = NetworkEmulator(bandwidth)
 
+
+        # TODO this diagnostic assumes grads and params are same size, and saturation is when there are num_workers msgs at once
+        time_per_msg = PARAMS_SIZE / (bandwidth / cluster.num_workers) 
+        print('\nNetwork Interface:')
+        print('Time per message when network is saturated (%d msgs at once): %f\n' % (cluster.num_workers, time_per_msg))
+
     def wait_for_params(self, worker):
         return self.nc.wait_for_params(worker)
 

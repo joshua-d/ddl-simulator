@@ -42,7 +42,7 @@ class Cluster:
 
         self._parse_config(config)
 
-        self.ni = NetworkInterface(self, 2_000_000_000) # TODO placeholder bandwidth
+        self.ni = NetworkInterface(self, 1_000_000_000) # TODO placeholder bandwidth
 
         self._create_parameter_servers()
         self._create_workers()
