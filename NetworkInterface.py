@@ -2,8 +2,8 @@ from time import sleep
 from NetworkEmulator import NetworkEmulator
 
 
-PARAMS_SIZE = 1024*8
-GRADS_SIZE = 1024*8
+PARAMS_SIZE = 407_080 * 8 # 407.08 KB
+GRADS_SIZE = 407_080 * 8
 
 class NetworkInterface:
 
@@ -86,13 +86,13 @@ class NodeCommunication:
             worker.params_queue_cond.notify()
 
 
-    def flush_worker_params_queues(self):
+    def clear_worker_params_queues(self):
         for worker in self.cluster.workers:
             with worker.params_queue_cond:
                 worker.params_queue = []
 
 
-    def flush_ps_grads_queues(self):
+    def clear_ps_grads_queues(self):
         for ps in self.cluster.parameter_servers.values():
             with ps.grads_queue_cond:
                 ps.grads_queue = []

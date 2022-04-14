@@ -1,5 +1,7 @@
 from tensorflow._api.v2 import data
 import threading
+from time import sleep
+import random
 
 
 class Worker:
@@ -18,7 +20,11 @@ class Worker:
         self.params_queue = []
         self.params_queue_cond = threading.Condition()
 
-        self.stop_training = False
+        self.stop = False
+
+        # steps_scheduled decremented only once the gradients for the step are ON the network
+        self.steps_scheduled = 0
+        self.steps_scheduled_cond = threading.Condition()
 
 
     def wait_for_params(self): # TODO consider renaming params_msgs here and in Network
@@ -42,20 +48,26 @@ class Worker:
     def train_step(self):
         self.wait_for_params()
         gradients = self.forward_pass(next(self.dataset_iterator))
+        if self.id == 0 or self.id == 1:
+            sleep(random.randint(20, 40) / 1000) # 20ms - 40ms
         self.send_gradients(gradients)
 
+
     def start(self):
-        self.stop_training = False
+        self.stop = False
 
-        while not self.stop_training:
+        while not self.stop:
+
+            # Wait until there are steps scheduled
+            with self.steps_scheduled_cond:
+                while self.steps_scheduled == 0:
+                    self.steps_scheduled_cond.wait()
+
+            # Do step
             self.train_step()
-            with self.cluster.steps_completed_lock:
-                self.cluster.steps_completed += 1
-                if self.cluster.steps_completed % 100 == 0:
-                    print('Steps completed: %d' % self.cluster.steps_completed)
-                    pass
-                if self.cluster.steps_completed >= self.cluster.steps_scheduled:
-                    self.stop_training = True  # TODO maybe stop for all workers? trying to throw out in prog, step-schedule seems like a good system
-                    break
 
-# TODO worker checks for steps completed after performing step - num steps completed slightly above than scheduled
+            # Decrement steps scheduled
+            with self.steps_scheduled_cond: 
+                self.steps_scheduled -= 1
+                if self.steps_scheduled == 0:
+                    self.steps_scheduled_cond.notify_all()

@@ -42,18 +42,16 @@ class Cluster:
 
         self._parse_config(config)
 
-        self.ni = NetworkInterface(self, 100_000_000) # TODO placeholder bandwidth
+        self.ni = NetworkInterface(self, 2_000_000_000) # TODO placeholder bandwidth
 
         self._create_parameter_servers()
         self._create_workers()
 
         self.test_model, self.test_model_params, _ = model_builder()
 
-        self.steps_completed = 0
-        self.steps_scheduled = 0
-        self.steps_completed_lock = threading.Lock()
+        self.params_msgs_sent = 0
+        self.params_msgs_sent_cond = threading.Condition()
 
-        self.print_lock = threading.Lock()
 
 
     def _create_parameter_servers(self):
@@ -86,10 +84,7 @@ class Cluster:
             dataset = self.dataset_fn(i, self.num_train_samples)
             dataset_iterator = DatasetIterator(dataset, self.batch_size)
             
-            if self.training_style == 'async':
-                self.workers.append(Worker(i, self.model_builder, dataset_iterator, self.param_locations, self.ni, self))
-            elif self.training_style == 'sync':
-                self.workers.append(SyncWorker(i, self.model_builder, dataset_iterator, self.param_locations, self.ni, self))
+            self.workers.append(Worker(i, self.model_builder, dataset_iterator, self.param_locations, self.ni, self))
 
 
     def _parse_config(self, config):
@@ -118,7 +113,8 @@ class Cluster:
     def get_test_model(self):
         params_msgs = []
         for ps in self.parameter_servers.values():
-            params_msgs.append(ps.get_params())
+            with ps.params_lock:
+                params_msgs.append(ps.get_params())
 
         for vals_by_param_id in params_msgs:
             for param_id in vals_by_param_id:
@@ -133,7 +129,7 @@ class Cluster:
 
         # Editable stopping condition vars
         max_epochs = 400
-        acc_threshold = 0.95
+        acc_threshold = 0.955
 
         best_acc = 0
         best_acc_epoch = 0
@@ -142,68 +138,66 @@ class Cluster:
         steps_per_epoch = int(self.num_train_samples / self.batch_size)
 
 
+        # Create and start worker threads
+        worker_threads = []
+        
+        for worker in self.workers:
+            worker_thread = threading.Thread(target=worker.start, daemon=True)
+            worker_threads.append(worker_thread)
+
+        for wt in worker_threads:
+            wt.start()
+
+        # Create and start PS threads
+        ps_threads = []
+
+        for ps_id in self.parameter_servers:
+                ps = self.parameter_servers[ps_id]
+                ps_thread = threading.Thread(target=ps.start, daemon=True)
+                ps_threads.append(ps_thread)
+
+        for pst in ps_threads:
+            pst.start()
+
+        # Start network emulator
+        self.ni.start()
+
+        # Begin training
         print('Beginning training')
         start_time = time.time()
-
-        # TODO machine threads stop and start every epoch. Change this.
-        self.ni.start()
 
         while True:
             epoch += 1
 
-            self.steps_completed = 0
-            self.steps_scheduled = steps_per_epoch
-
-            worker_threads = []
-            
-            for worker in self.workers:
-                worker_thread = threading.Thread(target=worker.start, daemon=True)
-                worker_threads.append(worker_thread)
-
-            for wt in worker_threads:
-                wt.start()
-
-            ps_threads = []
-
-            for ps_id in self.parameter_servers:
-                    ps = self.parameter_servers[ps_id]
-                    ps_thread = threading.Thread(target=ps.start, daemon=True)
-                    ps_threads.append(ps_thread)
-
-            for pst in ps_threads:
-                pst.start()
-
-            for wt in worker_threads:
-                wt.join()
-
-
-            print('Finished epoch %d' % epoch)
-            
-            for ps in self.parameter_servers.values():
-                ps.stop_listening = True
-
-            for pst in ps_threads:
-                pst.join()
-
-            # at this point, ps thread terminated, all final msgs are on the network
-
-            self.ni.ne.announce_network_idle = True
-            with self.ni.ne.network_idle_cond:
-                while not self.ni.ne.network_idle:
-                    self.ni.ne.network_idle_cond.wait()
-
-            # reset network idle util
-            self.ni.ne.network_idle = False
-            self.ni.ne.announce_network_idle = False
-
-            # network messages have finished, flush worker params for next round
-            self.ni.nc.flush_worker_params_queues()
-            self.ni.nc.flush_ps_grads_queues()
-
-            predictions = self.get_test_model().predict(x_test)
+            # Schedule steps for each worker
+            steps_scheduled = steps_per_epoch
+            steps_per_worker = int(steps_scheduled / self.num_workers)
+            remainder = steps_scheduled % self.num_workers
 
             if self.training_style == 'sync':
-                self.parameter_servers['ps0'].reset_round()
+                remainder = 0 # TODO can't have a fractional round - not supported
+
+            for worker in self.workers:
+                with worker.steps_scheduled_cond:
+                    worker.steps_scheduled = steps_per_worker
+                    if remainder > 0:
+                        worker.steps_scheduled += 1
+                        remainder -= 1
+                    worker.steps_scheduled_cond.notify()
+
+
+            # Wait until workers are done
+            for worker in self.workers:
+                with worker.steps_scheduled_cond:
+                    while worker.steps_scheduled > 0:
+                        worker.steps_scheduled_cond.wait()
+            
+
+            print('Finished epoch %d' % epoch)
+
+            
+            # Evaluate model
+            predictions = self.get_test_model().predict(x_test)            
 
             num_correct = 0
             for prediction, target in zip(predictions, y_test):

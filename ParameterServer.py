@@ -18,7 +18,10 @@ class ParameterServer:
         self.grads_queue = []
         self.grads_queue_cond = threading.Condition()
 
-        self.stop_listening = False
+        self.stop = False
+
+        # used for get_test_model
+        self.params_lock = threading.Lock()
 
 
     def get_params(self):
@@ -40,19 +43,19 @@ class ParameterServer:
 
 
     def start(self):
-        self.stop_listening = False
 
         # Start by broadcasting params
         self.ni.broadcast_params(self.get_params())
         
-        while not self.stop_listening:
+        while not self.stop:
             grads_queue_buffer = self.ni.wait_for_grads(self)
 
             waiting_workers = []
 
             # Apply all grads before sending back - TODO this is a custom policy
             for grads, wk_id in grads_queue_buffer:
-                self.apply_gradients(grads)
+                with self.params_lock:
+                    self.apply_gradients(grads)
                 waiting_workers.append(wk_id)
 
             # Send params to any requesting workers

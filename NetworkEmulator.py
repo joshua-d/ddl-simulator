@@ -3,7 +3,7 @@ from threading import Thread, Condition
 import time
 
 
-TIMING_THREAD_PERIOD = 0.010 # 10ms
+TIMING_THREAD_PERIOD = 0.001 # 1ms
 
 
 class Message:
@@ -31,19 +31,10 @@ class NetworkEmulator:
 
         # Sending msg timing thread
         self.timing_thread = Thread(target=self.process_sending_msgs, daemon=True)
-        self.timing_thread_waiting = True
 
         # Data transmission thread
         self.dt_thread = Thread(target=self.process_dtjq, daemon=True)
-        self.dt_thread_waiting = True
 
-        # Network idle utility. CURRENTLY SINGLE USE - once announce is set to True, once the network
-        # becomes idle, network_idle will be set to true and the cond will notify.
-        # network_idle will not be changed from True after this point
-        self.network_idle = False
-        self.network_idle_cond = Condition()
-        self.announce_network_idle = False # if false, network_idle is not updated or announced
-    
 
     def send_msg(self, msg_size, dtj_fn):
         with self.sending_msgs_cond:
@@ -58,16 +49,7 @@ class NetworkEmulator:
 
             with self.sending_msgs_cond:
                 while len(self.sending_msgs) == 0:
-
-                    self.timing_thread_waiting = True
-                    if self.announce_network_idle and self.dt_thread_waiting:
-                        with self.network_idle_cond:
-                            self.network_idle = True
-                            self.network_idle_cond.notify_all()
-
                     self.sending_msgs_cond.wait()
-
-                self.timing_thread_waiting = False
 
                 # print(len(self.sending_msgs))
 
@@ -107,16 +89,7 @@ class NetworkEmulator:
 
             with self.dtjq_cond:
                 while len(self.dtjq) == 0:
-
-                    self.dt_thread_waiting = True
-                    if self.announce_network_idle and self.timing_thread_waiting:
-                        with self.network_idle_cond:
-                            self.network_idle = True
-                            self.network_idle_cond.notify_all()
-
                     self.dtjq_cond.wait()
-
-                self.dt_thread_waiting = False
 
                 # Move into buffer and unlock
                 dtjq_buffer = self.dtjq
@@ -129,6 +102,29 @@ class NetworkEmulator:
     def start(self):
         self.timing_thread.start()
         self.dt_thread.start()
+
+
+    # def wait_for_idle(self):
+    #     with self.sending_msgs_cond:
+    #         while len(self.sending_msgs) > 0:
+    #             self.sending_msgs_cond.wait()
+
+    #     with self.dtjq_cond:
+    #         while len(self.dtjq) > 0:
+    #             self.dtjq_cond.wait()
+
+
+
+    # def pause_and_clear(self):
+    #     self.paused = True
+    #     with self.dtjq_cond:
+    #         self.dtjq = []
+    #     with self.sending_msgs_cond:
+    #         self.sending_msgs = []
+
+
+    # def resume(self):
+    #     self.paused = False
 
 
 
