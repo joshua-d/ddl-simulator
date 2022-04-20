@@ -131,20 +131,43 @@ class Cluster:
 
 
     def start(self):
-        x_test, y_test = keras_model.test_dataset(self.num_test_samples)
-        accuracies = []
 
         # Editable stopping condition vars
         max_epochs = 100
         acc_threshold = 0.955
 
+        log_interval = 20 # log progress every 20 epochs
+
+
+        # Init logging file
+        now = datetime.datetime.now()
+        time_str = str(now.time())
+        time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
+
+        logging_filename = 'eval_logs/custom_ps_%s_%s.txt' % (self.training_style, time_stamp)
+
+        with open(logging_filename, 'w') as outfile:
+            outfile.write('%d workers, %d ps\n' % (self.num_workers, self.num_ps))
+            outfile.write('%d slow workers, %d to %d ms\n' % (self.num_slow_workers, self.slow_worker_lb, self.slow_worker_ub))
+            outfile.write('%s training\n' % self.training_style)
+            outfile.write('784-128-10\n')
+            outfile.write('%d bandwidth\n' % BANDWIDTH)
+            outfile.write('num train samples: %d, num test samples: %d, batch size: %d, learning rate: %f\n'
+                            % (self.num_train_samples, self.num_test_samples, self.batch_size, self.learning_rate))
+            outfile.write('%f acc threshold, %d max epochs\n\n' % (acc_threshold, max_epochs))
+            outfile.close()
+        
+
+        # Logging and eval vars
+        x_test, y_test = keras_model.test_dataset(self.num_test_samples)
+        accuracies = []
+
         best_acc = 0
         best_acc_epoch = 0
-
         epoch = 0
         steps_per_epoch = int(self.num_train_samples / self.batch_size)
 
-
+        
         # Create and start worker threads
         worker_threads = []
         
@@ -212,6 +235,15 @@ class Cluster:
             accuracies.append(test_accuracy)
 
 
+            # Log
+            if epoch % log_interval == 0:
+                with open(logging_filename, 'a') as outfile:
+                    for accuracy in accuracies:
+                        outfile.write('%f\n' % accuracy)
+                    outfile.close()
+                accuracies = []
+
+
             # STOPPING CONDITIONS 
             if test_accuracy > best_acc:
                 best_acc = test_accuracy
@@ -221,22 +253,18 @@ class Cluster:
                 break
 
 
+        # Training done, complete logging
         time_elapsed = time.time() - start_time
-        now = datetime.datetime.now()
-        time_str = str(now.time())
-        time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
-
-        with open('eval_logs/custom_ps_%s_%s.txt' % (self.training_style, time_stamp), 'w') as outfile:
-            outfile.write('%d workers, %d ps\n' % (self.num_workers, self.num_ps))
-            outfile.write('%d slow workers, %d to %d ms\n' % (self.num_slow_workers, self.slow_worker_lb, self.slow_worker_ub))
-            outfile.write('%s training\n' % self.training_style)
-            outfile.write('784-128-10\n')
-            outfile.write('%d bandwidth\n' % BANDWIDTH)
-            outfile.write('num train samples: %d, num test samples: %d, batch size: %d, learning rate: %f\n'
-                            % (self.num_train_samples, self.num_test_samples, self.batch_size, self.learning_rate))
-            outfile.write('%f seconds\n\n' % time_elapsed)
-            outfile.write('%f acc threshold, %d max epochs\n' % (acc_threshold, max_epochs))
-            outfile.write('%d epochs, best accuracy: %f, epoch: %d\n\n' % (epoch, best_acc, best_acc_epoch))
+        
+        with open(logging_filename, 'a') as outfile:
             for accuracy in accuracies:
                 outfile.write('%f\n' % accuracy)
+            outfile.close()
+
+        with open(logging_filename, 'r+') as outfile:
+            data = outfile.read()
+            outfile.seek(0)
+            prepend = '%d epochs, best accuracy: %f, epoch: %d\n%f seconds\n\n' % (epoch, best_acc, best_acc_epoch, time_elapsed)
+            outfile.write(prepend)
+            outfile.write(data)
             outfile.close()
