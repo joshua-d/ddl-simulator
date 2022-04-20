@@ -7,6 +7,7 @@ import json
 import sys
 
 from Cluster import Cluster
+from DatasetIterator import DatasetIterator
 
 
 model_seed = 1  # model seed and shuffle seed (in dataset_fn) for consistent tests
@@ -21,12 +22,15 @@ def load_config():
     return config
 
 
-# cross worker data sharding does happen here
-def dataset_fn(worker_id, num_train_samples):
-    dataset = keras_model.mnist_dataset()
-    dataset = dataset.shuffle(len(dataset), seed=(model_seed + worker_id)).take(num_train_samples)
+mnist_dataset = keras_model.mnist_dataset()
 
-    return dataset
+def dataset_fn(worker_id, num_train_samples):
+    master_dataset = mnist_dataset.shuffle(len(mnist_dataset), seed=model_seed).take(num_train_samples)
+
+    # From here, data sharding is possible. Here, we don't shard - each worker has full dataset shuffled differently
+    worker_dataset = master_dataset.shuffle(len(master_dataset), seed=(model_seed + worker_id))
+
+    return worker_dataset
 
 
 

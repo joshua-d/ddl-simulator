@@ -10,15 +10,14 @@ the dataset for many epochs
 
 # TODO consider generating a bunch in advance
 
+# Original dataset is undisturbed - can create many DatasetIterators using one dataset - this feature is not currently used however
 class DatasetIterator:
 
-    def __init__(self, dataset, batch_size, reshuffle_each_iteration=True):
+    def __init__(self, dataset, batch_size, reshuffle_each_iteration=True, initial_shuffle_seed=1):
         self.dataset = dataset
         self.batch_size = batch_size
         self.reshuffle_each_iteration = reshuffle_each_iteration
-
-        # TODO consider making this configurable
-        self.shuffle_seed = 1
+        self.shuffle_seed = initial_shuffle_seed
 
         self.iterator = iter(dataset.batch(batch_size))
         

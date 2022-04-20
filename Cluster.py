@@ -27,6 +27,7 @@ class Cluster:
         #  forward_pass = f(batch) -> { param_id: param gradient }
         self.model_builder = model_builder
 
+        # TODO may want to have dataset_fn return an infinite iterator over worker's dataset
         # f(worker_id, num_train_samples) -> worker's dataset
         self.dataset_fn = dataset_fn
 
