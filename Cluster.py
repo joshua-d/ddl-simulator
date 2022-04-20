@@ -44,8 +44,6 @@ class Cluster:
 
         self._parse_config(config)
 
-        # TODO remove this, it's specific to this test
-        self.delay_workers = self.training_style == 'async'
 
         self.ni = NetworkInterface(self, BANDWIDTH)
 
@@ -103,8 +101,11 @@ class Cluster:
         
         # Num train samples per epoch - passed into dataset_fn
         self.num_train_samples = self._get_config_item(config, 'num_train_samples')
-
         self.num_test_samples = self._get_config_item(config, 'num_test_samples')
+
+        self.num_slow_workers = self._get_config_item(config, 'num_slow_workers')
+        self.slow_worker_lb = self._get_config_item(config, 'slow_worker_lower_bound_ms')
+        self.slow_worker_ub = self._get_config_item(config, 'slow_worker_upper_bound_ms')
 
         if self.training_style == 'sync' and self.num_ps > 1:
             raise Exception('More than 1 PS with synchronous training is not supported')
@@ -227,6 +228,7 @@ class Cluster:
 
         with open('eval_logs/custom_ps_%s_%s.txt' % (self.training_style, time_stamp), 'w') as outfile:
             outfile.write('%d workers, %d ps\n' % (self.num_workers, self.num_ps))
+            outfile.write('%d slow workers, %d to %d ms\n' % (self.num_slow_workers, self.slow_worker_lb, self.slow_worker_ub))
             outfile.write('%s training\n' % self.training_style)
             outfile.write('784-128-10\n')
             outfile.write('%d bandwidth\n' % BANDWIDTH)

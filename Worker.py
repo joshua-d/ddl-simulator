@@ -48,8 +48,8 @@ class Worker:
     def train_step(self):
         self.wait_for_params()
         gradients = self.forward_pass(next(self.dataset_iterator))
-        if self.cluster.delay_workers and self.id < 2:
-            sleep(random.randint(500, 1000) / 1000) # 500ms - 1000ms
+        if self.id < self.cluster.num_slow_workers:
+            sleep(random.randint(self.cluster.slow_worker_lb, self.cluster.slow_worker_ub) / 1000)
         self.send_gradients(gradients)
 
 

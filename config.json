@@ -8,5 +8,9 @@
     "batch_size": 10,
 
     "num_train_samples": 5000,
-    "num_test_samples": 5000
+    "num_test_samples": 5000,
+
+    "num_slow_workers": 2,
+    "slow_worker_lower_bound_ms": 500,
+    "slow_worker_upper_bound_ms": 1000
 }
