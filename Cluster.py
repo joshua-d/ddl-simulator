@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 import threading
 
 # Only imported for test dataset
@@ -13,8 +14,6 @@ from SyncWorker import SyncWorker
 from DatasetIterator import DatasetIterator
 from NetworkInterface import NetworkInterface
 
-
-BANDWIDTH = 300_000_000
 
 # For now assuming cluster is the outermost name for the system, i. e. only one cluster per simulator run
 class Cluster:
@@ -44,13 +43,14 @@ class Cluster:
 
         self._parse_config(config)
 
+        self.test_model, self.test_model_params, _ = model_builder()
 
-        self.ni = NetworkInterface(self, BANDWIDTH)
+        msg_size = self._get_model_size()
+        self._set_bandwidth(msg_size)
+        self.ni = NetworkInterface(self, self.bandwidth, msg_size, msg_size)
 
         self._create_parameter_servers()
         self._create_workers()
-
-        self.test_model, self.test_model_params, _ = model_builder()
 
         self.steps_completed = 0
         self.steps_scheduled = 0
@@ -76,9 +76,9 @@ class Cluster:
         for i in range(self.num_ps):
             ps_id = 'ps%d' % i
             if self.training_style == 'async':
-                self.parameter_servers[ps_id] = ParameterServer(ps_id, params_objs[i], tf.keras.optimizers.RMSprop(learning_rate=self.learning_rate), self.ni)
+                self.parameter_servers[ps_id] = ParameterServer(ps_id, params_objs[i], tf.keras.optimizers.SGD(learning_rate=self.learning_rate), self.ni)
             elif self.training_style == 'sync':
-                self.parameter_servers[ps_id] = SyncParameterServer(ps_id, params_objs[i], tf.keras.optimizers.RMSprop(learning_rate=self.learning_rate), self.ni, self.num_workers)
+                self.parameter_servers[ps_id] = SyncParameterServer(ps_id, params_objs[i], tf.keras.optimizers.SGD(learning_rate=self.learning_rate), self.ni, self.num_workers)
 
             self.param_locations[ps_id] = list(params_objs[i].keys())
 
@@ -91,6 +91,22 @@ class Cluster:
             self.workers.append(Worker(i, self.model_builder, dataset_iterator, self.param_locations, self.ni, self))
 
 
+    # Returns the size of the model in bits
+    # Used for setting the params and grads msg size for NI
+    def _get_model_size(self):
+        total_bits = 0
+        for param in self.test_model_params.values():
+            total_bits += np.size(param) * np.size(param.dtype) * 8
+        return total_bits
+
+
+    # If a base_msg_time was given in config, sets bandwidth accordingly
+    # Assumes all msgs are the same size
+    def _set_bandwidth(self, msg_size):
+        if self.base_msg_time != 0:
+            self.bandwidth = msg_size / self.base_msg_time
+
+
     def _parse_config(self, config):
         self.num_ps = self._get_config_item(config, 'num_ps')
         self.num_workers = self._get_config_item(config, 'num_workers')
@@ -98,6 +114,9 @@ class Cluster:
         
         self.learning_rate = self._get_config_item(config, 'learning_rate')
         self.batch_size = self._get_config_item(config, 'batch_size')
+
+        self.bandwidth = self._get_config_item(config, 'bandwidth')
+        self.base_msg_time = self._get_config_item(config, 'base_msg_time')
         
         # Num train samples per epoch - passed into dataset_fn
         self.num_train_samples = self._get_config_item(config, 'num_train_samples')
@@ -151,7 +170,7 @@ class Cluster:
             outfile.write('%d slow workers, %d to %d ms\n' % (self.num_slow_workers, self.slow_worker_lb, self.slow_worker_ub))
             outfile.write('%s training\n' % self.training_style)
             outfile.write('784-128-10\n')
-            outfile.write('%d bandwidth\n' % BANDWIDTH)
+            outfile.write('%d bandwidth\n' % self.bandwidth)
             outfile.write('num train samples: %d, num test samples: %d, batch size: %d, learning rate: %f\n'
                             % (self.num_train_samples, self.num_test_samples, self.batch_size, self.learning_rate))
             outfile.write('%f acc threshold, %d max epochs\n\n' % (acc_threshold, max_epochs))

@@ -1,36 +1,40 @@
 from time import sleep
 from NetworkEmulator import NetworkEmulator
 
-
-PARAMS_SIZE = 407_080 * 8 # 407.08 KB
-GRADS_SIZE = 407_080 * 8
-
 class NetworkInterface:
 
-    def __init__(self, cluster, bandwidth):
+    def __init__(self, cluster, bandwidth, PARAMS_SIZE, GRADS_SIZE):
         self.cluster = cluster
+        self.PARAMS_SIZE = PARAMS_SIZE # size of a params msg
+        self.GRADS_SIZE = GRADS_SIZE # size of a grads msg
+        
         self.nc = NodeCommunication(cluster)
         self.ne = NetworkEmulator(bandwidth)
 
 
         # TODO this diagnostic assumes grads and params are same size, and saturation is when there are num_workers msgs at once
-        time_per_msg = PARAMS_SIZE / (bandwidth / cluster.num_workers) 
         print('\nNetwork Interface:')
-        print('Time per message when network is saturated (%d msgs at once): %f\n' % (cluster.num_workers, time_per_msg))
+        print('Bandwidth: %f' % bandwidth)
+        
+        if self.cluster.base_msg_time != 0:
+            print("Time to send 1 msg: %f" % self.cluster.base_msg_time)
+
+        sat_time = PARAMS_SIZE / (bandwidth / cluster.num_workers) 
+        print('Time per message when network is saturated (%d msgs at once): %f\n' % (cluster.num_workers, sat_time))
 
     def wait_for_params(self, worker):
         return self.nc.wait_for_params(worker)
 
     def send_gradients(self, wk_id, ps_id, grads):
         # TODO get size of actual grads
-        self.ne.send_msg(GRADS_SIZE, lambda: self.nc.send_gradients(wk_id, ps_id, grads))
+        self.ne.send_msg(self.GRADS_SIZE, lambda: self.nc.send_gradients(wk_id, ps_id, grads))
 
     def wait_for_grads(self, ps):
         return self.nc.wait_for_grads(ps)
 
     def send_params(self, wk_id, vals_by_param_id):
         # TODO get size of actual params
-        self.ne.send_msg(PARAMS_SIZE, lambda: self.nc.send_params(wk_id, vals_by_param_id))
+        self.ne.send_msg(self.PARAMS_SIZE, lambda: self.nc.send_params(wk_id, vals_by_param_id))
 
     def broadcast_params(self, vals_by_param_id):
         for worker in self.cluster.workers:

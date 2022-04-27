@@ -1,0 +1,2 @@
+If base_msg_time is 0, bandwidth will be set based on the config.json value. Otherwise, bandwidth
+will be set based on base_msg_time.
