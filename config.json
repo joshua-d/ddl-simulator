@@ -1,14 +1,14 @@
 {
     "num_ps": 1,
-    "num_workers": 1,
+    "num_workers": 8,
 
     "training_style": "async",
 
     "bandwidth": 0,
     "base_msg_time": 0.010,
 
-    "learning_rate": 0.01,
-    "batch_size": 128,
+    "learning_rate": 0.001,
+    "batch_size": 32,
 
     "num_train_samples": 5000,
     "num_test_samples": 5000,

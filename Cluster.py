@@ -76,9 +76,9 @@ class Cluster:
         for i in range(self.num_ps):
             ps_id = 'ps%d' % i
             if self.training_style == 'async':
-                self.parameter_servers[ps_id] = ParameterServer(ps_id, params_objs[i], tf.keras.optimizers.SGD(learning_rate=self.learning_rate), self.ni)
+                self.parameter_servers[ps_id] = ParameterServer(ps_id, params_objs[i], tf.keras.optimizers.RMSprop(learning_rate=self.learning_rate), self.ni) # TODO make optimizer confirgurable, in model_builder?
             elif self.training_style == 'sync':
-                self.parameter_servers[ps_id] = SyncParameterServer(ps_id, params_objs[i], tf.keras.optimizers.SGD(learning_rate=self.learning_rate), self.ni, self.num_workers)
+                self.parameter_servers[ps_id] = SyncParameterServer(ps_id, params_objs[i], tf.keras.optimizers.RMSprop(learning_rate=self.learning_rate), self.ni, self.num_workers)
 
             self.param_locations[ps_id] = list(params_objs[i].keys())
 
