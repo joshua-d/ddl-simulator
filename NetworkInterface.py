@@ -14,7 +14,7 @@ class NetworkInterface:
 
         # TODO this diagnostic assumes grads and params are same size, and saturation is when there are num_workers msgs at once
         print('\nNetwork Interface:')
-        print('Bandwidth: %f' % bandwidth)
+        print('Bandwidth: %s' % '{:,}'.format(bandwidth))
         
         if self.cluster.base_msg_time != 0:
             print("Time to send 1 msg: %f" % self.cluster.base_msg_time)
