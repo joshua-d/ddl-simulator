@@ -126,6 +126,9 @@ class Cluster:
         self.slow_worker_lb = self._get_config_item(config, 'slow_worker_lower_bound_ms')
         self.slow_worker_ub = self._get_config_item(config, 'slow_worker_upper_bound_ms')
 
+        if self.training_style == 'sync': # TODO document or remove this
+            self.num_slow_workers = 0
+
         if self.training_style == 'sync' and self.num_ps > 1:
             raise Exception('More than 1 PS with synchronous training is not supported')
 
@@ -153,7 +156,7 @@ class Cluster:
 
         # Editable stopping condition vars
         max_epochs = 100
-        acc_threshold = 0.955
+        acc_threshold = 1
 
         log_interval = 20 # log progress every 20 epochs
 
