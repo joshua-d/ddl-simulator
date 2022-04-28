@@ -155,11 +155,14 @@ class Cluster:
     def start(self):
 
         # Editable stopping condition vars
-        max_epochs = 100
-        acc_threshold = 1
+        max_epochs = 100 # now max pseudo-epochs
+        acc_threshold = 0.98
 
-        log_interval = 20 # log progress every 20 epochs
+        steps_per_acc_check = 100 # check accuracy every steps_per_acc_check steps
+        log_interval = 20 # log progress every log_interval acc checks (pseudo-epochs)
 
+        actual_max_epochs = max_epochs*steps_per_acc_check*self.batch_size/self.num_train_samples
+        print('Max epochs: %f' % actual_max_epochs)
 
         # Init logging file
         now = datetime.datetime.now()
@@ -172,11 +175,14 @@ class Cluster:
             outfile.write('%d workers, %d ps\n' % (self.num_workers, self.num_ps))
             outfile.write('%d slow workers, %d to %d ms\n' % (self.num_slow_workers, self.slow_worker_lb, self.slow_worker_ub))
             outfile.write('%s training\n' % self.training_style)
-            outfile.write('784-128-10\n')
+
+            # MODEL INFO
+            outfile.write('LeNet-5\n')
+
             outfile.write('%d bandwidth\n' % self.bandwidth)
             outfile.write('num train samples: %d, num test samples: %d, batch size: %d, learning rate: %f\n'
                             % (self.num_train_samples, self.num_test_samples, self.batch_size, self.learning_rate))
-            outfile.write('%f acc threshold, %d max epochs\n\n' % (acc_threshold, max_epochs))
+            outfile.write('%f acc threshold, %d max pseudo-epochs, %d steps per pseudo-epoch, %f max epochs\n\n' % (acc_threshold, max_epochs, steps_per_acc_check, actual_max_epochs))
             outfile.close()
         
 
@@ -186,8 +192,7 @@ class Cluster:
 
         best_acc = 0
         best_acc_epoch = 0
-        epoch = 0
-        steps_per_epoch = int(self.num_train_samples / self.batch_size)
+        epoch = 0 # now counts pseudo-epochs
 
         
         # Create and start worker threads
@@ -222,19 +227,18 @@ class Cluster:
         while True:
             epoch += 1
 
-            # Schedule steps for this epoch
-            self.steps_scheduled = steps_per_epoch
+            # Schedule steps for this pseudo-epoch
+            self.steps_scheduled = steps_per_acc_check
             
             # Wait for workers to complete scheduled steps
             with self.steps_completed_cond:
                 while self.steps_completed < self.steps_scheduled:
                     self.steps_completed_cond.wait()
-                # print("Steps completed: %d" % self.steps_completed)
                 self.steps_completed = 0
                 self.steps_scheduled = 0
 
 
-            print('Finished epoch %d' % epoch)
+            print('Finished pseudo-epoch %d,  %d steps completed' % (epoch, epoch * steps_per_acc_check))
 
             
             # Evaluate model
@@ -286,7 +290,7 @@ class Cluster:
         with open(logging_filename, 'r+') as outfile:
             data = outfile.read()
             outfile.seek(0)
-            prepend = '%d epochs, best accuracy: %f, epoch: %d\n%f seconds\n\n' % (epoch, best_acc, best_acc_epoch, time_elapsed)
+            prepend = '%d pseudo-epochs - %d steps, best accuracy: %f, pseudo-epoch: %d\n%f seconds\n\n' % (epoch, epoch*steps_per_acc_check, best_acc, best_acc_epoch, time_elapsed)
             outfile.write(prepend)
             outfile.write(data)
             outfile.close()
