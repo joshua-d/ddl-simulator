@@ -76,9 +76,9 @@ class Cluster:
         for i in range(self.num_ps):
             ps_id = 'ps%d' % i
             if self.training_style == 'async':
-                self.parameter_servers[ps_id] = ParameterServer(ps_id, params_objs[i], tf.keras.optimizers.RMSprop(learning_rate=self.learning_rate), self.ni) # TODO make optimizer confirgurable, in model_builder?
+                self.parameter_servers[ps_id] = ParameterServer(ps_id, params_objs[i], tf.keras.optimizers.Adam(learning_rate=self.learning_rate), self.ni) # TODO make optimizer confirgurable, in model_builder?
             elif self.training_style == 'sync':
-                self.parameter_servers[ps_id] = SyncParameterServer(ps_id, params_objs[i], tf.keras.optimizers.RMSprop(learning_rate=self.learning_rate), self.ni, self.num_workers)
+                self.parameter_servers[ps_id] = SyncParameterServer(ps_id, params_objs[i], tf.keras.optimizers.Adam(learning_rate=self.learning_rate), self.ni, self.num_workers)
 
             self.param_locations[ps_id] = list(params_objs[i].keys())
 
@@ -158,7 +158,7 @@ class Cluster:
         max_epochs = 100 # now max pseudo-epochs
         acc_threshold = 0.98
 
-        steps_per_acc_check = 100 # check accuracy every steps_per_acc_check steps
+        steps_per_acc_check = 20 # check accuracy every steps_per_acc_check steps
         log_interval = 20 # log progress every log_interval acc checks (pseudo-epochs)
 
         actual_max_epochs = max_epochs*steps_per_acc_check*self.batch_size/self.num_train_samples
@@ -177,7 +177,7 @@ class Cluster:
             outfile.write('%s training\n' % self.training_style)
 
             # MODEL INFO
-            outfile.write('LeNet-5\n')
+            outfile.write('AlexNet\n')
 
             outfile.write('%d bandwidth\n' % self.bandwidth)
             outfile.write('num train samples: %d, num test samples: %d, batch size: %d, learning rate: %f\n'
