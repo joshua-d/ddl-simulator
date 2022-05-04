@@ -50,7 +50,7 @@ class Worker:
         self.wait_for_params()
         gradients = self.forward_pass(next(self.dataset_iterator))
         if self.id < self.cluster.num_slow_workers:
-            sleep(random.randint(self.cluster.slow_worker_lb, self.cluster.slow_worker_ub) / 1000)
+            sleep(random.uniform(self.cluster.slow_worker_lb, self.cluster.slow_worker_ub))
         self.send_gradients(gradients)
 
 
