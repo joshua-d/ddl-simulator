@@ -34,6 +34,7 @@ class ParameterServer:
         return vals_by_param_id
 
 
+    # gradients: [ (param gradient, param id) ]
     def apply_gradients(self, gradients):
         apply_list = []
         for grad, param_id in gradients:

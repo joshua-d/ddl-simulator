@@ -8,7 +8,7 @@ class Worker:
 
     def __init__(self, id, model_builder, dataset_iterator, param_locations, ni, cluster):
         self.id = id
-        self.model, self.params, self.forward_pass = model_builder()
+        self.model, self.params, self.forward_pass, _ = model_builder()
         self.dataset_iterator = dataset_iterator
 
         # { param_id: ps_id }
@@ -35,6 +35,7 @@ class Worker:
                 self.params[param_id].assign(vals_by_param_id[param_id])
 
 
+    # gradients: { param id: param gradient }, returned from forward_pass
     def send_gradients(self, gradients):
 
         for ps_id in self.param_locations:

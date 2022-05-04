@@ -58,7 +58,10 @@ def model_builder():
         
         return grads_list
 
-    return model, params, forward_pass
+    def build_optimizer(learning_rate):
+        return tf.keras.optimizers.SGD(learning_rate=learning_rate)
+
+    return model, params, forward_pass, build_optimizer
 
 
 

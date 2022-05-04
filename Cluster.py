@@ -20,10 +20,12 @@ class Cluster:
 
     def __init__(self, model_builder, dataset_fn, config):
 
-        # f() -> (model, params, forward_pass)
+        # f() -> (model, params, forward_pass, build_optimizer)
         #  model = keras model
         #  params = { param_id -> model var }
         #  forward_pass = f(batch) -> { param_id: param gradient }
+        #  build_optimizer = f(learning_rate) -> optimizer
+        #    optimizer = object with apply_gradients([(grad, model var)]), usually a tf.keras.optimizers.X
         self.model_builder = model_builder
 
         # TODO may want to have dataset_fn return an infinite iterator over worker's dataset
@@ -43,7 +45,7 @@ class Cluster:
 
         self._parse_config(config)
 
-        self.test_model, self.test_model_params, _ = model_builder()
+        self.test_model, self.test_model_params, _, _ = model_builder()
 
         msg_size = self._get_model_size()
         self._set_bandwidth(msg_size)
@@ -61,7 +63,7 @@ class Cluster:
     def _create_parameter_servers(self):
 
         # Get a copy of the model and place its params on the parameter server(s)
-        _, params, _ = self.model_builder()
+        _, params, _, build_optimizer = self.model_builder()
 
         # round robin placement
         params_objs = []
@@ -76,9 +78,9 @@ class Cluster:
         for i in range(self.num_ps):
             ps_id = 'ps%d' % i
             if self.training_style == 'async':
-                self.parameter_servers[ps_id] = ParameterServer(ps_id, params_objs[i], tf.keras.optimizers.SGD(learning_rate=self.learning_rate), self.ni)
+                self.parameter_servers[ps_id] = ParameterServer(ps_id, params_objs[i], build_optimizer(self.learning_rate), self.ni)
             elif self.training_style == 'sync':
-                self.parameter_servers[ps_id] = SyncParameterServer(ps_id, params_objs[i], tf.keras.optimizers.SGD(learning_rate=self.learning_rate), self.ni, self.num_workers)
+                self.parameter_servers[ps_id] = SyncParameterServer(ps_id, params_objs[i], build_optimizer(self.learning_rate), self.ni, self.num_workers)
 
             self.param_locations[ps_id] = list(params_objs[i].keys())
 
