@@ -126,6 +126,9 @@ class Cluster:
         self.slow_worker_lb = self._get_config_item(config, 'slow_worker_lower_bound_ms')
         self.slow_worker_ub = self._get_config_item(config, 'slow_worker_upper_bound_ms')
 
+        if self.training_style == 'sync': # TODO document or remove this
+            self.num_slow_workers = 0
+
         if self.training_style == 'sync' and self.num_ps > 1:
             raise Exception('More than 1 PS with synchronous training is not supported')
 
@@ -169,7 +172,10 @@ class Cluster:
             outfile.write('%d workers, %d ps\n' % (self.num_workers, self.num_ps))
             outfile.write('%d slow workers, %d to %d ms\n' % (self.num_slow_workers, self.slow_worker_lb, self.slow_worker_ub))
             outfile.write('%s training\n' % self.training_style)
+
+            # MODEL INFO
             outfile.write('784-128-10\n')
+
             outfile.write('%d bandwidth\n' % self.bandwidth)
             outfile.write('num train samples: %d, num test samples: %d, batch size: %d, learning rate: %f\n'
                             % (self.num_train_samples, self.num_test_samples, self.batch_size, self.learning_rate))
