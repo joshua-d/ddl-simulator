@@ -128,8 +128,8 @@ class Cluster:
         self.num_test_samples = self._get_config_item(config, 'num_test_samples')
 
         self.num_slow_workers = self._get_config_item(config, 'num_slow_workers')
-        self.slow_worker_lb = self._get_config_item(config, 'slow_worker_lower_bound_ms')
-        self.slow_worker_ub = self._get_config_item(config, 'slow_worker_upper_bound_ms')
+        self.slow_worker_lb = self._get_config_item(config, 'slow_worker_lower_bound_ms') / 1000
+        self.slow_worker_ub = self._get_config_item(config, 'slow_worker_upper_bound_ms') / 1000
 
         if self.training_style == 'sync': # TODO document or remove this
             self.num_slow_workers = 0
