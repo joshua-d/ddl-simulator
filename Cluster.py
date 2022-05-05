@@ -284,7 +284,7 @@ class Cluster:
                 best_acc = test_accuracy
                 best_acc_epoch = epoch
 
-            if test_accuracy > acc_threshold or epoch >= max_epochs:
+            if test_accuracy >= acc_threshold or epoch >= max_epochs:
                 break
 
 
