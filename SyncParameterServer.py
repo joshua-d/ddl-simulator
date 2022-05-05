@@ -18,12 +18,11 @@ class SyncParameterServer(ParameterServer):
         
 
     def start(self):
-        self.stop_listening = False
 
         # Start by broadcasting params
         self.ni.broadcast_params(self.get_params())
 
-        while not self.stop_listening:
+        while True:
 
             # Wait for grads msg or params request
             grads_queue_buffer = self.ni.wait_for_grads(self)

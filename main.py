@@ -5,6 +5,7 @@ import datetime
 import threading
 import json
 import sys
+from multiprocessing import Process
 
 from Cluster import Cluster
 from DatasetIterator import DatasetIterator
@@ -65,16 +66,22 @@ def model_builder():
 
 
 
+
+def run_sim(config):
+    cluster = Cluster(model_builder, dataset_fn, config)
+    cluster.start()
+
+
 def main():
     config = load_config()
 
-    if len(sys.argv) > 1 and sys.argv[1] == 's':
-        config['training_style'] = 'sync'
-        print('******* SYNC TRAINING ********')
+    for _ in range(1):
+        p = Process(target=run_sim, args=(config,))
+        p.start()
+        p.join()
 
-    cluster = Cluster(model_builder, dataset_fn, config)
 
-    cluster.start()
     
 
-main()
+if __name__ == '__main__':
+    main()

@@ -18,8 +18,6 @@ class ParameterServer:
         self.grads_queue = []
         self.grads_queue_cond = threading.Condition()
 
-        self.stop = False
-
         # used for get_test_model
         self.params_lock = threading.Lock()
 
@@ -48,7 +46,7 @@ class ParameterServer:
         # Start by broadcasting params
         self.ni.broadcast_params(self.get_params())
         
-        while not self.stop:
+        while True:
             grads_queue_buffer = self.ni.wait_for_grads(self)
 
             waiting_workers = []

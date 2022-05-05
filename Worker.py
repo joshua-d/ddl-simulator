@@ -20,8 +20,6 @@ class Worker:
         self.params_queue = []
         self.params_queue_cond = threading.Condition()
 
-        self.stop = False
-
         # steps_scheduled decremented only once the gradients for the step are ON the network
         self.steps_scheduled = 0
         self.steps_scheduled_cond = threading.Condition()
@@ -55,9 +53,7 @@ class Worker:
 
 
     def start(self):
-        self.stop = False
-
-        while not self.stop:
+        while True:
 
             # Do step
             self.train_step()

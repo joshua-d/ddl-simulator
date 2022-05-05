@@ -10,7 +10,6 @@ import datetime
 from ParameterServer import ParameterServer
 from SyncParameterServer import SyncParameterServer
 from Worker import Worker
-from SyncWorker import SyncWorker
 from DatasetIterator import DatasetIterator
 from NetworkInterface import NetworkInterface, NetworkInterfaceBypass
 
