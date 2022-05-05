@@ -12,7 +12,7 @@ from SyncParameterServer import SyncParameterServer
 from Worker import Worker
 from SyncWorker import SyncWorker
 from DatasetIterator import DatasetIterator
-from NetworkInterface import NetworkInterface
+from NetworkInterface import NetworkInterface, NetworkInterfaceBypass
 
 
 # For now assuming cluster is the outermost name for the system, i. e. only one cluster per simulator run
@@ -47,9 +47,12 @@ class Cluster:
 
         self.test_model, self.test_model_params, _, _ = model_builder()
 
-        msg_size = self._get_model_size()
-        self._set_bandwidth(msg_size)
-        self.ni = NetworkInterface(self, self.bandwidth, msg_size, msg_size)
+        if self.bypass_NI:
+            self.ni = NetworkInterfaceBypass(self)
+        else:
+            msg_size = self._get_model_size()
+            self._set_bandwidth(msg_size)
+            self.ni = NetworkInterface(self, self.bandwidth, msg_size, msg_size)
 
         self._create_parameter_servers()
         self._create_workers()
@@ -117,6 +120,7 @@ class Cluster:
         self.learning_rate = self._get_config_item(config, 'learning_rate')
         self.batch_size = self._get_config_item(config, 'batch_size')
 
+        self.bypass_NI = self._get_config_item(config, 'bypass_NI')
         self.bandwidth = self._get_config_item(config, 'bandwidth')
         self.base_msg_time = self._get_config_item(config, 'base_msg_time')
         
@@ -178,7 +182,11 @@ class Cluster:
             # MODEL INFO
             outfile.write('784-128-10\n')
 
-            outfile.write('%d bandwidth\n' % self.bandwidth)
+            if self.bypass_NI:
+                outfile.write('NETWORK INTERFACE BYPASSED\n')
+            else:
+                outfile.write('%d bandwidth, %f base msg time\n' % (self.bandwidth, self.base_msg_time))
+
             outfile.write('num train samples: %d, num test samples: %d, batch size: %d, learning rate: %f\n'
                             % (self.num_train_samples, self.num_test_samples, self.batch_size, self.learning_rate))
             outfile.write('%f acc threshold, %d max epochs\n\n' % (acc_threshold, max_epochs))

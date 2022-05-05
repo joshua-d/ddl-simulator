@@ -4,6 +4,7 @@
 
     "training_style": "async",
 
+    "bypass_NI": true,
     "bandwidth": 0,
     "base_msg_time": 0.010,
 

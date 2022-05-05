@@ -45,6 +45,34 @@ class NetworkInterface:
         self.ne.start()
 
 
+class NetworkInterfaceBypass:
+
+    def __init__(self, cluster):
+        self.cluster = cluster
+        self.nc = NodeCommunication(cluster)
+
+        print('BYPASSING NETWORK INTERFACE')
+
+    def wait_for_params(self, worker):
+        return self.nc.wait_for_params(worker)
+
+    def send_gradients(self, wk_id, ps_id, grads):
+        self.nc.send_gradients(wk_id, ps_id, grads)
+
+    def wait_for_grads(self, ps):
+        return self.nc.wait_for_grads(ps)
+
+    def send_params(self, wk_id, vals_by_param_id):
+        self.nc.send_params(wk_id, vals_by_param_id)
+
+    def broadcast_params(self, vals_by_param_id):
+        for worker in self.cluster.workers:
+            self.send_params(worker.id, vals_by_param_id)
+
+    def start(self):
+        pass
+
+
 # TODO consider removing cluster from NC's fields, pass in through NI
 class NodeCommunication:
 
