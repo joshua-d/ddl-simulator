@@ -160,10 +160,14 @@ class Cluster:
     def start(self):
 
         # Editable stopping condition vars
-        max_epochs = 100
-        acc_threshold = 0.955
+        max_epochs = 40
+        acc_threshold = 0.92
+        eval_interval = 100 # eval every 100 batches
+        log_interval = 20 # log progress every 20 eval_intervals
 
-        log_interval = 20 # log progress every 20 epochs
+        batches_per_epoch = int(self.num_train_samples / self.batch_size)
+        max_eval_intervals = int((batches_per_epoch / eval_interval) * max_epochs)
+        max_batches = max_eval_intervals * eval_interval
 
 
         # Init logging file
@@ -171,7 +175,7 @@ class Cluster:
         time_str = str(now.time())
         time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
 
-        logging_filename = 'eval_logs/custom_ps_%s_%s.txt' % (self.training_style, time_stamp)
+        logging_filename = 'eval_logs/sim_%s_%s.txt' % (self.training_style, time_stamp)
 
         with open(logging_filename, 'w') as outfile:
             outfile.write('%d workers, %d ps\n' % (self.num_workers, self.num_ps))
@@ -179,7 +183,7 @@ class Cluster:
             outfile.write('%s training\n' % self.training_style)
 
             # MODEL INFO
-            outfile.write('784-128-10\n')
+            outfile.write('784-256-256-256-256-256-256-10\n')
 
             if self.bypass_NI:
                 outfile.write('NETWORK INTERFACE BYPASSED\n')
@@ -188,18 +192,14 @@ class Cluster:
 
             outfile.write('num train samples: %d, num test samples: %d, batch size: %d, learning rate: %f\n'
                             % (self.num_train_samples, self.num_test_samples, self.batch_size, self.learning_rate))
-            outfile.write('%f acc threshold, %d max epochs\n\n' % (acc_threshold, max_epochs))
+            outfile.write('%f acc threshold, %d max epochs (%d max batches)\n' % (acc_threshold, max_epochs, max_batches))
+            outfile.write('eval interval: %d batches\n\n' % eval_interval)
             outfile.close()
         
 
-        # Logging and eval vars
+        # Eval vars
         x_test, y_test = keras_model.test_dataset(self.num_test_samples)
         accuracies = []
-
-        best_acc = 0
-        best_acc_epoch = 0
-        epoch = 0
-        steps_per_epoch = int(self.num_train_samples / self.batch_size)
 
         
         # Create and start worker threads
@@ -231,11 +231,13 @@ class Cluster:
         # Start network emulator
         self.ni.start()
 
+        eval_num = 0
+
         while True:
-            epoch += 1
+            eval_num += 1
 
             # Schedule steps for this epoch
-            self.steps_scheduled = steps_per_epoch
+            self.steps_scheduled = eval_interval
             
             # Wait for workers to complete scheduled steps
             with self.steps_completed_cond:
@@ -246,7 +248,7 @@ class Cluster:
                 self.steps_scheduled = 0
 
 
-            print('Finished epoch %d' % epoch)
+            print('Finished eval %d (%d batches)' % (eval_num, eval_num*eval_interval))
 
             
             # Evaluate model
@@ -270,7 +272,7 @@ class Cluster:
 
 
             # Log
-            if epoch % log_interval == 0:
+            if eval_num % log_interval == 0:
                 with open(logging_filename, 'a') as outfile:
                     for accuracy in accuracies:
                         outfile.write('%f\n' % accuracy)
@@ -279,11 +281,7 @@ class Cluster:
 
 
             # STOPPING CONDITIONS 
-            if test_accuracy > best_acc:
-                best_acc = test_accuracy
-                best_acc_epoch = epoch
-
-            if test_accuracy >= acc_threshold or epoch >= max_epochs:
+            if test_accuracy >= acc_threshold or eval_num >= max_eval_intervals:
                 break
 
 
@@ -298,7 +296,7 @@ class Cluster:
         with open(logging_filename, 'r+') as outfile:
             data = outfile.read()
             outfile.seek(0)
-            outfile.write('%d epochs, best accuracy: %f, epoch: %d\n%f seconds\n\n' % (epoch, best_acc, best_acc_epoch, time_elapsed))
+            outfile.write('%d batches, %f epochs\n%f seconds\n\n' % (eval_num*eval_interval, eval_num*eval_interval / batches_per_epoch, time_elapsed))
             
             for worker in self.workers:
                 outfile.write('Worker %d: %d steps\n' % (worker.id, worker.steps_completed))
