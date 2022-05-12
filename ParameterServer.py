@@ -54,7 +54,8 @@ class ParameterServer:
             # Apply all grads before sending back - TODO this is a custom policy
             for grads, wk_id in grads_queue_buffer:
                 with self.params_lock:
-                    self.apply_gradients(grads)
+                    for grad in grads:  # tus-idea-a workers send multiple grads at once
+                        self.apply_gradients(grad)
                 waiting_workers.append(wk_id)
 
             # Send params to any requesting workers

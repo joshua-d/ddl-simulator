@@ -131,6 +131,8 @@ class Cluster:
         self.slow_worker_lb = self._get_config_item(config, 'slow_worker_lower_bound_ms') / 1000
         self.slow_worker_ub = self._get_config_item(config, 'slow_worker_upper_bound_ms') / 1000
 
+        self.S = self._get_config_item(config, 'S')
+
         if self.training_style == 'sync': # TODO document or remove this
             self.num_slow_workers = 0
 
@@ -181,7 +183,7 @@ class Cluster:
 
         with open(logging_filename, 'w') as outfile:
             outfile.write('%d workers, %d ps\n' % (self.num_workers, self.num_ps))
-            outfile.write('%d slow workers, %d to %d ms\n' % (self.num_slow_workers, self.slow_worker_lb*1000, self.slow_worker_ub*1000))
+            outfile.write('S = %d\n' % self.S)
             outfile.write('%s training\n' % self.training_style)
 
             # MODEL INFO

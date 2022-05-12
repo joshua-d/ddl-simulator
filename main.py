@@ -60,7 +60,7 @@ def model_builder():
         return grads_list
 
     def build_optimizer(learning_rate):
-        return tf.keras.optimizers.SGD(learning_rate=learning_rate)
+        return tf.keras.optimizers.Adam(learning_rate=learning_rate)
 
     return model, params, forward_pass, build_optimizer
 
@@ -75,7 +75,28 @@ def run_sim(config):
 def main():
     config = load_config()
 
-    for _ in range(1):
+    for _ in range(5):
+        p = Process(target=run_sim, args=(config,))
+        p.start()
+        p.join()
+
+    config['S'] = 4
+
+    for _ in range(5):
+        p = Process(target=run_sim, args=(config,))
+        p.start()
+        p.join()
+
+    config['S'] = 8
+
+    for _ in range(5):
+        p = Process(target=run_sim, args=(config,))
+        p.start()
+        p.join()
+
+    config['S'] = 16
+
+    for _ in range(5):
         p = Process(target=run_sim, args=(config,))
         p.start()
         p.join()
