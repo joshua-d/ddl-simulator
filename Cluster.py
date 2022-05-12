@@ -131,6 +131,8 @@ class Cluster:
         self.slow_worker_lb = self._get_config_item(config, 'slow_worker_lower_bound_ms') / 1000
         self.slow_worker_ub = self._get_config_item(config, 'slow_worker_upper_bound_ms') / 1000
 
+        self.S = self._get_config_item(config, 'S')
+
         if self.training_style == 'sync': # TODO document or remove this
             self.num_slow_workers = 0
 
@@ -161,13 +163,16 @@ class Cluster:
 
         # Editable stopping condition vars
         max_epochs = 40
-        acc_threshold = 0.92
+        acc_threshold = 0.95
         eval_interval = 100 # eval every 100 batches
-        log_interval = 20 # log progress every 20 eval_intervals
+        log_interval = 50 # log progress every 20 eval_intervals
 
         batches_per_epoch = int(self.num_train_samples / self.batch_size)
         max_eval_intervals = int((batches_per_epoch / eval_interval) * max_epochs)
         max_batches = max_eval_intervals * eval_interval
+
+        reached_92 = False
+        reached_92_batches = 0
 
 
         # Init logging file
@@ -179,7 +184,7 @@ class Cluster:
 
         with open(logging_filename, 'w') as outfile:
             outfile.write('%d workers, %d ps\n' % (self.num_workers, self.num_ps))
-            outfile.write('%d slow workers, %d to %d ms\n' % (self.num_slow_workers, self.slow_worker_lb*1000, self.slow_worker_ub*1000))
+            outfile.write('S = %d\n' % self.S)
             outfile.write('%s training\n' % self.training_style)
 
             # MODEL INFO
@@ -280,7 +285,11 @@ class Cluster:
                 accuracies = []
 
 
-            # STOPPING CONDITIONS 
+            # STOPPING CONDITIONS
+            if not reached_92 and test_accuracy >= 0.92:
+                reached_92 = True
+                reached_92_batches = eval_num * eval_interval
+
             if test_accuracy >= acc_threshold or eval_num >= max_eval_intervals:
                 break
 
@@ -296,7 +305,7 @@ class Cluster:
         with open(logging_filename, 'r+') as outfile:
             data = outfile.read()
             outfile.seek(0)
-            prepend = '%d batches, %f epochs\n%f seconds\n\n' % (eval_num*eval_interval, eval_num*eval_interval / batches_per_epoch, time_elapsed)
+            prepend = '95: %d batches, 92: %d batches, %f epochs\n%f seconds\n\n' % (eval_num*eval_interval, reached_92_batches, eval_num*eval_interval / batches_per_epoch, time_elapsed)
             outfile.write(prepend)
             outfile.write(data)
             outfile.close()
