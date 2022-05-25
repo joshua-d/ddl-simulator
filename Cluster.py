@@ -184,7 +184,7 @@ class Cluster:
 
         with open(logging_filename, 'w') as outfile:
             outfile.write('%d workers, %d ps\n' % (self.num_workers, self.num_ps))
-            outfile.write('S = %d\n' % self.S)
+            outfile.write('%d slow, S = %d\n' % (self.num_slow_workers, self.S))
             outfile.write('%s training\n' % self.training_style)
 
             # MODEL INFO
