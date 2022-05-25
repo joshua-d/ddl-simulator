@@ -46,8 +46,13 @@ class Worker:
 
         num_steps_this_round = 0
 
-        # Perform 1 to S steps before sending
-        for _ in range(random.randint(1, self.cluster.S)):
+        # If slow worker, perform 1 to S steps before sending
+        if self.id < self.cluster.num_slow_workers:
+            steps = random.randint(1, self.cluster.S)
+        else:
+            steps = 1
+
+        for _ in range(steps):
             gradients = self.forward_pass(next(self.dataset_iterator))
             
             apply_list = []
