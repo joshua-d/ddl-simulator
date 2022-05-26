@@ -2,7 +2,7 @@
     "num_ps": 1,
     "num_workers": 8,
 
-    "training_style": "async",
+    "training_style": "sync",
 
     "bypass_NI": true,
     "bandwidth": 0,

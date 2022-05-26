@@ -75,6 +75,8 @@ def run_sim(config):
 def main():
     config = load_config()
 
+    config['S'] = 1
+
     for _ in range(5):
         p = Process(target=run_sim, args=(config,))
         p.start()
@@ -95,6 +97,13 @@ def main():
         p.join()
 
     config['S'] = 16
+
+    for _ in range(5):
+        p = Process(target=run_sim, args=(config,))
+        p.start()
+        p.join()
+
+    config['S'] = 32
 
     for _ in range(5):
         p = Process(target=run_sim, args=(config,))

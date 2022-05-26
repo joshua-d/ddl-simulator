@@ -29,7 +29,9 @@ class SyncParameterServer(ParameterServer):
 
             # Apply grads in order received
             for grads, wk_id in grads_queue_buffer:
-                self.apply_gradients(grads)
+                with self.params_lock:
+                    for grad in grads:  # tus-idea-a workers send multiple grads at once
+                        self.apply_gradients(grad)
                 self.round_num_grads_received += 1
 
             # If all workers have sent in grads, send out params

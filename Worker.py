@@ -39,9 +39,7 @@ class Worker:
     # tus-idea-a Only works for 1 PS
     def train_step(self):
 
-        self.wait_for_params()
         send_list = []
-
         num_steps_this_round = 0
 
         # If slow worker, perform 1 to S steps before sending
@@ -49,20 +47,22 @@ class Worker:
             steps = random.randint(1, self.cluster.S)
         else:
             steps = 1
-
-        for _ in range(steps):
+        
+        for i in range(steps):
+            self.wait_for_params()
             gradients = self.forward_pass(next(self.dataset_iterator))
             
-            apply_list = []
             grads_list = []
             for param_id in self.params:
-                apply_list.append((gradients[param_id], self.params[param_id]))
                 grads_list.append((gradients[param_id], param_id))
 
             send_list.append(grads_list)
-            self.optimizer.apply_gradients(apply_list)
             num_steps_this_round += 1
 
+            # Send empty grads to signal PS that this worker is done with step
+            if i != steps - 1:
+                self.ni.send_gradients(self.id, 'ps0', [[]])
+            
         self.ni.send_gradients(self.id, 'ps0', send_list)
 
         return num_steps_this_round
