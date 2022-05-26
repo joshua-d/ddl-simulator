@@ -133,9 +133,6 @@ class Cluster:
 
         self.S = self._get_config_item(config, 'S')
 
-        if self.training_style == 'sync': # TODO document or remove this
-            self.num_slow_workers = 0
-
         if self.training_style == 'sync' and self.num_ps > 1:
             raise Exception('More than 1 PS with synchronous training is not supported')
 
