@@ -160,15 +160,17 @@ class Cluster:
     def start(self):
 
         # Editable stopping condition vars
-        max_epochs = 40
-        acc_threshold = 0.92
+        max_epochs = 12
+        acc_threshold = 0.95
         eval_interval = 100 # eval every 100 batches
-        log_interval = 20 # log progress every 20 eval_intervals
+        log_interval = 50 # log progress every 20 eval_intervals
 
         batches_per_epoch = int(self.num_train_samples / self.batch_size)
         max_eval_intervals = int((batches_per_epoch / eval_interval) * max_epochs)
         max_batches = max_eval_intervals * eval_interval
 
+        reached_92 = False
+        reached_92_batches = 0
 
         # Init logging file
         now = datetime.datetime.now()
@@ -280,7 +282,11 @@ class Cluster:
                 accuracies = []
 
 
-            # STOPPING CONDITIONS 
+            # STOPPING CONDITIONS
+            if not reached_92 and test_accuracy >= 0.92:
+                reached_92 = True
+                reached_92_batches = eval_num * eval_interval
+
             if test_accuracy >= acc_threshold or eval_num >= max_eval_intervals:
                 break
 
@@ -296,7 +302,7 @@ class Cluster:
         with open(logging_filename, 'r+') as outfile:
             data = outfile.read()
             outfile.seek(0)
-            outfile.write('%d batches, %f epochs\n%f seconds\n\n' % (eval_num*eval_interval, eval_num*eval_interval / batches_per_epoch, time_elapsed))
+            outfile.write('95: %d batches, 92: %d batches, %f epochs\n%f seconds\n\n' % (eval_num*eval_interval, reached_92_batches, eval_num*eval_interval / batches_per_epoch, time_elapsed))
             
             for worker in self.workers:
                 outfile.write('Worker %d: %d steps\n' % (worker.id, worker.steps_completed))
