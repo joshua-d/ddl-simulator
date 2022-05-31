@@ -17,8 +17,8 @@ class Worker:
         self.ni = ni
         self.cluster = cluster # TODO don't really want to have to do this, but need it for steps_completed stuff
 
-        self.params_queue = []
-        self.params_queue_cond = threading.Condition()
+        self.param_update_queue = []
+        self.param_update_queue_cond = threading.Condition()
 
         # steps_scheduled decremented only once the gradients for the step are ON the network
         self.steps_scheduled = 0
@@ -27,12 +27,11 @@ class Worker:
         self.steps_completed = 0
 
 
-    def wait_for_params(self): # TODO consider renaming params_msgs here and in Network
-        params_msgs = self.ni.wait_for_params(self)
+    def wait_for_params(self):
+        param_updates = self.ni.worker_wait_for_params(self)
 
-        for vals_by_param_id in params_msgs:
-            for param_id in vals_by_param_id:
-                self.params[param_id].assign(vals_by_param_id[param_id])
+        for param_update in param_updates:
+            param_update.apply(self.params, None)
 
 
     # gradients: { param id: param gradient }, returned from forward_pass
@@ -43,7 +42,7 @@ class Worker:
             for param_id in self.param_locations[ps_id]:
                 send_list.append((gradients[param_id], param_id))
             
-            self.ni.send_gradients(self.id, ps_id, send_list)
+            self.ni.worker_send_gradients(self.id, ps_id, send_list)
 
 
     def train_step(self):

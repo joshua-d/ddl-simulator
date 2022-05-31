@@ -136,3 +136,4 @@ eval_logs/
 old_logs/
 test.py
 *.bat
+notes.txt

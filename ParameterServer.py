@@ -15,8 +15,18 @@ class ParameterServer:
 
         self.ni = ni
 
-        self.grads_queue = []
-        self.grads_queue_cond = threading.Condition()
+        # TODO update this documentation
+        # List of ParamUpdate objects
+        # ParamUpdate:
+        #
+        #   sender_id: id of sender
+        #
+        #   apply(params, optimizer)
+        #       params: ParameterServer.params
+        #
+        #       applies update
+        self.param_update_queue = []
+        self.param_update_queue_cond = threading.Condition()
 
         # used for get_test_model
         self.params_lock = threading.Lock()
@@ -32,34 +42,26 @@ class ParameterServer:
         return vals_by_param_id
 
 
-    # gradients: [ (param gradient, param id) ]
-    def apply_gradients(self, gradients):
-        apply_list = []
-        for grad, param_id in gradients:
-            apply_list.append((grad, self.params[param_id]))
-
-        self.optimizer.apply_gradients(apply_list)
-
-
     def start(self):
 
         # Start by broadcasting params
         self.ni.broadcast_params(self.get_params())
         
         while True:
-            grads_queue_buffer = self.ni.wait_for_grads(self)
+            param_update_buffer = self.ni.ps_wait_for_update(self)
 
-            waiting_workers = []
+            waiting_nodes = []
 
-            # Apply all grads before sending back - TODO this is a custom policy
-            for grads, wk_id in grads_queue_buffer:
-                with self.params_lock:
-                    self.apply_gradients(grads)
-                waiting_workers.append(wk_id)
-
-            # Send params to any requesting workers
-            if len(waiting_workers) > 0:
+            # Apply all updates
+            with self.params_lock:
+                for param_update in param_update_buffer:
+                    param_update.apply(self.params, self.optimizer)
+                    if param_update.return_params:
+                        waiting_nodes.append(param_update.sender_id)
+                    
+            # Send params back to waiting nodes
+            if len(waiting_nodes) > 0:
                 vals_by_param_id = self.get_params() # TODO may need lock on here because cluster and self reading at same time?
-                for wk_id in waiting_workers:
-                    self.ni.send_params(wk_id, vals_by_param_id)
+                for node_id in waiting_nodes:
+                    self.ni.send_params(node_id, vals_by_param_id)
                     

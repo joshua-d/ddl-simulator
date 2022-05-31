@@ -38,6 +38,10 @@ class Cluster:
         # { PS_id -> ParameterServer }
         self.parameter_servers = {}
 
+        # TODO all node IDs must be independent - make sure worker and ps IDs don't collide
+        # { Node id -> Node object }
+        self.nodes = {}
+
         # { PS_id -> [v1_id, v2_id, ...] }
         self.param_locations = {}
 
@@ -80,9 +84,13 @@ class Cluster:
         for i in range(self.num_ps):
             ps_id = 'ps%d' % i
             if self.training_style == 'async':
-                self.parameter_servers[ps_id] = ParameterServer(ps_id, params_objs[i], build_optimizer(self.learning_rate), self.ni)
+                ps = ParameterServer(ps_id, params_objs[i], build_optimizer(self.learning_rate), self.ni)
+                self.parameter_servers[ps_id] = ps
+                self.nodes[ps_id] = ps
             elif self.training_style == 'sync':
-                self.parameter_servers[ps_id] = SyncParameterServer(ps_id, params_objs[i], build_optimizer(self.learning_rate), self.ni, self.num_workers)
+                ps = SyncParameterServer(ps_id, params_objs[i], build_optimizer(self.learning_rate), self.ni, self.num_workers)
+                self.parameter_servers[ps_id] = ps
+                self.nodes[ps_id] = ps
 
             self.param_locations[ps_id] = list(params_objs[i].keys())
 
@@ -92,7 +100,9 @@ class Cluster:
             dataset = self.dataset_fn(i, self.num_train_samples)
             dataset_iterator = DatasetIterator(dataset, self.batch_size)
             
-            self.workers.append(Worker(i, self.model_builder, dataset_iterator, self.param_locations, self.ni, self))
+            worker = Worker(i, self.model_builder, dataset_iterator, self.param_locations, self.ni, self)
+            self.workers.append(worker)
+            self.nodes[i] = worker
 
 
     # Returns the size of the model in bits
