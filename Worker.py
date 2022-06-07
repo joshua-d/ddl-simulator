@@ -24,6 +24,8 @@ class Worker:
         self.steps_scheduled = 0
         self.steps_scheduled_cond = threading.Condition()
 
+        self.steps_completed = 0
+
 
     def wait_for_params(self): # TODO consider renaming params_msgs here and in Network
         params_msgs = self.ni.wait_for_params(self)
@@ -61,5 +63,6 @@ class Worker:
             # Increment steps completed
             with self.cluster.steps_completed_cond:
                 self.cluster.steps_completed += 1
+                self.steps_completed += 1
                 if self.cluster.steps_completed >= self.cluster.steps_scheduled:
                     self.cluster.steps_completed_cond.notify()

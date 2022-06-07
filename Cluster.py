@@ -298,7 +298,11 @@ class Cluster:
         with open(logging_filename, 'r+') as outfile:
             data = outfile.read()
             outfile.seek(0)
-            prepend = '%d epochs, best accuracy: %f, epoch: %d\n%f seconds\n\n' % (epoch, best_acc, best_acc_epoch, time_elapsed)
-            outfile.write(prepend)
+            outfile.write('%d epochs, best accuracy: %f, epoch: %d\n%f seconds\n\n' % (epoch, best_acc, best_acc_epoch, time_elapsed))
+            
+            for worker in self.workers:
+                outfile.write('Worker %d: %d steps\n' % (worker.id, worker.steps_completed))
+            
+            outfile.write('\n')
             outfile.write(data)
             outfile.close()
