@@ -39,6 +39,7 @@ class Node:
         self.param_update_queue_cond = threading.Condition()
 
 
+    # TODO consider building update parent function so it doesn't have to check parent update policy all the time
     # gradients: map of param id to gradient
     # param_values: map of param id to param value
     def update_parents(self, gradients, param_values):
@@ -75,4 +76,4 @@ class Node:
                     vals_by_param_id[param_id] = param_values[param_id]
 
                 # Call NI to send
-                self.ni.send_params_average(parent_id, vals_by_param_id)
+                self.ni.send_params_average(parent_id, vals_by_param_id, self.id)

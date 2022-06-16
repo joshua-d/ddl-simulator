@@ -2,6 +2,7 @@ from time import sleep
 from NetworkEmulator import NetworkEmulator
 from GradientParamUpdate import GradientParamUpdate
 from ReplacementParamUpdate import ReplacementParamUpdate
+from AverageParamUpdate import AverageParamUpdate
 
 class NetworkInterface:
 
@@ -40,9 +41,9 @@ class NetworkInterface:
         # TODO get actual size dynamically
         self.ne.send_msg(self.GRADS_SIZE, lambda: self.nc.send_params_gradient(node_id, grads_by_param_id, sender_id))
 
-    def send_params_average(self, node_id, vals_by_param_id):
+    def send_params_average(self, node_id, vals_by_param_id, sender_id):
         # TODO get actual size dynamically
-        self.ne.send_msg(self.PARAMS_SIZE, lambda: self.nc.send_params_average(node_id, vals_by_param_id))
+        self.ne.send_msg(self.PARAMS_SIZE, lambda: self.nc.send_params_average(node_id, vals_by_param_id, sender_id))
 
     
     def start(self):
@@ -71,8 +72,8 @@ class NetworkInterfaceBypass:
     def send_params_gradient(self, node_id, grads_by_param_id, sender_id):
         self.nc.send_params_gradient(node_id, grads_by_param_id, sender_id)
 
-    def send_params_average(self, node_id, vals_by_param_id):
-        self.nc.send_params_average(node_id, vals_by_param_id)
+    def send_params_average(self, node_id, vals_by_param_id, sender_id):
+        self.nc.send_params_average(node_id, vals_by_param_id, sender_id)
 
     
 
@@ -141,9 +142,16 @@ class NodeCommunication:
             node.param_update_queue_cond.notify()
 
 
-    def send_params_average(self, node_id, vals_by_param_id):
-        # TODO implement
-        pass
+    def send_params_average(self, node_id, vals_by_param_id, sender_id):
+        node = self.cluster.nodes[node_id]
+
+        # Build AverageParamUpdate
+        param_update = AverageParamUpdate(vals_by_param_id, sender_id)
+
+        # Place param update in queue and notify node
+        with node.param_update_queue_cond:
+            node.param_update_queue.append(param_update)
+            node.param_update_queue_cond.notify()
 
 
     def clear_worker_param_update_queues(self):
