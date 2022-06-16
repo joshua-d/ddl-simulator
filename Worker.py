@@ -1,24 +1,18 @@
-from tensorflow._api.v2 import data
 import threading
 from time import sleep
 import random
+from Node import Node
 
 
-class Worker:
+class Worker(Node):
 
-    def __init__(self, id, model_builder, dataset_iterator, param_locations, ni, cluster):
-        self.id = id
+    def __init__(self, id, parents, update_policies, param_locations, ni, model_builder, dataset_iterator, cluster):
+        super().__init__(id, parents, update_policies, param_locations, ni)
+
         self.model, self.params, self.forward_pass, _ = model_builder()
         self.dataset_iterator = dataset_iterator
 
-        # { param_id: ps_id }
-        self.param_locations = param_locations
-
-        self.ni = ni
         self.cluster = cluster # TODO don't really want to have to do this, but need it for steps_completed stuff
-
-        self.param_update_queue = []
-        self.param_update_queue_cond = threading.Condition()
 
         # steps_scheduled decremented only once the gradients for the step are ON the network
         self.steps_scheduled = 0
@@ -26,42 +20,44 @@ class Worker:
 
         self.steps_completed = 0
 
+        self.working_thread = threading.Thread(target=self.work, daemon=True)
+
+
+    def _increment_step_counter(self):
+        # Increment steps completed
+        with self.cluster.steps_completed_cond:
+            self.cluster.steps_completed += 1
+            self.steps_completed += 1
+            if self.cluster.steps_completed >= self.cluster.steps_scheduled:
+                self.cluster.steps_completed_cond.notify()
+
 
     def wait_for_params(self):
         param_updates = self.ni.worker_wait_for_params(self)
 
         for param_update in param_updates:
-            param_update.apply(self.params, None)
-
-
-    # gradients: { param id: param gradient }, returned from forward_pass
-    def send_gradients(self, gradients):
-
-        for ps_id in self.param_locations:
-            send_list = []
-            for param_id in self.param_locations[ps_id]:
-                send_list.append((gradients[param_id], param_id))
-            
-            self.ni.worker_send_gradients(self.id, ps_id, send_list)
+            param_update.apply(params=self.params, optimizer=None)
 
 
     def train_step(self):
-        self.wait_for_params()
         gradients = self.forward_pass(next(self.dataset_iterator))
+
         if self.id < self.cluster.num_slow_workers:
             sleep(random.randint(self.cluster.slow_worker_lb, self.cluster.slow_worker_ub) / 1000)
-        self.send_gradients(gradients)
+
+        # print("Worker %d updating parent" % self.id)
+        self.update_parents(gradients, None)
+
+        self._increment_step_counter()
+
+        # print("Worker %d waiting for params" % self.id)
+        self.wait_for_params()
+
+
+    def work(self):
+        while True:
+            self.train_step()
 
 
     def start(self):
-        while True:
-
-            # Do step
-            self.train_step()
-
-            # Increment steps completed
-            with self.cluster.steps_completed_cond:
-                self.cluster.steps_completed += 1
-                self.steps_completed += 1
-                if self.cluster.steps_completed >= self.cluster.steps_scheduled:
-                    self.cluster.steps_completed_cond.notify()
+        self.working_thread.start()

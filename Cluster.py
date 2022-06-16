@@ -1,3 +1,4 @@
+from ast import Param
 import tensorflow as tf
 import numpy as np
 import threading
@@ -12,6 +13,14 @@ from SyncParameterServer import SyncParameterServer
 from Worker import Worker
 from DatasetIterator import DatasetIterator
 from NetworkInterface import NetworkInterface, NetworkInterfaceBypass
+from Node import UpdatePolicy
+
+
+update_policy_str_map = {
+    'replace': UpdatePolicy.REPLACE,
+    'gradient': UpdatePolicy.GRADIENT,
+    'average': UpdatePolicy.AVERAGE
+}
 
 
 # For now assuming cluster is the outermost name for the system, i. e. only one cluster per simulator run
@@ -31,16 +40,13 @@ class Cluster:
         # f(worker_id, num_train_samples) -> worker's dataset
         self.dataset_fn = dataset_fn
 
-        # TODO dict for consistency with self.parameter_servers
-        # [ Worker ]
-        self.workers = []
-
-        # { PS_id -> ParameterServer }
-        self.parameter_servers = {}
-
         # TODO all node IDs must be independent - make sure worker and ps IDs don't collide
         # { Node id -> Node object }
         self.nodes = {}
+
+        # Lists for easy access
+        self.workers = []
+        self.parameter_servers = []
 
         # { PS_id -> [v1_id, v2_id, ...] }
         self.param_locations = {}
@@ -57,52 +63,92 @@ class Cluster:
             self._set_bandwidth(msg_size)
             self.ni = NetworkInterface(self, self.bandwidth, msg_size, msg_size)
 
-        self._create_parameter_servers()
-        self._create_workers()
+        self._create_nodes()
 
         self.steps_completed = 0
         self.steps_scheduled = 0
         self.steps_completed_cond = threading.Condition()
 
 
+    # TODO sync stuff, slow workers
+    def _create_nodes(self):
 
-    def _create_parameter_servers(self):
+        self.num_workers = 0
+        self.num_slow_workers = 0
+        self.num_ps = 0
 
-        # Get a copy of the model and place its params on the parameter server(s)
-        _, params, _, build_optimizer = self.model_builder()
+        for node_desc in self.node_descs:
 
-        # round robin placement
-        params_objs = []
-        for i in range(self.num_ps):
-            params_objs.append({})
+            _, params, _, build_optimizer = self.model_builder()
 
-        next_ps_ind = 0
-        for param_id in params:
-            params_objs[next_ps_ind][param_id] = params[param_id]
-            next_ps_ind = (next_ps_ind + 1) % self.num_ps
+            # Build update_policies
+            update_policies = {}
+            for parent_id in node_desc['parents']:
+                # TODO this line strictly assumes that node IDs are also their indexes in node_descs !!!!!
+                update_policies[parent_id] = update_policy_str_map[self.node_descs[parent_id]['update_policy']]
 
-        for i in range(self.num_ps):
-            ps_id = 'ps%d' % i
-            if self.training_style == 'async':
-                ps = ParameterServer(ps_id, params_objs[i], build_optimizer(self.learning_rate), self.ni)
-                self.parameter_servers[ps_id] = ps
-                self.nodes[ps_id] = ps
-            elif self.training_style == 'sync':
-                ps = SyncParameterServer(ps_id, params_objs[i], build_optimizer(self.learning_rate), self.ni, self.num_workers)
-                self.parameter_servers[ps_id] = ps
-                self.nodes[ps_id] = ps
+            # Build param_locations
+            # TODO this will be much different when model sharding is implemented
+            param_locations = {}
+            for parent_id in node_desc['parents']:
+                param_locations[parent_id] = []
+                for param_id in params:
+                    param_locations[parent_id].append(param_id)
 
-            self.param_locations[ps_id] = list(params_objs[i].keys())
+            # Add this node to children of parents
+            # TODO assumes parents are already built
+            # TODO currently unused, can remove
+            for parent_id in node_desc['parents']:
+                self.nodes[parent_id].children.append(node_desc['id'])
 
-    
-    def _create_workers(self):
-        for i in range(self.num_workers):
-            dataset = self.dataset_fn(i, self.num_train_samples)
-            dataset_iterator = DatasetIterator(dataset, self.batch_size)
-            
-            worker = Worker(i, self.model_builder, dataset_iterator, self.param_locations, self.ni, self)
-            self.workers.append(worker)
-            self.nodes[i] = worker
+
+            if node_desc['node_type'] == 'ps':
+
+                # Get update_interval
+                if len(node_desc['parents']) > 0:
+                    update_interval = node_desc['update_interval']
+                else:
+                    update_interval = 0
+
+                ps = ParameterServer(
+                    node_desc['id'], 
+                    node_desc['parents'], 
+                    update_policies, 
+                    param_locations, 
+                    self.ni, 
+                    params, 
+                    build_optimizer(self.learning_rate), 
+                    update_interval
+                )
+
+                self.nodes[ps.id] = ps
+                self.parameter_servers.append(ps)
+                self.num_ps += 1
+
+            elif node_desc['node_type'] == 'worker':
+
+                # Build dataset_iterator
+                dataset = self.dataset_fn(self.num_workers, self.num_train_samples) # TODO using num workers here is a bit hacky
+                dataset_iterator = DatasetIterator(dataset, self.batch_size)
+
+                if node_desc['slow']:
+                    self.num_slow_workers += 1
+
+                # TODO since we already call model builder above, could pass in individual things instead of model builder here
+                worker = Worker(
+                    node_desc['id'],
+                    node_desc['parents'],
+                    update_policies,
+                    param_locations,
+                    self.ni,
+                    self.model_builder,
+                    dataset_iterator,
+                    self
+                )
+
+                self.nodes[worker.id] = worker
+                self.workers.append(worker)
+                self.num_workers += 1
 
 
     # Returns the size of the model in bits
@@ -122,10 +168,7 @@ class Cluster:
 
 
     def _parse_config(self, config):
-        self.num_ps = self._get_config_item(config, 'num_ps')
-        self.num_workers = self._get_config_item(config, 'num_workers')
-        self.training_style = self._get_config_item(config, 'training_style')
-        
+
         self.learning_rate = self._get_config_item(config, 'learning_rate')
         self.batch_size = self._get_config_item(config, 'batch_size')
 
@@ -137,15 +180,10 @@ class Cluster:
         self.num_train_samples = self._get_config_item(config, 'num_train_samples')
         self.num_test_samples = self._get_config_item(config, 'num_test_samples')
 
-        self.num_slow_workers = self._get_config_item(config, 'num_slow_workers')
         self.slow_worker_lb = self._get_config_item(config, 'slow_worker_lower_bound_ms')
         self.slow_worker_ub = self._get_config_item(config, 'slow_worker_upper_bound_ms')
 
-        if self.training_style == 'sync': # TODO document or remove this
-            self.num_slow_workers = 0
-
-        if self.training_style == 'sync' and self.num_ps > 1:
-            raise Exception('More than 1 PS with synchronous training is not supported')
+        self.node_descs = self._get_config_item(config, 'nodes')
 
     def _get_config_item(self, config, item):
         if item not in config:
@@ -155,14 +193,13 @@ class Cluster:
 
 
     def get_test_model(self):
-        params_msgs = []
-        for ps in self.parameter_servers.values():
-            with ps.params_lock:
-                params_msgs.append(ps.get_params())
+        # TODO assumes node 0 is top level PS
 
-        for vals_by_param_id in params_msgs:
-            for param_id in vals_by_param_id:
-                self.test_model_params[param_id].assign(vals_by_param_id[param_id])
+        with self.nodes[0].params_lock:
+            vals_by_param_id = self.nodes[0].get_params()
+
+        for param_id in vals_by_param_id:
+            self.test_model_params[param_id].assign(vals_by_param_id[param_id])
 
         return self.test_model
 
@@ -181,12 +218,11 @@ class Cluster:
         time_str = str(now.time())
         time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
 
-        logging_filename = 'eval_logs/custom_ps_%s_%s.txt' % (self.training_style, time_stamp)
+        logging_filename = 'eval_logs/custom_ps_%s.txt' % time_stamp
 
         with open(logging_filename, 'w') as outfile:
             outfile.write('%d workers, %d ps\n' % (self.num_workers, self.num_ps))
             outfile.write('%d slow workers, %d to %d ms\n' % (self.num_slow_workers, self.slow_worker_lb, self.slow_worker_ub))
-            outfile.write('%s training\n' % self.training_style)
 
             # MODEL INFO
             outfile.write('784-128-10\n')
@@ -212,26 +248,9 @@ class Cluster:
         steps_per_epoch = int(self.num_train_samples / self.batch_size)
 
         
-        # Create and start worker threads
-        worker_threads = []
-        
-        for worker in self.workers:
-            worker_thread = threading.Thread(target=worker.start, daemon=True)
-            worker_threads.append(worker_thread)
-
-        for wt in worker_threads:
-            wt.start()
-
-        # Create and start PS threads
-        ps_threads = []
-
-        for ps_id in self.parameter_servers:
-                ps = self.parameter_servers[ps_id]
-                ps_thread = threading.Thread(target=ps.start, daemon=True)
-                ps_threads.append(ps_thread)
-
-        for pst in ps_threads:
-            pst.start()
+        # Start nodes
+        for node in self.nodes.values():
+            node.start()
 
 
         # Begin training

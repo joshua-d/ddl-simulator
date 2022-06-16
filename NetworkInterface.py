@@ -24,23 +24,25 @@ class NetworkInterface:
         sat_time = PARAMS_SIZE / (bandwidth / cluster.num_workers) 
         print('Time per message when network is saturated (%d msgs at once): %f\n' % (cluster.num_workers, sat_time))
 
+
     def worker_wait_for_params(self, worker):
         return self.nc.worker_wait_for_params(worker)
-
-    def worker_send_gradients(self, wk_id, ps_id, grads):
-        # TODO get size of actual grads
-        self.ne.send_msg(self.GRADS_SIZE, lambda: self.nc.worker_send_gradients(wk_id, ps_id, grads))
 
     def ps_wait_for_update(self, ps):
         return self.nc.ps_wait_for_update(ps)
 
-    def send_params(self, wk_id, vals_by_param_id):
-        # TODO get size of actual params
-        self.ne.send_msg(self.PARAMS_SIZE, lambda: self.nc.send_params(wk_id, vals_by_param_id))
 
-    def broadcast_params(self, vals_by_param_id):
-        for worker in self.cluster.workers:
-            self.send_params(worker.id, vals_by_param_id)
+    def send_params_replace(self, node_id, vals_by_param_id):
+        # TODO get actual size dynamically
+        self.ne.send_msg(self.PARAMS_SIZE, lambda: self.nc.send_params_replace(node_id, vals_by_param_id))
+
+    def send_params_gradient(self, node_id, grads_by_param_id, sender_id):
+        # TODO get actual size dynamically
+        self.ne.send_msg(self.GRADS_SIZE, lambda: self.nc.send_params_gradient(node_id, grads_by_param_id, sender_id))
+
+    def send_params_average(self, node_id, vals_by_param_id):
+        # TODO get actual size dynamically
+        self.ne.send_msg(self.PARAMS_SIZE, lambda: self.nc.send_params_average(node_id, vals_by_param_id))
 
     
     def start(self):
@@ -55,21 +57,24 @@ class NetworkInterfaceBypass:
 
         print('BYPASSING NETWORK INTERFACE')
 
+
     def worker_wait_for_params(self, worker):
         return self.nc.worker_wait_for_params(worker)
-
-    def worker_send_gradients(self, wk_id, ps_id, grads):
-        self.nc.worker_send_gradients(wk_id, ps_id, grads)
 
     def ps_wait_for_update(self, ps):
         return self.nc.ps_wait_for_update(ps)
 
-    def send_params(self, wk_id, vals_by_param_id):
-        self.nc.send_params(wk_id, vals_by_param_id)
 
-    def broadcast_params(self, vals_by_param_id):
-        for worker in self.cluster.workers:
-            self.send_params(worker.id, vals_by_param_id)
+    def send_params_replace(self, node_id, vals_by_param_id):
+        self.nc.send_params_replace(node_id, vals_by_param_id)
+
+    def send_params_gradient(self, node_id, grads_by_param_id, sender_id):
+        self.nc.send_params_gradient(node_id, grads_by_param_id, sender_id)
+
+    def send_params_average(self, node_id, vals_by_param_id):
+        self.nc.send_params_average(node_id, vals_by_param_id)
+
+    
 
     def start(self):
         pass
@@ -81,11 +86,12 @@ class NodeCommunication:
     def __init__(self, cluster):
         self.cluster = cluster
 
+
     # Waits on worker.param_update_queue_cond for enough ReplacementParamUpdates to update all of worker's params
     def worker_wait_for_params(self, worker):
         with worker.param_update_queue_cond:
-            # TODO update this condition. Must check if worker param updates from all its parents/for all its params
-            while len(worker.param_update_queue) != self.cluster.num_ps:
+
+            while len(worker.param_update_queue) != len(worker.parents):
                 worker.param_update_queue_cond.wait()
 
             # All ReplacementParamUpdates are in, move them out of queue and return to worker
@@ -93,19 +99,6 @@ class NodeCommunication:
             worker.param_update_queue = []
 
         return param_updates
-
-
-    # Sends a GradientParamUpdate from a worker to a PS
-    def worker_send_gradients(self, wk_id, ps_id, grads):
-        ps = self.cluster.parameter_servers[ps_id]
-
-        # Build GradientParamUpdate
-        param_update = GradientParamUpdate(grads, wk_id)
-
-        # Place param_update in queue and notify PS
-        with ps.param_update_queue_cond:
-            ps.param_update_queue.append(param_update)
-            ps.param_update_queue_cond.notify()
 
 
     # Waits on ps.param_update_queue_cond for a ParamUpdate to enter the queue
@@ -124,7 +117,7 @@ class NodeCommunication:
 
 
     # Sends a ReplacementParamUpdate to a node
-    def send_params(self, node_id, vals_by_param_id):
+    def send_params_replace(self, node_id, vals_by_param_id):
         node = self.cluster.nodes[node_id]
 
         # Build ReplacementParamUpdate
@@ -136,6 +129,22 @@ class NodeCommunication:
             node.param_update_queue_cond.notify()
 
 
+    def send_params_gradient(self, node_id, grads_by_param_id, sender_id):
+        node = self.cluster.nodes[node_id]
+
+        # Build GradientParamUpdate
+        param_update = GradientParamUpdate(grads_by_param_id, sender_id)
+
+        # Place param update in queue and notify node
+        with node.param_update_queue_cond:
+            node.param_update_queue.append(param_update)
+            node.param_update_queue_cond.notify()
+
+
+    def send_params_average(self, node_id, vals_by_param_id):
+        # TODO implement
+        pass
+
 
     def clear_worker_param_update_queues(self):
         for worker in self.cluster.workers:
@@ -144,6 +153,6 @@ class NodeCommunication:
 
 
     def clear_ps_param_update_queues(self):
-        for ps in self.cluster.parameter_servers.values():
+        for ps in self.cluster.parameter_servers:
             with ps.param_update_queue_cond:
                 ps.param_update_queue = []
