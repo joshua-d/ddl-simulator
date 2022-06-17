@@ -45,12 +45,11 @@ class Worker(Node):
         if self.id < self.cluster.num_slow_workers:
             sleep(random.randint(self.cluster.slow_worker_lb, self.cluster.slow_worker_ub) / 1000)
 
-        # print("Worker %d updating parent" % self.id)
+        # TODO assumes parent has gradient update policy
         self.update_parents(gradients, None)
 
         self._increment_step_counter()
 
-        # print("Worker %d waiting for params" % self.id)
         self.wait_for_params()
 
 
