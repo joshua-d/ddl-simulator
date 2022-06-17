@@ -40,6 +40,7 @@ class Node:
 
 
     # TODO consider building update parent function so it doesn't have to check parent update policy all the time
+    # TODO naming - param_values, vals_by_param_id, params...
     # gradients: map of param id to gradient
     # param_values: map of param id to param value
     def update_parents(self, gradients, param_values):

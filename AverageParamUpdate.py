@@ -12,4 +12,4 @@ class AverageParamUpdate(ParamUpdate):
     def apply(self, params, optimizer):
         # Average new params into existing params
         for param_id in self.new_params:
-            params[param_id].assign((params[param_id].value() + self.new_params[param_id].value()) / 2)
+            params[param_id].assign((params[param_id].value() + self.new_params[param_id]) / 2)

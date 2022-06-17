@@ -25,7 +25,12 @@ class ParameterServer(Node):
 
     def get_params(self):
         # { param_id: param's value }
-        return self.params
+        vals_by_param_id = {}
+
+        for param_id in self.params:
+            vals_by_param_id[param_id] = self.params[param_id].value()
+        
+        return vals_by_param_id
 
 
     def run(self):

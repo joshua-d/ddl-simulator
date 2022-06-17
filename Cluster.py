@@ -70,7 +70,7 @@ class Cluster:
         self.steps_completed_cond = threading.Condition()
 
 
-    # TODO sync stuff, slow workers
+    # TODO slow workers
     def _create_nodes(self):
 
         self.num_workers = 0
@@ -148,6 +148,7 @@ class Cluster:
                     self.ni,
                     self.model_builder,
                     dataset_iterator,
+                    build_optimizer(self.learning_rate),
                     self
                 )
 
