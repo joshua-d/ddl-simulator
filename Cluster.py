@@ -95,9 +95,8 @@ class Cluster:
                 for param_id in params:
                     param_locations[parent_id].append(param_id)
 
-            # Add this node to children of parents
+            # Add this node to children of parents, used for sync tracking
             # TODO assumes parents are already built
-            # TODO currently unused, can remove
             for parent_id in node_desc['parents']:
                 self.nodes[parent_id].children.append(node_desc['id'])
 
@@ -110,7 +109,13 @@ class Cluster:
                 else:
                     update_interval = 0
 
-                ps = ParameterServer(
+                # Set async or sync
+                if node_desc['train_style'] == 'async':
+                    PSClass = ParameterServer
+                elif node_desc['train_style'] == 'sync':
+                    PSClass = SyncParameterServer
+
+                ps = PSClass(
                     node_desc['id'], 
                     node_desc['parents'], 
                     update_policies, 

@@ -18,7 +18,7 @@
             "id": 0,
             "parents": [],
             "update_policy": "average",
-            "train_style": "async" 
+            "train_style": "sync"
         },
 
         {

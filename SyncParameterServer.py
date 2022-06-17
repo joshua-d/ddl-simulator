@@ -6,35 +6,42 @@ import threading
 
 class SyncParameterServer(ParameterServer):
 
-    def __init__(self, id, params, optimizer, ni, num_workers):
-        super().__init__(id, params, optimizer, ni)
+    def __init__(self, id, parents, update_policies, param_locations, ni, params, optimizer, update_interval):
+        super().__init__(id, parents, update_policies, param_locations, ni, params, optimizer, update_interval)
 
-        self.num_workers = num_workers
-        self.round_num_grads_received = 0
+        self.round_num_updates_received = 0
 
 
     def reset_round(self):
-        self.round_num_grads_received = 0
+        self.round_num_updates_received = 0
         
 
-    def start(self):
-
-        # Start by broadcasting params
-        self.ni.broadcast_params(self.get_params())
-
+    def run(self):
+        
         while True:
+            param_update_buffer = self.ni.ps_wait_for_update(self)
 
-            # Wait for grads msg or params request
-            grads_queue_buffer = self.ni.wait_for_grads(self)
+            waiting_nodes = []
 
-            # Apply grads in order received
-            for grads, wk_id in grads_queue_buffer:
-                self.apply_gradients(grads)
-                self.round_num_grads_received += 1
+            # Apply all updates
+            with self.params_lock:
+                for param_update in param_update_buffer:
+                    param_update.apply(self.params, self.optimizer)
+                    if param_update.return_params:
+                        waiting_nodes.append(param_update.sender_id)
+                    self.n_updates += 1
+                    self.round_num_updates_received += 1
 
-            # If all workers have sent in grads, send out params
-            if self.round_num_grads_received == self.num_workers:
-                self.round_num_grads_received = 0
-                # print('broadcasting params')
-                self.ni.broadcast_params(self.get_params())
+                vals_by_param_id = self.get_params()
+
+            # Maybe update parent
+            if self.n_updates == self.update_interval:
+                self.update_parents(gradients=None, param_values=vals_by_param_id)
+                self.n_updates = 0
+                    
+            # If all children have sent updates, send params back to waiting nodes
+            if self.round_num_updates_received == len(self.children):
+                self.round_num_updates_received = 0
+                for node_id in waiting_nodes:
+                    self.ni.send_params_replace(node_id, vals_by_param_id)
 
