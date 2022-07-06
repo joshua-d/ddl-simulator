@@ -46,7 +46,7 @@ class ParameterServer(Node):
                     param_update.apply(self.params, self.optimizer)
                     if param_update.return_params:
                         waiting_nodes.append(param_update.sender_id)
-                    self.n_updates += 1
+                        self.n_updates += 1
 
                 vals_by_param_id = self.get_params()
 

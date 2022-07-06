@@ -27,7 +27,7 @@ class SyncParameterServer(ParameterServer):
                     param_update.apply(self.params, self.optimizer)
                     if param_update.return_params:
                         self.n_worker_updates_this_round += 1 # TODO this feels hacky - way to detect if update is from child
-                    self.n_updates += 1
+                        self.n_updates += 1
 
                 vals_by_param_id = self.get_params()
 
