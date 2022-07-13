@@ -25,18 +25,11 @@ class Node:
         # Network Interface
         self.ni = ni
 
-        # TODO update this documentation
-        # List of ParamUpdate objects
-        # ParamUpdate:
-        #
-        #   sender_id: id of sender
-        #
-        #   apply(params, optimizer)
-        #       params: ParameterServer.params
-        #
-        #       applies update
-        self.param_update_queue = []
-        self.param_update_queue_cond = threading.Condition()
+        # TODO currently, all nodes have this, so here it is
+        #   Looking ahead to a different structure, consider renaming - primary_update_queue, PS has secondary?
+        # Queue for param updates from parents
+        self.parent_update_queue = []
+        self.parent_update_queue_cond = threading.Condition()
 
 
     # TODO consider building update parent function so it doesn't have to check parent update policy all the time
@@ -49,17 +42,7 @@ class Node:
 
             update_policy = self.update_policies[parent_id]
 
-            if update_policy == UpdatePolicy.REPLACE:
-
-                # Generate vals_by_param_id
-                vals_by_param_id = {}
-                for param_id in self.param_locations[parent_id]:
-                    vals_by_param_id[param_id] = param_values[param_id]
-
-                # Call NI to send
-                self.ni.send_params_replace(parent_id, vals_by_param_id)
-
-            elif update_policy == UpdatePolicy.GRADIENT:
+            if update_policy == UpdatePolicy.GRADIENT:
 
                 # Generate grads_by_param_id
                 grads_by_param_id = {}

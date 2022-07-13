@@ -2,3 +2,7 @@ If base_msg_time is 0, bandwidth will be set based on the config.json value. Oth
 will be set based on base_msg_time.
 
 if sync, must specify num children
+
+
+ps_return_threshold: float - seconds to wait after receiving first update from worker for more updates
+to come in before sending back (async)

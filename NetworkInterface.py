@@ -29,13 +29,16 @@ class NetworkInterface:
     def worker_wait_for_params(self, worker):
         return self.nc.worker_wait_for_params(worker)
 
-    def ps_wait_for_update(self, ps):
-        return self.nc.ps_wait_for_update(ps)
+    def ps_wait_for_child_update(self, ps, timeout=None):
+        return self.nc.ps_wait_for_child_update(ps, timeout)
+
+    def ps_wait_for_parent_update(self, ps, timeout=None):
+        return self.nc.ps_wait_for_parent_update(ps, timeout)
 
 
-    def send_params_replace(self, node_id, vals_by_param_id):
+    def ps_send_to_child(self, node_id, vals_by_param_id):
         # TODO get actual size dynamically
-        self.ne.send_msg(self.PARAMS_SIZE, lambda: self.nc.send_params_replace(node_id, vals_by_param_id))
+        self.ne.send_msg(self.PARAMS_SIZE, lambda: self.nc.ps_send_to_child(node_id, vals_by_param_id))
 
     def send_params_gradient(self, node_id, grads_by_param_id, sender_id):
         # TODO get actual size dynamically
@@ -62,12 +65,15 @@ class NetworkInterfaceBypass:
     def worker_wait_for_params(self, worker):
         return self.nc.worker_wait_for_params(worker)
 
-    def ps_wait_for_update(self, ps):
-        return self.nc.ps_wait_for_update(ps)
+    def ps_wait_for_child_update(self, ps, timeout=None):
+        return self.nc.ps_wait_for_child_update(ps, timeout)
+
+    def ps_wait_for_parent_update(self, ps, timeout=None):
+        return self.nc.ps_wait_for_parent_update(ps, timeout)
 
 
-    def send_params_replace(self, node_id, vals_by_param_id):
-        self.nc.send_params_replace(node_id, vals_by_param_id)
+    def ps_send_to_child(self, node_id, vals_by_param_id):
+        self.nc.ps_send_to_child(node_id, vals_by_param_id)
 
     def send_params_gradient(self, node_id, grads_by_param_id, sender_id):
         self.nc.send_params_gradient(node_id, grads_by_param_id, sender_id)
@@ -88,48 +94,62 @@ class NodeCommunication:
         self.cluster = cluster
 
 
-    # Waits on worker.param_update_queue_cond for enough ReplacementParamUpdates to update all of worker's params
+    # Waits on worker.parent_update_queue_cond for enough ReplacementParamUpdates to update all of worker's params
     def worker_wait_for_params(self, worker):
-        with worker.param_update_queue_cond:
+        with worker.parent_update_queue_cond:
 
-            while len(worker.param_update_queue) != len(worker.parents):
-                worker.param_update_queue_cond.wait()
+            while len(worker.parent_update_queue) != len(worker.parents):
+                worker.parent_update_queue_cond.wait()
 
             # All ReplacementParamUpdates are in, move them out of queue and return to worker
-            param_updates = worker.param_update_queue
-            worker.param_update_queue = []
+            param_updates = worker.parent_update_queue
+            worker.parent_update_queue = []
 
         return param_updates
 
 
-    # Waits on ps.param_update_queue_cond for a ParamUpdate to enter the queue
-    def ps_wait_for_update(self, ps):
+    # Waits on ps.child_update_queue_cond for a ParamUpdate to enter the queue
+    def ps_wait_for_child_update(self, ps, timeout=None):
 
         # Wait for a param update to come in
-        with ps.param_update_queue_cond:
-            while len(ps.param_update_queue) == 0:
-                ps.param_update_queue_cond.wait()
+        with ps.child_update_queue_cond:
+            ps.child_update_queue_cond.wait_for(lambda: len(ps.child_update_queue) != 0, timeout=timeout)
 
             # A param update has come in, move everything out of queue and return to ps
-            param_update_queue_buffer = ps.param_update_queue
-            ps.param_update_queue = []
+            child_update_queue_buffer = ps.child_update_queue
+            ps.child_update_queue = []
         
-        return param_update_queue_buffer
+        return child_update_queue_buffer
+
+    
+    # Waits on ps.parent_update_queue_cond for a ParamUpdate to enter the queue
+    def ps_wait_for_parent_update(self, ps, timeout=None):
+
+        # Wait for a param update to come in
+        with ps.parent_update_queue_cond:
+            ps.parent_update_queue_cond.wait_for(lambda: len(ps.parent_update_queue) != 0, timeout=timeout)
+
+            # A param update has come in, move everything out of queue and return to ps
+            parent_update_queue_buffer = ps.parent_update_queue
+            ps.parent_update_queue = []
+        
+        return parent_update_queue_buffer
 
 
-    # Sends a ReplacementParamUpdate to a node
-    def send_params_replace(self, node_id, vals_by_param_id):
+    # Places a ReplacementParamUpdate in a node's parent_update_queue
+    def ps_send_to_child(self, node_id, vals_by_param_id):
         node = self.cluster.nodes[node_id]
 
         # Build ReplacementParamUpdate
         param_update = ReplacementParamUpdate(vals_by_param_id)
 
         # Place param update in queue and notify node
-        with node.param_update_queue_cond:
-            node.param_update_queue.append(param_update)
-            node.param_update_queue_cond.notify()
+        with node.parent_update_queue_cond:
+            node.parent_update_queue.append(param_update)
+            node.parent_update_queue_cond.notify()
 
 
+    # Places a GradientParamUpdate in a PS's child_update_queue
     def send_params_gradient(self, node_id, grads_by_param_id, sender_id):
         node = self.cluster.nodes[node_id]
 
@@ -137,11 +157,12 @@ class NodeCommunication:
         param_update = GradientParamUpdate(grads_by_param_id, sender_id)
 
         # Place param update in queue and notify node
-        with node.param_update_queue_cond:
-            node.param_update_queue.append(param_update)
-            node.param_update_queue_cond.notify()
+        with node.child_update_queue_cond:
+            node.child_update_queue.append(param_update)
+            node.child_update_queue_cond.notify()
 
 
+    # Places a AverageParamUpdate in a PS's child_update_queue
     def send_params_average(self, node_id, vals_by_param_id, sender_id):
         node = self.cluster.nodes[node_id]
 
@@ -149,18 +170,6 @@ class NodeCommunication:
         param_update = AverageParamUpdate(vals_by_param_id, sender_id)
 
         # Place param update in queue and notify node
-        with node.param_update_queue_cond:
-            node.param_update_queue.append(param_update)
-            node.param_update_queue_cond.notify()
-
-
-    def clear_worker_param_update_queues(self):
-        for worker in self.cluster.workers:
-            with worker.param_update_queue_cond:
-                worker.param_update_queue = []
-
-
-    def clear_ps_param_update_queues(self):
-        for ps in self.cluster.parameter_servers:
-            with ps.param_update_queue_cond:
-                ps.param_update_queue = []
+        with node.child_update_queue_cond:
+            node.child_update_queue.append(param_update)
+            node.child_update_queue_cond.notify()

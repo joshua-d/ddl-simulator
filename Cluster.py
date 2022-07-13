@@ -2,6 +2,7 @@ from ast import Param
 import tensorflow as tf
 import numpy as np
 import threading
+from math import inf
 
 # Only imported for test dataset
 import keras_model
@@ -107,7 +108,7 @@ class Cluster:
                 if len(node_desc['parents']) > 0:
                     update_interval = node_desc['update_interval']
                 else:
-                    update_interval = 0
+                    update_interval = inf # TODO make sure top level PS never updates
 
                 # Set async or sync
                 if node_desc['train_style'] == 'async':
@@ -123,7 +124,8 @@ class Cluster:
                     self.ni, 
                     params, 
                     build_optimizer(self.learning_rate), 
-                    update_interval
+                    update_interval,
+                    self.ps_return_threshold
                 )
 
                 self.nodes[ps.id] = ps
@@ -190,6 +192,8 @@ class Cluster:
         self.slow_worker_ub = self._get_config_item(config, 'slow_worker_upper_bound_ms')
 
         self.node_descs = self._get_config_item(config, 'nodes')
+
+        self.ps_return_threshold = self._get_config_item(config, 'ps_return_threshold')
 
     def _get_config_item(self, config, item):
         if item not in config:
