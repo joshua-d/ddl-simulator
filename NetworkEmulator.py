@@ -51,21 +51,21 @@ class NetworkEmulator:
         self.dt_thread = Thread(target=self._process_dtjq, daemon=True)
 
 
-    def get_available_bw(self, from_id):
+    def get_available_bw(self, msg_list, max_bw):
 
-        if len(self.outgoing[from_id]) == 0:
-            return self.outbound_max[from_id]
+        if len(msg_list) == 0:
+            return max_bw
 
         # Gather and sort send rates
         send_rates = []
 
-        for msg in self.outgoing[from_id]:
+        for msg in msg_list:
             send_rates.append(msg.send_rate)
 
         send_rates.sort(reverse=True)
 
         # Calc baseline bw
-        baseline_bw = self.outbound_max[from_id] / len(send_rates)
+        baseline_bw = max_bw / len(send_rates)
 
         # Calc extra bandwidth and how much is in use
         extra_bw = 0
@@ -92,7 +92,7 @@ class NetworkEmulator:
 
             split_val = (send_rates[sr_idx] - avail_bw) * n_splitting / (n_splitting + 1)
 
-            if sr_idx + 1 == len(send_rates) or avail_bw > send_rates[sr_idx + 1] or avail_bw + split_val > send_rates[sr_idx + 1]:
+            if sr_idx + 1 == len(send_rates) or avail_bw + split_val > send_rates[sr_idx + 1]:
                 # Ready to split between current srs and avail
                 avail_bw += split_val
                 return avail_bw
@@ -104,10 +104,56 @@ class NetworkEmulator:
                 sr_idx += 1
 
 
+    def add_msg(self, msg, msg_list, max_bw):
 
+        if len(msg_list) == 0:
+            msg_list.append(msg)
+            return
 
+        # Calc baseline bw
+        baseline_bw = max_bw / len(msg_list)
 
+        # Calc extra bandwidth and how much is in use
+        extra_bw = 0
+        extra_bw_in_use = 0
 
+        for aux_msg in msg_list:
+            sr = aux_msg.send_rate
+            if sr < baseline_bw:
+                extra_bw += baseline_bw - sr
+            elif sr > baseline_bw:
+                extra_bw_in_use += sr - baseline_bw
+
+        # Start by giving free bw to pulled
+        pulled_bw = extra_bw - extra_bw_in_use
+
+        # Check base cases
+        if pulled_bw > msg.send_rate:
+            msg_list.append(msg)
+            return
+
+        # Pull remaining bw from top msgs
+        msg_list.sort(key=lambda msg: msg.send_rate, reverse=True)
+
+        msg_idx = 0
+        n_pulling = 1
+
+        while True:
+
+            remaining = msg.send_rate - pulled_bw
+            pull_result = msg_list[msg_idx].send_rate - (remaining / n_pulling)
+
+            if msg_idx + 1 == len(msg_list) or pull_result > msg_list[msg_idx + 1].send_rate:
+                # Ready to pull
+                for j in range(msg_idx + 1):
+                    msg_list[j].send_rate = pull_result
+                msg_list.append(msg)
+                return
+            else:
+                # Lower currs, add to pulled, add next to pulling
+                pulled_bw += (msg_list[msg_idx].send_rate - msg_list[msg_idx + 1].send_rate) * n_pulling
+                n_pulling += 1
+                msg_idx += 1
 
 
 
@@ -115,10 +161,18 @@ class NetworkEmulator:
     def send_msg(self, from_id, to_id, msg_size, dtj_fn):
         with self.sending_msgs_cond:
 
-            
+            from_avail = self.get_available_bw(self.outgoing[from_id], self.outbound_max[from_id])
+            to_avail = self.get_available_bw(self.incoming[to_id], self.inbound_max[to_id])
 
+            send_rate = min(from_avail, to_avail)
+            msg = Message(from_id, to_id, msg_size, dtj_fn, 0, send_rate)
 
-            self.sending_msgs.append(Message(msg_size, dtj_fn, time.perf_counter()))
+            # TODO thread safety here
+            self.add_msg(msg, self.outgoing[from_id])
+            self.add_msg(msg, self.incoming[to_id])
+
+            msg.last_checked = time.perf_counter()
+            self.sending_msgs.append(msg)
             self.sending_msgs_cond.notify()
 
 
@@ -240,9 +294,15 @@ if __name__ == '__main__':
 
     ne = NetworkEmulator((inbound, outbound))
 
-    ne.outgoing[0].append(DM(10))
-    ne.outgoing[0].append(DM(25))
-    ne.outgoing[0].append(DM(25))
+    ne.outgoing[0].append(DM(5))
+    ne.outgoing[0].append(DM(5))
+    ne.outgoing[0].append(DM(15))
+    ne.outgoing[0].append(DM(20))
 
 
-    print(ne.get_available_bw(0))
+    print(ne.get_available_bw(ne.outgoing[0], ne.outbound_max[0]))
+    print()
+
+    ne.add_msg(DM(10), ne.outgoing[0], ne.outbound_max[0])
+    for msg in ne.outgoing[0]:
+        print(msg.send_rate)
