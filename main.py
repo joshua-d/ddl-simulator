@@ -60,7 +60,7 @@ def model_builder():
         return grads_list
 
     def build_optimizer(learning_rate):
-        return tf.keras.optimizers.SGD(learning_rate=learning_rate)
+        return tf.keras.optimizers.Adam(learning_rate=learning_rate)
 
     return model, params, forward_pass, build_optimizer
 
@@ -75,13 +75,44 @@ def run_sim(config):
 def main():
     config = load_config()
 
-    for _ in range(1):
+    # 2 level tests
+
+
+    # Bypass NI
+
+    # S S
+    for _ in range(20):
         p = Process(target=run_sim, args=(config,))
         p.start()
         p.join()
 
+    # A S
+    config['nodes'][0]['train_style'] = 'async'
 
-    
+    for _ in range(20):
+        p = Process(target=run_sim, args=(config,))
+        p.start()
+        p.join()
+
+    # S A
+    config['nodes'][0]['train_style'] = 'sync'
+    config['nodes'][1]['train_style'] = 'async'
+    config['nodes'][2]['train_style'] = 'async'
+
+    for _ in range(20):
+        p = Process(target=run_sim, args=(config,))
+        p.start()
+        p.join()
+
+    # A A
+    config['nodes'][0]['train_style'] = 'async'
+
+    for _ in range(20):
+        p = Process(target=run_sim, args=(config,))
+        p.start()
+        p.join()
+
+        
 
 if __name__ == '__main__':
     main()

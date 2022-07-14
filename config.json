@@ -1,5 +1,5 @@
 {
-    "bypass_NI": false,
+    "bypass_NI": true,
 
     "learning_rate": 0.001,
     "batch_size": 32,
@@ -28,9 +28,9 @@
             "node_type": "ps",
             "id": 1,
             "parents": [0],
-            "update_policy": "gradient",
-            "train_style": "async",
-            "update_interval": 10,
+            "update_policy": "average",
+            "train_style": "sync",
+            "update_interval": 1,
 
             "inbound_bw": 100,
             "outbound_bw": 100
@@ -39,9 +39,9 @@
             "node_type": "ps",
             "id": 2,
             "parents": [0],
-            "update_policy": "gradient",
-            "train_style": "async",
-            "update_interval": 10,
+            "update_policy": "average",
+            "train_style": "sync",
+            "update_interval": 1,
 
             "inbound_bw": 100,
             "outbound_bw": 100
