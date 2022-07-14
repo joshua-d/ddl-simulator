@@ -24,6 +24,8 @@ class NetworkEmulator:
 
     def __init__(self, node_bws):
 
+        # These vars must be edited with the sending_msgs_cond held
+
         # (node_id -> inbound bw, node_id -> outbound bw)
         self.inbound_max, self.outbound_max = node_bws
 
@@ -114,15 +116,30 @@ class NetworkEmulator:
 
 
     def _add_msg(self, msg):
-        self._add_msg_to_list(msg, self.outgoing[msg.from_id], self.outbound_max[msg.from_id])
-        self._add_msg_to_list(msg, self.incoming[msg.to_id], self.inbound_max[msg.to_id])
+        edited_msgs_end_idx = self._add_msg_to_list(msg, self.outgoing[msg.from_id], self.outbound_max[msg.from_id])
+
+        msg_list = self.outgoing[msg.from_id]
+        for msg_idx in range(edited_msgs_end_idx):
+            aux_msg = msg_list[msg_idx]
+            if aux_msg == msg:
+                continue
+            self._update_send_rates(self.incoming[aux_msg.to_id], self.inbound_max[aux_msg.to_id], self._get_unused_outbound_bws(aux_msg.to_id))
+
+        edited_msgs_end_idx = self._add_msg_to_list(msg, self.incoming[msg.to_id], self.inbound_max[msg.to_id])
+
+        msg_list = self.incoming[msg.to_id]
+        for msg_idx in range(edited_msgs_end_idx):
+            aux_msg = msg_list[msg_idx]
+            if aux_msg == msg:
+                continue
+            self._update_send_rates(self.outgoing[aux_msg.from_id], self.outbound_max[aux_msg.from_id], self._get_unused_inbound_bws(aux_msg.from_id))
 
 
     def _add_msg_to_list(self, msg, msg_list, max_bw):
 
         if len(msg_list) == 0:
             msg_list.append(msg)
-            return
+            return 0
 
         # Calc baseline bw
         baseline_bw = max_bw / len(msg_list)
@@ -144,7 +161,7 @@ class NetworkEmulator:
         # Check base cases
         if pulled_bw > msg.send_rate:
             msg_list.append(msg)
-            return
+            return 0
 
         # Pull remaining bw from top msgs
         msg_list.sort(key=lambda msg: msg.send_rate, reverse=True)
@@ -162,12 +179,41 @@ class NetworkEmulator:
                 for j in range(msg_idx + 1):
                     msg_list[j].send_rate = pull_result
                 msg_list.append(msg)
-                return
+                break
             else:
                 # Lower currs, add to pulled, add next to pulling
                 pulled_bw += (msg_list[msg_idx].send_rate - msg_list[msg_idx + 1].send_rate) * n_pulling
                 n_pulling += 1
                 msg_idx += 1
+
+        # Return index to signify how many messages were edited
+        return msg_idx + 1
+
+
+
+    def _get_unused_inbound_bws(self, from_id):
+        self.outgoing[from_id].sort(key=lambda m: m.send_rate)
+
+        unused_inbound_bws = {}
+        aux_msg_idx = 0
+        for aux_msg in self.outgoing[from_id]:
+            unused_inbound_bws[aux_msg_idx] = self._get_unused_bw(self.incoming[aux_msg.to_id], self.inbound_max[aux_msg.to_id])
+            aux_msg_idx += 1
+
+        return unused_inbound_bws
+
+    
+    def _get_unused_outbound_bws(self, to_id):
+        self.incoming[to_id].sort(key=lambda m: m.send_rate)
+
+        unused_outbound_bws = {}
+        aux_msg_idx = 0
+        for aux_msg in self.incoming[to_id]:
+            unused_outbound_bws[aux_msg_idx] = self._get_unused_bw(self.outgoing[aux_msg.from_id], self.outbound_max[aux_msg.from_id])
+            aux_msg_idx += 1
+
+        return unused_outbound_bws
+
 
 
     def _remove_msg(self, msg):
@@ -179,28 +225,14 @@ class NetworkEmulator:
 
         if len(self.outgoing[msg.from_id]) != 0:
 
-            self.outgoing[msg.from_id].sort(key=lambda m: m.send_rate)
-
-            unused_inbound_bws = {}
-            aux_msg_idx = 0
-            for aux_msg in self.outgoing[msg.from_id]:
-                unused_inbound_bws[aux_msg_idx] = self._get_unused_bw(self.incoming[aux_msg.to_id], self.inbound_max[aux_msg.to_id])
-                aux_msg_idx += 1
-
+            unused_inbound_bws = self._get_unused_inbound_bws(msg.from_id)
             self._update_send_rates(self.outgoing[msg.from_id], self.outbound_max[msg.from_id], unused_inbound_bws)
 
         # Update 'to' inbound
 
         if len(self.incoming[msg.to_id]) != 0:
 
-            self.incoming[msg.to_id].sort(key=lambda m: m.send_rate)
-
-            unused_outbound_bws = {}
-            aux_msg_idx = 0
-            for aux_msg in self.incoming[msg.to_id]:
-                unused_outbound_bws[aux_msg_idx] = self._get_unused_bw(self.outgoing[aux_msg.from_id], self.outbound_max[aux_msg.from_id])
-                aux_msg_idx += 1
-
+            unused_outbound_bws = self._get_unused_outbound_bws(msg.to_id)
             self._update_send_rates(self.incoming[msg.to_id], self.inbound_max[msg.to_id], unused_outbound_bws)
 
 
@@ -274,9 +306,7 @@ class NetworkEmulator:
 
             msg.send_rate = min(from_avail, to_avail)
             
-            # TODO thread safety here
-            self._add_msg(msg, self.outgoing[from_id], self.outbound_max[from_id])
-            self._add_msg(msg, self.incoming[to_id], self.inbound_max[to_id])
+            self._add_msg(msg)
 
             self.sending_msgs.append(msg)
             self.sending_msgs_cond.notify()
@@ -295,18 +325,18 @@ class NetworkEmulator:
                     self.sending_msgs_cond.wait()
 
                 current_time = time.perf_counter()
-                avail_bw = self.bw / len(self.sending_msgs)
 
                 msg_idx = 0
                 while msg_idx < len(self.sending_msgs):
                     msg = self.sending_msgs[msg_idx]
 
-                    msg.amt_sent += (current_time - msg.last_checked) * avail_bw
+                    msg.amt_sent += (current_time - msg.last_checked) * msg.send_rate
                     msg.last_checked = current_time
 
                     if msg.amt_sent >= msg.size:
-                        # message has sent, remove from sending_msgs and add to sent_msgs
+                        # message has sent, remove from sending_msgs, call remove, and add to sent_msgs
                         self.sending_msgs.pop(msg_idx)
+                        self._remove_msg(msg)
                         msg_idx -= 1
                         sent_msgs.append(msg)
 
@@ -407,21 +437,18 @@ if __name__ == '__main__':
     }
 
     ne = NetworkEmulator((inbound, outbound))
+    ne.start()
+    start_time = time.perf_counter()
 
-    msgs = [
-        DM(5, 0, 1),
-        DM(10, 0, 2),
-        DM(15, 0, 3),
-        DM(5, 0, 4),
+    ne.send_msg(0, 4, 60, lambda: print('Sent 0! %f' % (time.perf_counter() - start_time)))
+    ne.send_msg(0, 3, 60, lambda: print('Sent 1! %f' % (time.perf_counter() - start_time)))
 
-        DM(20, 1, 2),
-        DM(20, 1, 3)
-    ]
+    ne.send_msg(0, 2, 60, lambda: print('Sent 2! %f' % (time.perf_counter() - start_time)))
 
-    for msg in msgs:
-        ne._add_msg(msg)
+    ne.send_msg(1, 2, 60, lambda: print('Sent 3! %f' % (time.perf_counter() - start_time)))
+    ne.send_msg(3, 2, 60, lambda: print('Sent 4! %f' % (time.perf_counter() - start_time)))
+    ne.send_msg(4, 2, 60, lambda: print('Sent 5! %f' % (time.perf_counter() - start_time)))
 
-    ne._remove_msg(ne.outgoing[0][1])
+    print()
 
-    for msg in ne.incoming[2]:
-        print(msg.send_rate)
+    ne.timing_thread.join()
