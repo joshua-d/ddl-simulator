@@ -6,3 +6,6 @@ if sync, must specify num children
 
 ps_return_threshold: float - seconds to wait after receiving first update from worker for more updates
 to come in before sending back (async)
+
+
+inbound/outbound_bw: bw in megabits

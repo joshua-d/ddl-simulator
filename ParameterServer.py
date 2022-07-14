@@ -92,7 +92,7 @@ class ParameterServer(Node):
             # Send params back to waiting nodes
             if len(waiting_nodes) > 0:
                 for node_id in waiting_nodes:
-                    self.ni.ps_send_to_child(node_id, params)
+                    self.ni.ps_send_to_child(self.id, node_id, params)
 
 
     def start(self):

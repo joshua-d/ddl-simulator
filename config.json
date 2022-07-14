@@ -1,7 +1,5 @@
 {
-    "bypass_NI": true,
-    "bandwidth": 0,
-    "base_msg_time": 0.010,
+    "bypass_NI": false,
 
     "learning_rate": 0.001,
     "batch_size": 32,
@@ -9,8 +7,10 @@
     "num_train_samples": 60000,
     "num_test_samples": 10000,
 
-    "slow_worker_lower_bound_ms": 500,
-    "slow_worker_upper_bound_ms": 1000,
+    "slow_worker_lower_bound_ms": 0,
+    "slow_worker_upper_bound_ms": 0,
+
+    "ps_return_threshold": 0.050,
 
     "nodes": [
         {
@@ -18,7 +18,10 @@
             "id": 0,
             "parents": [],
             "update_policy": "average",
-            "train_style": "sync"
+            "train_style": "sync",
+
+            "inbound_bw": 100,
+            "outbound_bw": 100
         },
 
         {
@@ -27,7 +30,10 @@
             "parents": [0],
             "update_policy": "gradient",
             "train_style": "async",
-            "update_interval": 10
+            "update_interval": 10,
+
+            "inbound_bw": 100,
+            "outbound_bw": 100
         },
         {
             "node_type": "ps",
@@ -35,33 +41,48 @@
             "parents": [0],
             "update_policy": "gradient",
             "train_style": "async",
-            "update_interval": 10
+            "update_interval": 10,
+
+            "inbound_bw": 100,
+            "outbound_bw": 100
         },
 
         {
             "node_type": "worker",
             "id": 3,
             "parents": [1],
-            "slow": false
+            "slow": false,
+
+            "inbound_bw": 100,
+            "outbound_bw": 100
         },
         {
             "node_type": "worker",
             "id": 4,
             "parents": [1],
-            "slow": false
+            "slow": false,
+
+            "inbound_bw": 100,
+            "outbound_bw": 100
         },
 
         {
             "node_type": "worker",
             "id": 5,
             "parents": [2],
-            "slow": false
+            "slow": false,
+
+            "inbound_bw": 100,
+            "outbound_bw": 100
         },
         {
             "node_type": "worker",
             "id": 6,
             "parents": [2],
-            "slow": false
+            "slow": false,
+
+            "inbound_bw": 100,
+            "outbound_bw": 100
         }
     ]
 }

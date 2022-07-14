@@ -53,5 +53,5 @@ class SyncParameterServer(ParameterServer):
 
             # Send params back to children
             for node_id in self.children:
-                self.ni.ps_send_to_child(node_id, params)
+                self.ni.ps_send_to_child(self.id, node_id, params)
 

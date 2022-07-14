@@ -50,7 +50,7 @@ class Node:
                     grads_by_param_id[param_id] = gradients[param_id]
 
                 # Call NI to send
-                self.ni.send_params_gradient(parent_id, grads_by_param_id, self.id)
+                self.ni.send_params_gradient(self.id, parent_id, grads_by_param_id)
 
             elif update_policy == UpdatePolicy.AVERAGE:
 
@@ -60,4 +60,4 @@ class Node:
                     vals_by_param_id[param_id] = param_values[param_id]
 
                 # Call NI to send
-                self.ni.send_params_average(parent_id, vals_by_param_id, self.id)
+                self.ni.send_params_average(self.id, parent_id, vals_by_param_id)

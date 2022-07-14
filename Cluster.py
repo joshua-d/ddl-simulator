@@ -61,14 +61,24 @@ class Cluster:
             self.ni = NetworkInterfaceBypass(self)
         else:
             msg_size = self._get_model_size()
-            self._set_bandwidth(msg_size)
-            self.ni = NetworkInterface(self, self.bandwidth, msg_size, msg_size)
+            self.ni = NetworkInterface(self, self._create_node_bws(), msg_size, msg_size)
 
         self._create_nodes()
 
         self.steps_completed = 0
         self.steps_scheduled = 0
         self.steps_completed_cond = threading.Condition()
+
+
+    def _create_node_bws(self):
+        inbound_bws = {}
+        outbound_bws = {}
+
+        for node_desc in self.node_descs:
+            inbound_bws[node_desc['id']] = node_desc['inbound_bw'] * 1000000
+            outbound_bws[node_desc['id']] = node_desc['outbound_bw'] * 1000000
+
+        return (inbound_bws, outbound_bws)
 
 
     # TODO slow workers
@@ -168,21 +178,12 @@ class Cluster:
         return total_bits
 
 
-    # If a base_msg_time was given in config, sets bandwidth accordingly
-    # Assumes all msgs are the same size
-    def _set_bandwidth(self, msg_size):
-        if self.base_msg_time != 0:
-            self.bandwidth = msg_size / self.base_msg_time
-
-
     def _parse_config(self, config):
 
         self.learning_rate = self._get_config_item(config, 'learning_rate')
         self.batch_size = self._get_config_item(config, 'batch_size')
 
         self.bypass_NI = self._get_config_item(config, 'bypass_NI')
-        self.bandwidth = self._get_config_item(config, 'bandwidth')
-        self.base_msg_time = self._get_config_item(config, 'base_msg_time')
         
         # Num train samples per epoch - passed into dataset_fn
         self.num_train_samples = self._get_config_item(config, 'num_train_samples')
@@ -243,8 +244,6 @@ class Cluster:
 
             if self.bypass_NI:
                 outfile.write('NETWORK INTERFACE BYPASSED\n')
-            else:
-                outfile.write('%d bandwidth, %f base msg time\n' % (self.bandwidth, self.base_msg_time))
 
             outfile.write('num train samples: %d, num test samples: %d, batch size: %d, learning rate: %f\n'
                             % (self.num_train_samples, self.num_test_samples, self.batch_size, self.learning_rate))

@@ -6,24 +6,16 @@ from AverageParamUpdate import AverageParamUpdate
 
 class NetworkInterface:
 
-    def __init__(self, cluster, bandwidth, PARAMS_SIZE, GRADS_SIZE):
+    def __init__(self, cluster, node_bws, PARAMS_SIZE, GRADS_SIZE):
         self.cluster = cluster
         self.PARAMS_SIZE = PARAMS_SIZE # size of a params msg
         self.GRADS_SIZE = GRADS_SIZE # size of a grads msg
         
         self.nc = NodeCommunication(cluster)
-        self.ne = NetworkEmulator(bandwidth)
+        self.ne = NetworkEmulator(node_bws)
 
-
-        # TODO this diagnostic assumes grads and params are same size, and saturation is when there are num_workers msgs at once
-        print('\nNetwork Interface:')
-        print('Bandwidth: %s' % '{:,}'.format(bandwidth))
-        
-        if self.cluster.base_msg_time != 0:
-            print("Time to send 1 msg: %f" % self.cluster.base_msg_time)
-
-        sat_time = PARAMS_SIZE / (bandwidth / cluster.num_workers) 
-        print('Time per message when network is saturated (%d msgs at once): %f\n' % (cluster.num_workers, sat_time))
+        print('Params size: %d' % PARAMS_SIZE)
+        print('Grads size: %d' % GRADS_SIZE)
 
 
     def worker_wait_for_params(self, worker):
@@ -36,17 +28,17 @@ class NetworkInterface:
         return self.nc.ps_wait_for_parent_update(ps, timeout)
 
 
-    def ps_send_to_child(self, node_id, vals_by_param_id):
+    def ps_send_to_child(self, from_id, to_id, vals_by_param_id):
         # TODO get actual size dynamically
-        self.ne.send_msg(self.PARAMS_SIZE, lambda: self.nc.ps_send_to_child(node_id, vals_by_param_id))
+        self.ne.send_msg(from_id, to_id, self.PARAMS_SIZE, lambda: self.nc.ps_send_to_child(to_id, vals_by_param_id))
 
-    def send_params_gradient(self, node_id, grads_by_param_id, sender_id):
+    def send_params_gradient(self, from_id, to_id, grads_by_param_id):
         # TODO get actual size dynamically
-        self.ne.send_msg(self.GRADS_SIZE, lambda: self.nc.send_params_gradient(node_id, grads_by_param_id, sender_id))
+        self.ne.send_msg(from_id, to_id, self.GRADS_SIZE, lambda: self.nc.send_params_gradient(to_id, grads_by_param_id, from_id))
 
-    def send_params_average(self, node_id, vals_by_param_id, sender_id):
+    def send_params_average(self, from_id, to_id, vals_by_param_id):
         # TODO get actual size dynamically
-        self.ne.send_msg(self.PARAMS_SIZE, lambda: self.nc.send_params_average(node_id, vals_by_param_id, sender_id))
+        self.ne.send_msg(from_id, to_id, self.PARAMS_SIZE, lambda: self.nc.send_params_average(to_id, vals_by_param_id, from_id))
 
     
     def start(self):
@@ -72,14 +64,14 @@ class NetworkInterfaceBypass:
         return self.nc.ps_wait_for_parent_update(ps, timeout)
 
 
-    def ps_send_to_child(self, node_id, vals_by_param_id):
-        self.nc.ps_send_to_child(node_id, vals_by_param_id)
+    def ps_send_to_child(self, from_id, to_id, vals_by_param_id):
+        self.nc.ps_send_to_child(to_id, vals_by_param_id)
 
-    def send_params_gradient(self, node_id, grads_by_param_id, sender_id):
-        self.nc.send_params_gradient(node_id, grads_by_param_id, sender_id)
+    def send_params_gradient(self, from_id, to_id, grads_by_param_id):
+        self.nc.send_params_gradient(to_id, grads_by_param_id, from_id)
 
-    def send_params_average(self, node_id, vals_by_param_id, sender_id):
-        self.nc.send_params_average(node_id, vals_by_param_id, sender_id)
+    def send_params_average(self, from_id, to_id, vals_by_param_id):
+        self.nc.send_params_average(to_id, vals_by_param_id, from_id)
 
     
 
