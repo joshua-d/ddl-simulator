@@ -113,7 +113,12 @@ class NetworkEmulator:
         return unused_bw
 
 
-    def _add_msg(self, msg, msg_list, max_bw):
+    def _add_msg(self, msg):
+        self._add_msg_to_list(msg, self.outgoing[msg.from_id], self.outbound_max[msg.from_id])
+        self._add_msg_to_list(msg, self.incoming[msg.to_id], self.inbound_max[msg.to_id])
+
+
+    def _add_msg_to_list(self, msg, msg_list, max_bw):
 
         if len(msg_list) == 0:
             msg_list.append(msg)
@@ -168,60 +173,78 @@ class NetworkEmulator:
     def _remove_msg(self, msg):
 
         self.outgoing[msg.from_id].remove(msg)
+        self.incoming[msg.to_id].remove(msg)
 
-        if len(self.outgoing[msg.from_id]) == 0:
-            return
+        # Update 'from' outbound
 
-        # Calc unused outbound
-        unused_outbound = self.outbound_max[msg.from_id]
-        for aux_msg in self.outgoing[msg.from_id]:
-            unused_outbound -= aux_msg.send_rate
+        if len(self.outgoing[msg.from_id]) != 0:
 
-        # Generate unused inbound by aux msg idx
-        self.outgoing[msg.from_id].sort(key=lambda m: m.send_rate)
+            self.outgoing[msg.from_id].sort(key=lambda m: m.send_rate)
 
-        unused_inbound_bws = {}
-        aux_msg_idx = 0
-        for aux_msg in self.outgoing[msg.from_id]:
-            unused_inbound_bws[aux_msg_idx] = self._get_unused_bw(self.incoming[aux_msg.to_id], self.inbound_max[aux_msg.to_id])
-            aux_msg_idx += 1
+            unused_inbound_bws = {}
+            aux_msg_idx = 0
+            for aux_msg in self.outgoing[msg.from_id]:
+                unused_inbound_bws[aux_msg_idx] = self._get_unused_bw(self.incoming[aux_msg.to_id], self.inbound_max[aux_msg.to_id])
+                aux_msg_idx += 1
 
-        
+            self._update_send_rates(self.outgoing[msg.from_id], self.outbound_max[msg.from_id], unused_inbound_bws)
+
+        # Update 'to' inbound
+
+        if len(self.incoming[msg.to_id]) != 0:
+
+            self.incoming[msg.to_id].sort(key=lambda m: m.send_rate)
+
+            unused_outbound_bws = {}
+            aux_msg_idx = 0
+            for aux_msg in self.incoming[msg.to_id]:
+                unused_outbound_bws[aux_msg_idx] = self._get_unused_bw(self.outgoing[aux_msg.from_id], self.outbound_max[aux_msg.from_id])
+                aux_msg_idx += 1
+
+            self._update_send_rates(self.incoming[msg.to_id], self.inbound_max[msg.to_id], unused_outbound_bws)
+
+
+    def _update_send_rates(self, prim_msg_list, prim_max, unused_sec_bws):
+
+        # Calc unused primary bw
+        unused_prim_bw = prim_max
+        for aux_msg in prim_msg_list:
+            unused_prim_bw -= aux_msg.send_rate
+
 
         msg_idx = 0
         adding_idxs = [0]
-        msg_list = self.outgoing[msg.from_id]
 
         while True:
-            aux_msg = msg_list[msg_idx]
+            aux_msg = prim_msg_list[msg_idx]
 
             # Find least limit
             least_limit = inf
             for adding_idx in adding_idxs:
-                if msg_list[adding_idx].send_rate + unused_inbound_bws[adding_idx] < least_limit:
-                    least_limit = msg_list[adding_idx].send_rate + unused_inbound_bws[adding_idx]
+                if prim_msg_list[adding_idx].send_rate + unused_sec_bws[adding_idx] < least_limit:
+                    least_limit = prim_msg_list[adding_idx].send_rate + unused_sec_bws[adding_idx]
                     least_limit_idx = adding_idx
 
-            possible_rate = aux_msg.send_rate + (unused_outbound / len(adding_idxs))
+            possible_rate = aux_msg.send_rate + (unused_prim_bw / len(adding_idxs))
 
-            if (msg_idx + 1 == len(msg_list) or possible_rate <= msg_list[msg_idx + 1].send_rate) and possible_rate <= least_limit:
+            if (msg_idx + 1 == len(prim_msg_list) or possible_rate <= prim_msg_list[msg_idx + 1].send_rate) and possible_rate <= least_limit:
                 # Add up to possible rate and then done
                 for adding_idx in adding_idxs:
-                    msg_list[adding_idx].send_rate = possible_rate
+                    prim_msg_list[adding_idx].send_rate = possible_rate
                 return
 
-            elif msg_idx + 1 == len(msg_list) or msg_list[msg_idx + 1].send_rate > least_limit:
+            elif msg_idx + 1 == len(prim_msg_list) or prim_msg_list[msg_idx + 1].send_rate > least_limit:
                 # possible rate greater than least limit - need to add up to least limit, and remove least limit idx
                 for adding_idx in adding_idxs:
-                    added = least_limit - msg_list[adding_idx].send_rate
-                    unused_outbound -= added
-                    unused_inbound_bws[adding_idx] -= added
-                    msg_list[adding_idx].send_rate = least_limit
+                    added = least_limit - prim_msg_list[adding_idx].send_rate
+                    unused_prim_bw -= added
+                    unused_sec_bws[adding_idx] -= added
+                    prim_msg_list[adding_idx].send_rate = least_limit
 
                 adding_idxs.remove(least_limit_idx)
 
                 if len(adding_idxs) == 0:
-                    if msg_idx + 1 != len(msg_list):
+                    if msg_idx + 1 != len(prim_msg_list):
                         adding_idxs.append(msg_idx + 1)
                         msg_idx += 1
                     else:
@@ -230,10 +253,10 @@ class NetworkEmulator:
             else:
                 # need to add up to next msg send rate, and add next msg to adding idxs
                 for adding_idx in adding_idxs:
-                    added = msg_list[msg_idx + 1].send_rate - msg_list[adding_idx].send_rate
-                    unused_outbound -= added
-                    unused_inbound_bws[adding_idx] -= added
-                    msg_list[adding_idx].send_rate = msg_list[msg_idx + 1].send_rate
+                    added = prim_msg_list[msg_idx + 1].send_rate - prim_msg_list[adding_idx].send_rate
+                    unused_prim_bw -= added
+                    unused_sec_bws[adding_idx] -= added
+                    prim_msg_list[adding_idx].send_rate = prim_msg_list[msg_idx + 1].send_rate
 
                 adding_idxs.append(msg_idx + 1)
                 msg_idx += 1
@@ -370,13 +393,17 @@ class DM:
 if __name__ == '__main__':
     inbound = {
         0: 60,
-        1: 25,
-        2: 15,
-        3: 20,
+        1: 60,
+        2: 60,
+        3: 60,
         4: 60
     }
     outbound = {
-        0: 60
+        0: 60,
+        1: 60,
+        2: 60,
+        3: 60,
+        4: 60
     }
 
     ne = NetworkEmulator((inbound, outbound))
@@ -385,15 +412,16 @@ if __name__ == '__main__':
         DM(5, 0, 1),
         DM(10, 0, 2),
         DM(15, 0, 3),
-        DM(5, 0, 4)
+        DM(5, 0, 4),
+
+        DM(20, 1, 2),
+        DM(20, 1, 3)
     ]
 
     for msg in msgs:
-        ne._add_msg(msg, ne.outgoing[msg.from_id], ne.outbound_max[msg.from_id])
-        ne._add_msg(msg, ne.incoming[msg.to_id], ne.inbound_max[msg.to_id])
+        ne._add_msg(msg)
 
+    ne._remove_msg(ne.outgoing[0][1])
 
-    ne._remove_msg(ne.outgoing[0][3])
-
-    for msg in ne.outgoing[0]:
+    for msg in ne.incoming[2]:
         print(msg.send_rate)
