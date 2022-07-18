@@ -67,11 +67,13 @@ class NetworkEmulator:
         incoming_offering = {}
         outgoing_offering = {}
 
-        for node_id in self.incoming.keys():
-            for msg in self.incoming[node_id]:
-                incoming_offering[msg] = self.inbound_max[node_id] / len(self.incoming[node_id])
-            for msg in self.outgoing[node_id]:
-                outgoing_offering[msg] = self.outbound_max[node_id] / len(self.outgoing[node_id])
+        for node_id in self.inbound_max.keys():
+            if self.receiving[node_id]:
+                for msg in self.active_msgs[node_id]:
+                    incoming_offering[msg] = self.inbound_max[node_id] / len(self.active_msgs[node_id])
+            else:
+                for msg in self.active_msgs[node_id]:
+                    outgoing_offering[msg] = self.outbound_max[node_id] / len(self.active_msgs[node_id])
 
         final_msgs = []  # TODO perhaps more efficient if this was a map?
 
@@ -93,13 +95,13 @@ class NetworkEmulator:
 
             # Mark node's msgs as final, follow, distribute
             if incoming:
-                for msg in self.incoming[least_offering_node_id]:
+                for msg in self.active_msgs[least_offering_node_id]:
                     if msg not in final_msgs:
                         msg.send_rate = least_offering
                         final_msgs.append(msg)
                         
                         distribute_msgs = []
-                        for aux_msg in self.outgoing[msg.from_id]:
+                        for aux_msg in self.active_msgs[msg.from_id]:
                             if aux_msg not in final_msgs:
                                 distribute_msgs.append(aux_msg)
 
@@ -110,13 +112,13 @@ class NetworkEmulator:
                                 outgoing_offering[aux_msg] += distribute_amt
                     
             else:
-                for msg in self.outgoing[least_offering_node_id]:
+                for msg in self.active_msgs[least_offering_node_id]:
                     if msg not in final_msgs:
                         msg.send_rate = least_offering
                         final_msgs.append(msg)
                         
                         distribute_msgs = []
-                        for aux_msg in self.incoming[msg.to_id]:
+                        for aux_msg in self.active_msgs[msg.to_id]:
                             if aux_msg not in final_msgs:
                                 distribute_msgs.append(aux_msg)
 
@@ -136,6 +138,8 @@ class NetworkEmulator:
                 self.active_msgs[from_id].append(msg)
                 self.active_msgs[to_id].append(msg)
                 self.total_msgs += 1
+                self.receiving[from_id] = False
+                self.receiving[to_id] = True
 
                 self._update_send_rates()
 
@@ -193,12 +197,12 @@ class NetworkEmulator:
                                 if from_queued[-1].from_id == msg.from_id:
                                     # outgoing msg
                                     requeue = []
-                                    while from_queued[-1].from_id == msg.from_id:
+                                    while len(from_queued) != 0 and from_queued[-1].from_id == msg.from_id:
                                         if self.queued_msgs[from_queued[-1].to_id][-1] == from_queued[-1] and self.receiving[from_queued[-1].to_id]:
-                                            from_active.append(from_queued.pop())
-                                            self.active_msgs[from_queued[-1].to_id].append(self.queued_msgs[from_queued[-1].to_id].pop()) 
                                             self.receiving[msg.from_id] = False
                                             self.receiving[from_queued[-1].to_id] = True
+                                            self.active_msgs[from_queued[-1].to_id].append(self.queued_msgs[from_queued[-1].to_id].pop())
+                                            from_active.append(from_queued.pop())
                                             self.total_msgs += 1
                                         else:
                                             requeue.append(from_queued.pop())
@@ -209,12 +213,12 @@ class NetworkEmulator:
                                 else:
                                     # incoming msg
                                     requeue = []
-                                    while from_queued[-1].from_id != msg.from_id:
+                                    while len(from_queued) != 0 and from_queued[-1].from_id != msg.from_id:
                                         if self.queued_msgs[from_queued[-1].from_id][-1] == from_queued[-1] and (not self.receiving[from_queued[-1].from_id] or len(self.active_msgs[from_queued[-1].from_id]) == 0):
-                                            from_active.append(from_queued.pop())
-                                            self.active_msgs[from_queued[-1].from_id].append(self.queued_msgs[from_queued[-1].from_id].pop())
                                             self.receiving[msg.from_id] = True
                                             self.receiving[from_queued[-1].to_id] = False
+                                            self.active_msgs[from_queued[-1].from_id].append(self.queued_msgs[from_queued[-1].from_id].pop())
+                                            from_active.append(from_queued.pop())
                                             self.total_msgs += 1
                                         else:
                                             requeue.append(from_queued.pop())
@@ -228,12 +232,12 @@ class NetworkEmulator:
                                 if to_queued[-1].from_id == msg.to_id:
                                     # outgoing msg
                                     requeue = []
-                                    while to_queued[-1].from_id == msg.to_id:
+                                    while len(to_queued) != 0 and to_queued[-1].from_id == msg.to_id:
                                         if self.queued_msgs[to_queued[-1].to_id][-1] == to_queued[-1] and self.receiving[to_queued[-1].to_id]:
-                                            to_active.append(to_queued.pop())
-                                            self.active_msgs[to_queued[-1].to_id].append(self.queued_msgs[to_queued[-1].to_id].pop()) 
                                             self.receiving[msg.to_id] = False
                                             self.receiving[to_queued[-1].to_id] = True
+                                            self.active_msgs[to_queued[-1].to_id].append(self.queued_msgs[to_queued[-1].to_id].pop()) 
+                                            to_active.append(to_queued.pop())
                                             self.total_msgs += 1
                                         else:
                                             requeue.append(to_queued.pop())
@@ -243,12 +247,12 @@ class NetworkEmulator:
                                 else:
                                     # incoming msg
                                     requeue = []
-                                    while to_queued[-1].from_id != msg.to_id:
+                                    while len(to_queued) != 0 and to_queued[-1].from_id != msg.to_id:
                                         if self.queued_msgs[to_queued[-1].from_id][-1] == to_queued[-1] and (not self.receiving[to_queued[-1].from_id] or len(self.active_msgs[to_queued[-1].from_id]) == 0):
-                                            to_active.append(to_queued.pop())
-                                            self.active_msgs[to_queued[-1].from_id].append(self.queued_msgs[to_queued[-1].from_id].pop())
                                             self.receiving[msg.to_id] = True
                                             self.receiving[to_queued[-1].to_id] = False
+                                            self.active_msgs[to_queued[-1].from_id].append(self.queued_msgs[to_queued[-1].from_id].pop())
+                                            to_active.append(to_queued.pop())
                                             self.total_msgs += 1
                                         else:
                                             requeue.append(to_queued.pop())
@@ -292,3 +296,36 @@ class NetworkEmulator:
         self.timing_thread.start()
         self.dt_thread.start()
 
+
+if __name__ == '__main__':
+    inbound = {
+        0: 60,
+        1: 60,
+        2: 60,
+        3: 60,
+        4: 60
+    }
+    outbound = {
+        0: 60,
+        1: 60,
+        2: 60,
+        3: 60,
+        4: 60
+    }
+
+    ne = NetworkEmulator((inbound, outbound))
+    ne.start()
+    start_time = time.perf_counter()
+
+    ne.send_msg(0, 4, 60, lambda: print('Sent 0! %f' % (time.perf_counter() - start_time)))
+    ne.send_msg(0, 3, 60, lambda: print('Sent 1! %f' % (time.perf_counter() - start_time)))
+
+    ne.send_msg(0, 2, 60, lambda: print('Sent 2! %f' % (time.perf_counter() - start_time)))
+
+    ne.send_msg(1, 2, 60, lambda: print('Sent 3! %f' % (time.perf_counter() - start_time)))
+    ne.send_msg(3, 2, 60, lambda: print('Sent 4! %f' % (time.perf_counter() - start_time)))
+    ne.send_msg(4, 2, 60, lambda: print('Sent 5! %f' % (time.perf_counter() - start_time)))
+
+    print()
+
+    ne.timing_thread.join()
