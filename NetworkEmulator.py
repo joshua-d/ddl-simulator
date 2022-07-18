@@ -1,6 +1,7 @@
 
 from threading import Thread, Condition
 import time
+from math import inf
 
 
 TIMING_THREAD_PERIOD = 0.001 # 1ms
@@ -32,6 +33,8 @@ class NetworkEmulator:
             self.incoming[node_id] = []
             self.outgoing[node_id] = []
 
+        self.total_msgs = 0  # TODO could perhaps use len(self.sending_msgs)
+
         # Data Transmission Job queue
         self.dtjq = []
         self.dtjq_cond = Condition()
@@ -47,11 +50,71 @@ class NetworkEmulator:
         self.dt_thread = Thread(target=self.process_dtjq, daemon=True)
 
 
-    def _update_send_rate(self, msg):
-        outbound_bw = self.outbound_max[msg.from_id] / len(self.outgoing[msg.from_id])
-        inbound_bw = self.inbound_max[msg.to_id] / len(self.incoming[msg.to_id])
+    def _update_send_rates(self):
 
-        msg.send_rate = min(outbound_bw, inbound_bw)
+        # Prepare
+        incoming_offering = {}
+        outgoing_offering = {}
+
+        for node_id in self.incoming.keys():
+            for msg in self.incoming[node_id]:
+                incoming_offering[msg] = self.inbound_max[node_id] / len(self.incoming[node_id])
+            for msg in self.outgoing[node_id]:
+                outgoing_offering[msg] = self.outbound_max[node_id] / len(self.outgoing[node_id])
+
+        final_msgs = []  # TODO perhaps more efficient if this was a map?
+
+        # Begin updating
+        while len(final_msgs) != self.total_msgs:
+
+            # Find least
+            least_offering = inf
+            for msg in incoming_offering.keys():
+                if msg not in final_msgs:
+                    if incoming_offering[msg] < least_offering:
+                        least_offering = incoming_offering[msg]
+                        least_offering_node_id = msg.to_id
+                        incoming = True
+                    if outgoing_offering[msg] < least_offering:
+                        least_offering = outgoing_offering[msg]
+                        least_offering_node_id = msg.from_id
+                        incoming = False
+
+            # Mark node's msgs as final, follow, distribute
+            if incoming:
+                for msg in self.incoming[least_offering_node_id]:
+                    if msg not in final_msgs:
+                        msg.send_rate = least_offering
+                        final_msgs.append(msg)
+                        
+                        distribute_msgs = []
+                        for aux_msg in self.outgoing[msg.from_id]:
+                            if aux_msg not in final_msgs:
+                                distribute_msgs.append(aux_msg)
+
+                        if len(distribute_msgs) != 0:
+                            distribute_amt = (outgoing_offering[msg] - least_offering) / len(distribute_msgs)
+
+                            for aux_msg in distribute_msgs:
+                                outgoing_offering[aux_msg] += distribute_amt
+                    
+            else:
+                for msg in self.outgoing[least_offering_node_id]:
+                    if msg not in final_msgs:
+                        msg.send_rate = least_offering
+                        final_msgs.append(msg)
+                        
+                        distribute_msgs = []
+                        for aux_msg in self.incoming[msg.to_id]:
+                            if aux_msg not in final_msgs:
+                                distribute_msgs.append(aux_msg)
+
+                        if len(distribute_msgs) != 0:
+                            distribute_amt = (incoming_offering[msg] - least_offering) / len(distribute_msgs)
+
+                            for aux_msg in distribute_msgs:
+                                incoming_offering[aux_msg] += distribute_amt
+
 
 
     def send_msg(self, from_id, to_id, msg_size, dtj_fn):
@@ -60,12 +123,9 @@ class NetworkEmulator:
             
             self.outgoing[from_id].append(msg)
             self.incoming[to_id].append(msg)
+            self.total_msgs += 1
 
-            for aux_msg in self.outgoing[from_id]:
-                self._update_send_rate(aux_msg)
-
-            for aux_msg in self.incoming[to_id]:
-                self._update_send_rate(aux_msg)
+            self._update_send_rates()
 
             self.sending_msgs.append(msg)
             self.sending_msgs_cond.notify()
@@ -101,12 +161,8 @@ class NetworkEmulator:
                         # remove from incoming/outgoing and update send rates
                         self.outgoing[msg.from_id].remove(msg)
                         self.incoming[msg.to_id].remove(msg)
-
-                        for aux_msg in self.outgoing[msg.from_id]:
-                            self._update_send_rate(aux_msg)
-
-                        for aux_msg in self.incoming[msg.to_id]:
-                            self._update_send_rate(aux_msg)
+                        self.total_msgs -= 1
+                        self._update_send_rates()
 
                     msg_idx += 1
 
@@ -141,40 +197,3 @@ class NetworkEmulator:
         self.timing_thread.start()
         self.dt_thread.start()
 
-
-    # def wait_for_idle(self):
-    #     with self.sending_msgs_cond:
-    #         while len(self.sending_msgs) > 0:
-    #             self.sending_msgs_cond.wait()
-
-    #     with self.dtjq_cond:
-    #         while len(self.dtjq) > 0:
-    #             self.dtjq_cond.wait()
-
-
-
-    # def pause_and_clear(self):
-    #     self.paused = True
-    #     with self.dtjq_cond:
-    #         self.dtjq = []
-    #     with self.sending_msgs_cond:
-    #         self.sending_msgs = []
-
-
-    # def resume(self):
-    #     self.paused = False
-
-
-
-    # For debugging use - sends all currently sending msgs right now
-    # NOT TESTED
-    def flush_messages(self):
-        with self.sending_msgs_cond:
-            msgs = self.sending_msgs
-            self.sending_msgs = []
-
-        with self.dtjq_cond:
-            for dtj_fn in self.dtjq:
-                dtj_fn()
-            for msg in msgs:
-                msg.dtj_fn()
