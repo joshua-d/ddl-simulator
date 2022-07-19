@@ -201,6 +201,8 @@ class NetworkEmulator:
                                         if self.queued_msgs[from_queued[-1].to_id][-1] == from_queued[-1] and self.receiving[from_queued[-1].to_id]:
                                             self.receiving[msg.from_id] = False
                                             self.receiving[from_queued[-1].to_id] = True
+                                            from_queued[-1].last_checked = time.perf_counter() # set entry time
+                                            self.sending_msgs.append(from_queued[-1])
                                             self.active_msgs[from_queued[-1].to_id].append(self.queued_msgs[from_queued[-1].to_id].pop())
                                             from_active.append(from_queued.pop())
                                             self.total_msgs += 1
@@ -217,6 +219,8 @@ class NetworkEmulator:
                                         if self.queued_msgs[from_queued[-1].from_id][-1] == from_queued[-1] and (not self.receiving[from_queued[-1].from_id] or len(self.active_msgs[from_queued[-1].from_id]) == 0):
                                             self.receiving[msg.from_id] = True
                                             self.receiving[from_queued[-1].to_id] = False
+                                            from_queued[-1].last_checked = time.perf_counter() # set entry time
+                                            self.sending_msgs.append(from_queued[-1])
                                             self.active_msgs[from_queued[-1].from_id].append(self.queued_msgs[from_queued[-1].from_id].pop())
                                             from_active.append(from_queued.pop())
                                             self.total_msgs += 1
@@ -236,6 +240,8 @@ class NetworkEmulator:
                                         if self.queued_msgs[to_queued[-1].to_id][-1] == to_queued[-1] and self.receiving[to_queued[-1].to_id]:
                                             self.receiving[msg.to_id] = False
                                             self.receiving[to_queued[-1].to_id] = True
+                                            to_queued[-1].last_checked = time.perf_counter() # set entry time
+                                            self.sending_msgs.append(to_queued[-1])
                                             self.active_msgs[to_queued[-1].to_id].append(self.queued_msgs[to_queued[-1].to_id].pop()) 
                                             to_active.append(to_queued.pop())
                                             self.total_msgs += 1
@@ -251,6 +257,8 @@ class NetworkEmulator:
                                         if self.queued_msgs[to_queued[-1].from_id][-1] == to_queued[-1] and (not self.receiving[to_queued[-1].from_id] or len(self.active_msgs[to_queued[-1].from_id]) == 0):
                                             self.receiving[msg.to_id] = True
                                             self.receiving[to_queued[-1].to_id] = False
+                                            to_queued[-1].last_checked = time.perf_counter() # set entry time
+                                            self.sending_msgs.append(to_queued[-1])
                                             self.active_msgs[to_queued[-1].from_id].append(self.queued_msgs[to_queued[-1].from_id].pop())
                                             to_active.append(to_queued.pop())
                                             self.total_msgs += 1
@@ -295,37 +303,3 @@ class NetworkEmulator:
     def start(self):
         self.timing_thread.start()
         self.dt_thread.start()
-
-
-if __name__ == '__main__':
-    inbound = {
-        0: 60,
-        1: 60,
-        2: 60,
-        3: 60,
-        4: 60
-    }
-    outbound = {
-        0: 60,
-        1: 60,
-        2: 60,
-        3: 60,
-        4: 60
-    }
-
-    ne = NetworkEmulator((inbound, outbound))
-    ne.start()
-    start_time = time.perf_counter()
-
-    ne.send_msg(0, 4, 60, lambda: print('Sent 0! %f' % (time.perf_counter() - start_time)))
-    ne.send_msg(0, 3, 60, lambda: print('Sent 1! %f' % (time.perf_counter() - start_time)))
-
-    ne.send_msg(0, 2, 60, lambda: print('Sent 2! %f' % (time.perf_counter() - start_time)))
-
-    ne.send_msg(1, 2, 60, lambda: print('Sent 3! %f' % (time.perf_counter() - start_time)))
-    ne.send_msg(3, 2, 60, lambda: print('Sent 4! %f' % (time.perf_counter() - start_time)))
-    ne.send_msg(4, 2, 60, lambda: print('Sent 5! %f' % (time.perf_counter() - start_time)))
-
-    print()
-
-    ne.timing_thread.join()
