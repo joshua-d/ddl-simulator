@@ -143,7 +143,126 @@ class NetworkEmulator:
                 self.queued_msgs[to_id].append(msg)
 
 
-            
+
+    def _ready_to_receive(self, from_id, to_id):
+
+        if not self.receiving[to_id] or len(self.queued_msgs[to_id]) == 0: # TODO second case should never happen
+            return False
+
+        queued = self.queued_msgs[to_id]
+
+        queue_idx = -1
+        while queue_idx > (-len(queued) - 1) and queued[queue_idx].to_id == to_id:
+            queued_msg = queued[queue_idx]
+            if queued_msg.from_id == from_id:
+                return True
+            queue_idx -= 1
+
+        return False
+
+
+    def _ready_to_send(self, from_id, to_id):
+
+        if self.receiving and len(self.active_msgs[from_id]) != 0 or len(self.queued_msgs[from_id]) == 0: # TODO second case should never happen
+            return False
+
+        queued = self.queued_msgs[from_id]
+
+        queue_idx = -1
+        while queue_idx > (-len(queued) - 1) and queued[queue_idx].from_id == from_id:
+            queued_msg = queued[queue_idx]
+            if queued_msg.to_id == to_id:
+                return True
+            queue_idx -= 1
+
+        return False
+
+
+    def _check_queue(self, node_id):
+        queued = self.queued_msgs[node_id]
+        active = self.active_msgs[node_id]
+        receiving = self.receiving[node_id]
+
+        if len(queued) == 0:
+            return
+
+        if queued[-1].from_id == node_id:
+            # next msgs are outgoing
+
+            # check that node is ready to send
+            if receiving and len(active) != 0:
+                return
+
+            # while next msg in queue is outgoing
+            queue_idx = -1
+            while queue_idx > (-len(queued) - 1) and queued[queue_idx].from_id == node_id:
+
+                # prepare utils
+                queued_msg = queued[queue_idx]
+                to_node_queued = self.queued_msgs[queued_msg.to_id]
+                to_node_active = self.active_msgs[queued_msg.to_id]
+
+                if self._ready_to_receive(node_id, queued_msg.to_id):
+                    # incoming node is ready to receive
+
+                    # remove msg from queue, move into active
+                    to_node_queued.remove(queued_msg)
+                    to_node_active.append(queued_msg)
+                    queued.remove(queued_msg)
+                    active.append(queued_msg)
+
+                    # update from-node's mode
+                    self.receiving[node_id] = False
+
+                    # set entry time and move into sending_msgs
+                    queued_msg.last_checked = time.perf_counter()
+                    self.sending_msgs.append(queued_msg)
+                    
+                    self.total_msgs += 1
+
+                else:
+                    # incoming node is not ready to receive
+                    queue_idx -= 1
+
+        else:
+            # next msgs are incoming
+
+            # check that node is ready to receive
+            if not receiving:
+                return
+
+            # while next msg in queue is incoming
+            queue_idx = -1
+            while queue_idx > (-len(queued) - 1) and queued[queue_idx].to_id == node_id:
+
+                # prepare utils
+                queued_msg = queued[queue_idx]
+                from_node_queued = self.queued_msgs[queued_msg.from_id]
+                from_node_active = self.active_msgs[queued_msg.from_id]
+
+                if self._ready_to_send(queued_msg.from_id, node_id):
+                    # outgoing node is ready to send
+
+                    # remove msg from queue, move into active
+                    from_node_queued.remove(queued_msg)
+                    from_node_active.append(queued_msg)
+                    queued.remove(queued_msg)
+                    active.append(queued_msg)
+
+                    # update modes
+                    self.receiving[node_id] = True
+                    self.receiving[queued_msg.from_id] = False
+
+                    # set entry time and move into sending_msgs
+                    queued_msg.last_checked = time.perf_counter()
+                    self.sending_msgs.append(queued_msg)
+                    
+                    self.total_msgs += 1
+
+                else:
+                    # outgoing node is not ready to send
+                    queue_idx -= 1
+    
 
 
     # Starting point of timing thread
@@ -175,169 +294,19 @@ class NetworkEmulator:
 
                         # remove from active, pull next from queues, update send rates
                         from_active = self.active_msgs[msg.from_id]
-                        to_active =  self.active_msgs[msg.to_id]
-                        from_queued = self.queued_msgs[msg.from_id]
-                        to_queued = self.queued_msgs[msg.to_id]
+                        to_active = self.active_msgs[msg.to_id]
 
                         from_active.remove(msg)
                         to_active.remove(msg)
+
                         self.total_msgs -= 1
 
                         if len(from_active) == 0:
-                            if len(from_queued) != 0:
-                                if from_queued[-1].from_id == msg.from_id:
-                                    # next msg in queue is outoging
-
-                                    requeue = []
-
-                                    # while next msg in queue is still outgoing
-                                    while len(from_queued) != 0 and from_queued[-1].from_id == msg.from_id:
-
-                                        # pop msg from queue and prepare utils
-                                        queued_msg = from_queued.pop()
-                                        to_node_queued = self.queued_msgs[queued_msg.to_id]
-                                        to_node_active = self.active_msgs[queued_msg.to_id]
-
-                                        if to_node_queued[-1] == queued_msg and self.receiving[queued_msg.to_id]:
-                                            # next msg in incoming node's queue is also this one, and node is in receiving mode
-
-                                            # remove msg from to-node's queue, move into active
-                                            to_node_queued.pop()
-                                            to_node_active.append(queued_msg)
-                                            from_active.append(queued_msg)
-
-                                            # update from-node's mode
-                                            self.receiving[msg.from_id] = False
-
-                                            # set entry time and move into sending_msgs
-                                            queued_msg.last_checked = time.perf_counter()
-                                            self.sending_msgs.append(queued_msg)
-                                            
-                                            self.total_msgs += 1
-
-                                        else:
-                                            # next msg in to-node's queue is not this one, or to-node is not receiving
-                                            requeue.append(queued_msg)
-
-                                    while len(requeue) != 0:
-                                        from_queued.append(requeue.pop())
-
-                                else:
-                                    # next msg in queue is incoming
-
-                                    requeue = []
-
-                                    # while next msg in queue is still incoming
-                                    while len(from_queued) != 0 and from_queued[-1].from_id != msg.from_id:
-
-                                        # pop msg from queue and prepare utils
-                                        queued_msg = from_queued.pop()
-                                        from_node_queued = self.queued_msgs[queued_msg.from_id]
-                                        from_node_active = self.active_msgs[queued_msg.from_id]
-
-                                        if from_node_queued[-1] == queued_msg and (not self.receiving[queued_msg.from_id] or len(from_node_active) == 0):
-                                            # next msg in outgoing node's queue is also this one, and node is not in receiving mode
-
-                                            # remove msg from from-node's queue, move into active
-                                            from_node_queued.pop()
-                                            from_node_active.append(queued_msg)
-                                            from_active.append(queued_msg)
-
-                                            # update modes
-                                            self.receiving[msg.from_id] = True
-                                            self.receiving[queued_msg.to_id] = False
-
-                                            # set entry time and move into sending_msgs
-                                            queued_msg.last_checked = time.perf_counter()
-                                            self.sending_msgs.append(queued_msg)
-
-                                            self.total_msgs += 1
-
-                                        else:
-                                            # next msg in from-node's queue is not this one, or from-node is receiving
-                                            requeue.append(from_queued.pop())
-
-                                    while len(requeue) != 0:
-                                        from_queued.append(requeue.pop())
-
+                            self.receiving[msg.from_id] = True
+                            self._check_queue(msg.from_id)
 
                         if len(to_active) == 0:
-                            if len(to_queued) != 0:
-                                if to_queued[-1].from_id == msg.to_id:
-                                    # next msg in queue is outoging
-
-                                    requeue = []
-
-                                    # while next msg in queue is still outgoing
-                                    while len(to_queued) != 0 and to_queued[-1].from_id == msg.to_id:
-
-                                        # pop msg from queue and prepare utils
-                                        queued_msg = to_queued.pop()
-                                        to_node_queued = self.queued_msgs[queued_msg.to_id]
-                                        to_node_active = self.active_msgs[queued_msg.to_id]
-
-                                        if to_node_queued[-1] == queued_msg and self.receiving[queued_msg.to_id]:
-                                            # next msg in incoming node's queue is also this one, and node is in receiving mode
-
-                                            # remove msg from to-node's queue, move into active
-                                            to_node_queued.pop()
-                                            to_node_active.append(queued_msg)
-                                            to_active.append(queued_msg)
-
-                                            # update from-node's mode
-                                            self.receiving[msg.to_id] = False
-
-                                            # set entry time and move into sending_msgs
-                                            queued_msg.last_checked = time.perf_counter()
-                                            self.sending_msgs.append(queued_msg)
-                                            
-                                            self.total_msgs += 1
-
-                                        else:
-                                            # next msg in to-node's queue is not this one, or to-node is not receiving
-                                            requeue.append(queued_msg)
-
-                                    while len(requeue) != 0:
-                                        to_queued.append(requeue.pop())
-
-                                else:
-                                    # next msg in queue is incoming
-
-                                    requeue = []
-
-                                    # while next msg in queue is still incoming
-                                    while len(to_queued) != 0 and to_queued[-1].from_id != msg.to_id:
-
-                                        # pop msg from queue and prepare utils
-                                        queued_msg = to_queued.pop()
-                                        from_node_queued = self.queued_msgs[queued_msg.from_id]
-                                        from_node_active = self.active_msgs[queued_msg.from_id]
-
-                                        if from_node_queued[-1] == queued_msg and (not self.receiving[queued_msg.from_id] or len(from_node_active) == 0):
-                                            # next msg in outgoing node's queue is also this one, and node is not in receiving mode
-
-                                            # remove msg from from-node's queue, move into active
-                                            from_node_queued.pop()
-                                            from_node_active.append(queued_msg)
-                                            to_active.append(queued_msg)
-
-                                            # update modes
-                                            self.receiving[msg.to_id] = True
-                                            self.receiving[queued_msg.to_id] = False
-
-                                            # set entry time and move into sending_msgs
-                                            queued_msg.last_checked = time.perf_counter()
-                                            self.sending_msgs.append(queued_msg)
-
-                                            self.total_msgs += 1
-
-                                        else:
-                                            # next msg in from-node's queue is not this one, or from-node is receiving
-                                            requeue.append(to_queued.pop())
-
-                                    while len(requeue) != 0:
-                                        to_queued.append(requeue.pop())
-
+                            self._check_queue(msg.to_id)
 
                         self._update_send_rates()
 
