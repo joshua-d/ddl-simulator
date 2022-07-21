@@ -126,22 +126,11 @@ class NetworkEmulator:
         with self.sending_msgs_cond:
             msg = Message(from_id, to_id, msg_size, dtj_fn, time.perf_counter(), 0)
 
-            if len(self.queued_msgs[from_id]) == 0 and (len(self.active_msgs[from_id]) == 0 or not self.receiving[from_id]) and len(self.queued_msgs[to_id]) == 0 and self.receiving[to_id]:
-                self.active_msgs[from_id].append(msg)
-                self.active_msgs[to_id].append(msg)
-                self.total_msgs += 1
-                self.receiving[from_id] = False
-                self.receiving[to_id] = True
+            self.queued_msgs[from_id].append(msg)
+            self.queued_msgs[to_id].append(msg)
 
-                self._update_send_rates()
-
-                self.sending_msgs.append(msg)
-                self.sending_msgs_cond.notify()
-
-            else:
-                self.queued_msgs[from_id].append(msg)
-                self.queued_msgs[to_id].append(msg)
-
+            self._check_queue(from_id)
+            self._update_send_rates()
 
 
     def _ready_to_receive(self, from_id, to_id):
@@ -151,12 +140,12 @@ class NetworkEmulator:
 
         queued = self.queued_msgs[to_id]
 
-        queue_idx = -1
-        while queue_idx > (-len(queued) - 1) and queued[queue_idx].to_id == to_id:
+        queue_idx = 0
+        while queue_idx < len(queued) and queued[queue_idx].to_id == to_id:
             queued_msg = queued[queue_idx]
             if queued_msg.from_id == from_id:
                 return True
-            queue_idx -= 1
+            queue_idx += 1
 
         return False
 
@@ -168,12 +157,12 @@ class NetworkEmulator:
 
         queued = self.queued_msgs[from_id]
 
-        queue_idx = -1
-        while queue_idx > (-len(queued) - 1) and queued[queue_idx].from_id == from_id:
+        queue_idx = 0
+        while queue_idx < len(queued) and queued[queue_idx].from_id == from_id:
             queued_msg = queued[queue_idx]
             if queued_msg.to_id == to_id:
                 return True
-            queue_idx -= 1
+            queue_idx += 1
 
         return False
 
@@ -186,7 +175,9 @@ class NetworkEmulator:
         if len(queued) == 0:
             return
 
-        if queued[-1].from_id == node_id:
+        notify_sending_msgs = False
+
+        if queued[0].from_id == node_id:
             # next msgs are outgoing
 
             # check that node is ready to send
@@ -194,8 +185,8 @@ class NetworkEmulator:
                 return
 
             # while next msg in queue is outgoing
-            queue_idx = -1
-            while queue_idx > (-len(queued) - 1) and queued[queue_idx].from_id == node_id:
+            queue_idx = 0
+            while queue_idx < len(queued) and queued[queue_idx].from_id == node_id:
 
                 # prepare utils
                 queued_msg = queued[queue_idx]
@@ -217,12 +208,13 @@ class NetworkEmulator:
                     # set entry time and move into sending_msgs
                     queued_msg.last_checked = time.perf_counter()
                     self.sending_msgs.append(queued_msg)
+                    notify_sending_msgs = True
                     
                     self.total_msgs += 1
 
                 else:
                     # incoming node is not ready to receive
-                    queue_idx -= 1
+                    queue_idx += 1
 
         else:
             # next msgs are incoming
@@ -232,8 +224,8 @@ class NetworkEmulator:
                 return
 
             # while next msg in queue is incoming
-            queue_idx = -1
-            while queue_idx > (-len(queued) - 1) and queued[queue_idx].to_id == node_id:
+            queue_idx = 0
+            while queue_idx < len(queued) and queued[queue_idx].to_id == node_id:
 
                 # prepare utils
                 queued_msg = queued[queue_idx]
@@ -256,13 +248,16 @@ class NetworkEmulator:
                     # set entry time and move into sending_msgs
                     queued_msg.last_checked = time.perf_counter()
                     self.sending_msgs.append(queued_msg)
+                    notify_sending_msgs = True
                     
                     self.total_msgs += 1
 
                 else:
                     # outgoing node is not ready to send
-                    queue_idx -= 1
+                    queue_idx += 1
     
+        if notify_sending_msgs:
+            self.sending_msgs_cond.notify()
 
 
     # Starting point of timing thread
