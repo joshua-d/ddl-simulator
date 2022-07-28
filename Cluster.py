@@ -219,7 +219,7 @@ class Cluster:
 
         # Editable stopping condition vars
         max_epochs = 12
-        acc_threshold = 0.95
+        acc_threshold = 0.93
         eval_interval = 100 # eval every 100 batches
         log_interval = 50 # log progress every 20 eval_intervals
 

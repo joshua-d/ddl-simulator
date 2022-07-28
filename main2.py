@@ -2,7 +2,7 @@ import tensorflow as tf
 import keras_model
 import time
 import datetime
-import threading
+from threading import Thread
 import json
 import sys
 from multiprocessing import Process
@@ -75,42 +75,11 @@ def run_sim(config):
 def main():
     config = load_config()
 
-    # 2 level tests
-
-
-    # Bypass NI
-
-    # S S
-    for _ in range(20):
-        p = Process(target=run_sim, args=(config,))
-        p.start()
-        p.join()
-
     # A S
+
     config['nodes'][0]['train_style'] = 'async'
 
-    for _ in range(20):
-        p = Process(target=run_sim, args=(config,))
-        p.start()
-        p.join()
-
-    # S A
-    config['nodes'][0]['train_style'] = 'sync'
-    config['nodes'][1]['train_style'] = 'async'
-    config['nodes'][2]['train_style'] = 'async'
-
-    for _ in range(20):
-        p = Process(target=run_sim, args=(config,))
-        p.start()
-        p.join()
-
-    # A A
-    config['nodes'][0]['train_style'] = 'async'
-
-    for _ in range(20):
-        p = Process(target=run_sim, args=(config,))
-        p.start()
-        p.join()
+    run_sim(config)
 
         
 

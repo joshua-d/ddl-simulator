@@ -1,5 +1,5 @@
 {
-    "bypass_NI": true,
+    "bypass_NI": false,
 
     "learning_rate": 0.001,
     "batch_size": 32,
@@ -20,8 +20,8 @@
             "update_policy": "average",
             "train_style": "sync",
 
-            "inbound_bw": 100,
-            "outbound_bw": 100
+            "inbound_bw": 200,
+            "outbound_bw": 200
         },
 
         {
@@ -32,8 +32,8 @@
             "train_style": "sync",
             "update_interval": 1,
 
-            "inbound_bw": 100,
-            "outbound_bw": 100
+            "inbound_bw": 200,
+            "outbound_bw": 200
         },
         {
             "node_type": "ps",
@@ -43,8 +43,8 @@
             "train_style": "sync",
             "update_interval": 1,
 
-            "inbound_bw": 100,
-            "outbound_bw": 100
+            "inbound_bw": 200,
+            "outbound_bw": 200
         },
 
         {
@@ -53,8 +53,8 @@
             "parents": [1],
             "slow": false,
 
-            "inbound_bw": 100,
-            "outbound_bw": 100
+            "inbound_bw": 200,
+            "outbound_bw": 200
         },
         {
             "node_type": "worker",
@@ -62,8 +62,8 @@
             "parents": [1],
             "slow": false,
 
-            "inbound_bw": 100,
-            "outbound_bw": 100
+            "inbound_bw": 200,
+            "outbound_bw": 200
         },
 
         {
@@ -72,8 +72,8 @@
             "parents": [2],
             "slow": false,
 
-            "inbound_bw": 100,
-            "outbound_bw": 100
+            "inbound_bw": 200,
+            "outbound_bw": 200
         },
         {
             "node_type": "worker",
@@ -81,8 +81,8 @@
             "parents": [2],
             "slow": false,
 
-            "inbound_bw": 100,
-            "outbound_bw": 100
+            "inbound_bw": 200,
+            "outbound_bw": 200
         }
     ]
 }
