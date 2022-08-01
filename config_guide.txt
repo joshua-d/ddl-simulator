@@ -9,3 +9,6 @@ to come in before sending back (async)
 
 
 inbound/outbound_bw: bw in megabits
+
+
+num_workers: must match num workers in nodes, just used for data sharding stuff

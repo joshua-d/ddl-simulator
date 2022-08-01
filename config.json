@@ -12,6 +12,8 @@
 
     "ps_return_threshold": 0.050,
 
+    "num_workers": 4,
+
     "nodes": [
         {
             "node_type": "ps",

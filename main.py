@@ -1,14 +1,9 @@
 import tensorflow as tf
 import keras_model
-import time
-import datetime
-import threading
+from threading import Thread
 import json
-import sys
-from multiprocessing import Process
 
 from Cluster import Cluster
-from DatasetIterator import DatasetIterator
 
 
 model_seed = 1  # model seed and shuffle seed (in dataset_fn) for consistent tests
@@ -25,11 +20,10 @@ def load_config():
 
 mnist_dataset = keras_model.mnist_dataset()
 
-def dataset_fn(worker_id, num_train_samples):
-    master_dataset = mnist_dataset.shuffle(len(mnist_dataset), seed=model_seed).take(num_train_samples)
+def dataset_fn(num_workers, worker_idx, num_train_samples):
+    master_dataset = mnist_dataset.shuffle(len(mnist_dataset), seed=model_seed, reshuffle_each_iteration=False).take(num_train_samples)
 
-    # From here, data sharding is possible. Here, we don't shard - each worker has full dataset shuffled differently
-    worker_dataset = master_dataset.shuffle(len(master_dataset), seed=(model_seed + worker_id))
+    worker_dataset = master_dataset.shard(num_shards=num_workers, index=worker_idx)
 
     return worker_dataset
 
@@ -82,7 +76,7 @@ def main():
 
     # S S
     for _ in range(20):
-        p = Process(target=run_sim, args=(config,))
+        p = Thread(target=run_sim, args=(config,))
         p.start()
         p.join()
 
@@ -90,7 +84,7 @@ def main():
     config['nodes'][0]['train_style'] = 'async'
 
     for _ in range(20):
-        p = Process(target=run_sim, args=(config,))
+        p = Thread(target=run_sim, args=(config,))
         p.start()
         p.join()
 
@@ -100,7 +94,7 @@ def main():
     config['nodes'][2]['train_style'] = 'async'
 
     for _ in range(20):
-        p = Process(target=run_sim, args=(config,))
+        p = Thread(target=run_sim, args=(config,))
         p.start()
         p.join()
 
@@ -108,7 +102,7 @@ def main():
     config['nodes'][0]['train_style'] = 'async'
 
     for _ in range(20):
-        p = Process(target=run_sim, args=(config,))
+        p = Thread(target=run_sim, args=(config,))
         p.start()
         p.join()
 

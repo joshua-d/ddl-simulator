@@ -38,7 +38,7 @@ class Cluster:
         self.model_builder = model_builder
 
         # TODO may want to have dataset_fn return an infinite iterator over worker's dataset
-        # f(worker_id, num_train_samples) -> worker's dataset
+        # f(num_workers, worker_idx, num_train_samples) -> worker's dataset
         self.dataset_fn = dataset_fn
 
         # TODO all node IDs must be independent - make sure worker and ps IDs don't collide
@@ -84,7 +84,7 @@ class Cluster:
     # TODO slow workers
     def _create_nodes(self):
 
-        self.num_workers = 0
+        next_worker_idx = 0 # used for data sharding
         self.num_slow_workers = 0
         self.num_ps = 0
 
@@ -145,7 +145,7 @@ class Cluster:
             elif node_desc['node_type'] == 'worker':
 
                 # Build dataset_iterator
-                dataset = self.dataset_fn(self.num_workers, self.num_train_samples) # TODO using num workers here is a bit hacky
+                dataset = self.dataset_fn(self.num_workers, next_worker_idx, self.num_train_samples)
                 dataset_iterator = DatasetIterator(dataset, self.batch_size)
 
                 if node_desc['slow']:
@@ -166,7 +166,7 @@ class Cluster:
 
                 self.nodes[worker.id] = worker
                 self.workers.append(worker)
-                self.num_workers += 1
+                next_worker_idx += 1
 
 
     # Returns the size of the model in bits
@@ -195,6 +195,8 @@ class Cluster:
         self.node_descs = self._get_config_item(config, 'nodes')
 
         self.ps_return_threshold = self._get_config_item(config, 'ps_return_threshold')
+
+        self.num_workers = self._get_config_item(config, 'num_workers')
 
     def _get_config_item(self, config, item):
         if item not in config:
