@@ -1,22 +1,25 @@
 
 Experiment file form:
 
-def main(load_exp_util):
-    exp_util = load_exp_util('CONFIG FILE NAME HERE')
+from experiments.util.exp_util import ExpUtil
+from experiments.util.notify_pushbullet import notify_pushbullet
+
+def main():
+    exp_util = ExpUtil('config1.json')
     ...
     [EXP UTIL CMDS]
     ...
+
+
 
 
 To run:
 
 - run_experiment.py -
 
-from exp_util import load_exp_util
+from experiments.exp1 import main
 
-from experiments.EXP_FILE_NAME_HERE import main
-
-main(load_exp_util)
+main()
 
 
 

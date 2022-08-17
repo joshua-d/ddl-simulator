@@ -1,4 +1,7 @@
-def main(load_exp_util):
-    exp_util = load_exp_util('config1.json')
+from experiments.util.exp_util import ExpUtil
+from experiments.util.notify_pushbullet import notify_pushbullet
+
+def main():
+    exp_util = ExpUtil('config1.json')
 
     exp_util.run()
