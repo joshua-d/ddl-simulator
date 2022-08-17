@@ -237,6 +237,9 @@ class Cluster:
 
         logging_filename = 'eval_logs/sim_%s.txt' % (time_stamp)
 
+        _, _, _, build_optimizer = self.model_builder()
+        optimizer = build_optimizer(self.learning_rate)
+
         with open(logging_filename, 'w') as outfile:
             outfile.write('%d workers, %d ps\n' % (self.num_workers, self.num_ps))
             outfile.write('%d slow workers, %d to %d ms\n' % (self.num_slow_workers, self.slow_worker_lb*1000, self.slow_worker_ub*1000))
@@ -244,13 +247,17 @@ class Cluster:
             # MODEL INFO
             outfile.write('784-256-256-256-256-256-256-10\n')
 
+            # Optimizer type
+            outfile.write('optimizer: ' + str(type(optimizer)) + '\n')
+
             if self.bypass_NI:
                 outfile.write('NETWORK INTERFACE BYPASSED\n')
 
-            outfile.write('num train samples: %d, num test samples: %d, batch size: %d, learning rate: %f\n'
+            outfile.write('num train samples: %d, num test samples: %d\nbatch size: %d, learning rate: %f\n'
                             % (self.num_train_samples, self.num_test_samples, self.batch_size, self.learning_rate))
             outfile.write('%f acc threshold, %d max epochs (%d max batches)\n' % (acc_threshold, max_epochs, max_batches))
-            outfile.write('eval interval: %d batches\n\n' % eval_interval)
+            outfile.write('eval interval: %d batches\n' % eval_interval)
+            outfile.write('ps return threshold: %f\n\n' % self.ps_return_threshold)
             outfile.close()
         
 
@@ -343,4 +350,10 @@ class Cluster:
             
             outfile.write('\n')
             outfile.write(data)
+            outfile.write('\n[\n')
+
+            for node_desc in self.node_descs:
+                outfile.write('\t' + str(node_desc) + '\n')
+
+            outfile.write(']\n')
             outfile.close()
