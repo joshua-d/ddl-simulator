@@ -22,8 +22,8 @@
             "update_policy": "average",
             "train_style": "sync",
 
-            "inbound_bw": 100,
-            "outbound_bw": 100
+            "inbound_bw": 10000,
+            "outbound_bw": 10000
         },
 
         {
@@ -34,8 +34,8 @@
             "train_style": "sync",
             "update_interval": 1,
 
-            "inbound_bw": 100,
-            "outbound_bw": 100
+            "inbound_bw": 10000,
+            "outbound_bw": 10000
         },
         {
             "node_type": "ps",
@@ -45,8 +45,8 @@
             "train_style": "sync",
             "update_interval": 1,
 
-            "inbound_bw": 100,
-            "outbound_bw": 100
+            "inbound_bw": 10000,
+            "outbound_bw": 10000
         },
 
         {
@@ -55,8 +55,8 @@
             "parents": [1],
             "slow": false,
 
-            "inbound_bw": 100,
-            "outbound_bw": 100
+            "inbound_bw": 10000,
+            "outbound_bw": 10000
         },
         {
             "node_type": "worker",
@@ -64,8 +64,8 @@
             "parents": [1],
             "slow": false,
 
-            "inbound_bw": 100,
-            "outbound_bw": 100
+            "inbound_bw": 10000,
+            "outbound_bw": 10000
         },
 
         {
@@ -74,8 +74,8 @@
             "parents": [2],
             "slow": false,
 
-            "inbound_bw": 100,
-            "outbound_bw": 100
+            "inbound_bw": 10000,
+            "outbound_bw": 10000
         },
         {
             "node_type": "worker",
@@ -83,8 +83,8 @@
             "parents": [2],
             "slow": false,
 
-            "inbound_bw": 100,
-            "outbound_bw": 100
+            "inbound_bw": 10000,
+            "outbound_bw": 10000
         }
     ]
 }

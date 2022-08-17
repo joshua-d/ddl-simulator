@@ -1,0 +1,25 @@
+
+Experiment file form:
+
+def main(load_exp_util):
+    exp_util = load_exp_util('CONFIG FILE NAME HERE')
+    ...
+    [EXP UTIL CMDS]
+    ...
+
+
+To run:
+
+- run_experiment.py -
+
+from exp_util import load_exp_util
+
+from experiments.EXP_FILE_NAME_HERE import main
+
+main(load_exp_util)
+
+
+
+Notes:
+
+don't forget to call export_config() after making changes to exp_util.config in exp file
