@@ -5,8 +5,8 @@ import threading
 class SyncParameterServer(ParameterServer):
 
     # SyncParameterServer does not use return_threshold
-    def __init__(self, id, parents, update_policies, param_locations, ni, params, optimizer, update_interval, return_threshold):
-        super().__init__(id, parents, update_policies, param_locations, ni, params, optimizer, update_interval, return_threshold)
+    def __init__(self, id, parents, update_policy, update_policies, param_locations, ni, params, optimizer, update_interval, return_threshold):
+        super().__init__(id, parents, update_policy, update_policies, param_locations, ni, params, optimizer, update_interval, return_threshold)
         
 
     def run(self):

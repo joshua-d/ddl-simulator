@@ -126,9 +126,13 @@ class Cluster:
                 elif node_desc['train_style'] == 'sync':
                     PSClass = SyncParameterServer
 
+                # Get this node's update policy
+                update_policy = update_policy_str_map[node_desc['update_policy']]
+
                 ps = PSClass(
                     node_desc['id'], 
                     node_desc['parents'], 
+                    update_policy,
                     update_policies, 
                     param_locations, 
                     self.ni, 

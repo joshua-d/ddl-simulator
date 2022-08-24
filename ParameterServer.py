@@ -1,11 +1,11 @@
 import threading
-from Node import Node
+from Node import Node, UpdatePolicy
 from time import perf_counter
 
 
 class ParameterServer(Node):
 
-    def __init__(self, id, parents, update_policies, param_locations, ni, params, optimizer, update_interval, return_threshold):
+    def __init__(self, id, parents, update_policy, update_policies, param_locations, ni, params, optimizer, update_interval, return_threshold):
         super().__init__(id, parents, update_policies, param_locations, ni)
 
         # { param_id: tf.Variable }
@@ -16,6 +16,8 @@ class ParameterServer(Node):
         self.n_updates = 0
 
         self.return_threshold = return_threshold
+
+        self.update_policy = update_policy
 
         # IDs of children
         self.children = []
@@ -49,27 +51,62 @@ class ParameterServer(Node):
 
             first_update_received_time = perf_counter()
             n_updates_received = len(param_update_buffer)
+            self.n_updates += len(param_update_buffer)
             waiting_nodes = []
 
             with self.params_lock:
 
-                while True:
+                if self.update_policy == UpdatePolicy.GRADIENT:
 
-                    # Apply updates
-                    for param_update in param_update_buffer:
-                        param_update.apply(self.params, self.optimizer)
-                        waiting_nodes.append(param_update.sender_id)
-                        self.n_updates += 1
+                    while True:
 
-                    # Wait for more updates, or if threshold has passed, break
-                    time_passed = perf_counter() - first_update_received_time
-                    if n_updates_received < len(self.children) and time_passed < self.return_threshold:
-                        param_update_buffer = self.ni.ps_wait_for_child_update(self, timeout=(self.return_threshold - time_passed))
-                        if len(param_update_buffer) == 0:
+                        # Apply updates
+                        for param_update in param_update_buffer:
+                            param_update.apply(self.params, self.optimizer)
+                            waiting_nodes.append(param_update.sender_id)
+
+                        # Wait for more updates, or if threshold has passed, break
+                        time_passed = perf_counter() - first_update_received_time
+                        if n_updates_received < len(self.children) and time_passed < self.return_threshold:
+                            param_update_buffer = self.ni.ps_wait_for_child_update(self, timeout=(self.return_threshold - time_passed))
+                            if len(param_update_buffer) == 0:
+                                break
+                            n_updates_received += len(param_update_buffer)
+                            self.n_updates += len(param_update_buffer)
+                        else:
                             break
-                        n_updates_received += len(param_update_buffer)
-                    else:
-                        break
+
+                elif self.update_policy == UpdatePolicy.AVERAGE:
+
+                    param_updates = []
+
+                    while True:
+
+                        # Store current updates
+                        for param_update in param_update_buffer:
+                            param_updates.append(param_update)
+                            waiting_nodes.append(param_update.sender_id)
+
+                        # Wait for more updates, or if threshold has passed, break
+                        time_passed = perf_counter() - first_update_received_time
+                        if n_updates_received < len(self.children) and time_passed < self.return_threshold:
+                            param_update_buffer = self.ni.ps_wait_for_child_update(self, timeout=(self.return_threshold - time_passed))
+                            if len(param_update_buffer) == 0:
+                                break
+                            n_updates_received += len(param_update_buffer)
+                            self.n_updates += len(param_update_buffer)
+                        else:
+                            break
+
+                    # Average and apply
+                    for param_id in self.params:
+                        param_value = 0
+                        for param_update in param_updates:
+                            param_value += param_update.new_params[param_id]
+                        
+                        param_value /= len(param_updates)
+                        self.params[param_id].assign(param_value)
+                            
 
                 params = self.get_params()
                 
