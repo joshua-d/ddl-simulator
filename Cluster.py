@@ -88,6 +88,10 @@ class Cluster:
         self.num_ps = 0
         self.num_workers = 0
 
+        # Build dataset_iterator
+        dataset = self.dataset_fn(self.num_train_samples)
+        dataset_iterator = DatasetIterator(dataset, self.batch_size, self.data_chunk_size)
+
         for node_desc in self.node_descs:
 
             _, params, _, build_optimizer = self.model_builder()
@@ -110,10 +114,6 @@ class Cluster:
             # TODO assumes parents are already built
             for parent_id in node_desc['parents']:
                 self.nodes[parent_id].children.append(node_desc['id'])
-
-            # Build dataset_iterator
-            dataset = self.dataset_fn(self.num_train_samples)
-            dataset_iterator = DatasetIterator(dataset, self.batch_size, self.data_chunk_size)
 
 
             if node_desc['node_type'] == 'ps':
