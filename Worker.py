@@ -21,6 +21,12 @@ class Worker(Node):
             if policy == UpdatePolicy.AVERAGE:
                 self.optimize_model_cache = True
 
+        # Dataset stuff
+        chunk = next(dataset_iterator)
+        self.data_chunk_size = len(chunk)
+        self.data_chunk_iterator = iter(chunk)
+        self.batch_idx = 0
+
         # steps_scheduled decremented only once the gradients for the step are ON the network
         self.steps_scheduled = 0
         self.steps_scheduled_cond = threading.Condition()
@@ -57,8 +63,21 @@ class Worker(Node):
             param_update.apply(params=self.params, optimizer=None)
 
 
+    def get_next_batch(self):
+        batch = next(self.data_chunk_iterator)
+        self.batch_idx += 1
+
+        if self.batch_idx == self.data_chunk_size:
+            chunk = next(self.dataset_iterator)
+            self.data_chunk_size = len(chunk)
+            self.data_chunk_iterator = iter(chunk)
+            self.batch_idx = 0
+
+        return batch
+
+
     def train_step(self):
-        gradients = self.forward_pass(next(self.dataset_iterator))
+        gradients = self.forward_pass(self.get_next_batch())
 
         if self.id < self.cluster.num_slow_workers:
             sleep(random.randint(self.cluster.slow_worker_lb, self.cluster.slow_worker_ub) / 1000)

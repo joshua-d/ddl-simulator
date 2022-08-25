@@ -7,12 +7,11 @@ model_seed = 1  # model seed and shuffle seed (in dataset_fn) for consistent tes
 
 mnist_dataset = keras_model.mnist_dataset()
 
-def dataset_fn(num_workers, worker_idx, num_train_samples):
-    master_dataset = mnist_dataset.shuffle(len(mnist_dataset), seed=model_seed, reshuffle_each_iteration=False).take(num_train_samples)
 
-    worker_dataset = master_dataset.shard(num_shards=num_workers, index=worker_idx)
-
-    return worker_dataset
+# In dataset-rework, this just gives the master dataset which is automatically "sharded" by thread-safe DatasetIterator
+def dataset_fn(num_train_samples):
+    dataset = mnist_dataset.shuffle(len(mnist_dataset), seed=model_seed, reshuffle_each_iteration=False).take(num_train_samples)
+    return dataset
 
 
 

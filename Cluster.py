@@ -84,9 +84,9 @@ class Cluster:
     # TODO slow workers
     def _create_nodes(self):
 
-        next_worker_idx = 0 # used for data sharding
         self.num_slow_workers = 0
         self.num_ps = 0
+        self.num_workers = 0
 
         for node_desc in self.node_descs:
 
@@ -110,6 +110,10 @@ class Cluster:
             # TODO assumes parents are already built
             for parent_id in node_desc['parents']:
                 self.nodes[parent_id].children.append(node_desc['id'])
+
+            # Build dataset_iterator
+            dataset = self.dataset_fn(self.num_train_samples)
+            dataset_iterator = DatasetIterator(dataset, self.batch_size, self.data_chunk_size)
 
 
             if node_desc['node_type'] == 'ps':
@@ -148,10 +152,6 @@ class Cluster:
 
             elif node_desc['node_type'] == 'worker':
 
-                # Build dataset_iterator
-                dataset = self.dataset_fn(self.num_workers, next_worker_idx, self.num_train_samples)
-                dataset_iterator = DatasetIterator(dataset, self.batch_size)
-
                 if node_desc['slow']:
                     self.num_slow_workers += 1
 
@@ -170,7 +170,7 @@ class Cluster:
 
                 self.nodes[worker.id] = worker
                 self.workers.append(worker)
-                next_worker_idx += 1
+                self.num_workers += 1
 
 
     # Returns the size of the model in bits
@@ -200,7 +200,7 @@ class Cluster:
 
         self.ps_return_threshold = self._get_config_item(config, 'ps_return_threshold')
 
-        self.num_workers = self._get_config_item(config, 'num_workers')
+        self.data_chunk_size = self._get_config_item(config, 'data_chunk_size')
 
     def _get_config_item(self, config, item):
         if item not in config:
