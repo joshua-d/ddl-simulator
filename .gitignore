@@ -138,3 +138,4 @@ test.py
 *.bat
 notes.txt
 config.json
+experiments/exp

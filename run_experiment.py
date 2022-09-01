@@ -1,3 +1,3 @@
-from experiments.exp1 import main
+from experiments.exp.exp1 import main
 
 main()

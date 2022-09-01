@@ -2,9 +2,9 @@ import os
 import json
 
 
-RUN_CMD = 'python run_sim.py'
+RUN_CMD = 'python3.9 run_sim.py'
 TMP_PREPEND = 'tmp_'
-EXPS_PATH = 'experiments/'
+EXPS_PATH = 'experiments/exp/'
 
 
 def load_json(json_file_path):

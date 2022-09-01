@@ -202,6 +202,8 @@ class Cluster:
 
         self.data_chunk_size = self._get_config_item(config, 'data_chunk_size')
 
+        self.acc_threshold = self._get_config_item(config, 'acc_threshold')
+
     def _get_config_item(self, config, item):
         if item not in config:
             raise Exception('%s not in config' % item)
@@ -225,7 +227,6 @@ class Cluster:
 
         # Editable stopping condition vars
         max_epochs = 12
-        acc_threshold = 0.95
         eval_interval = 100 # eval every 100 batches
         log_interval = 50 # log progress every 20 eval_intervals
 
@@ -259,7 +260,7 @@ class Cluster:
 
             outfile.write('num train samples: %d, num test samples: %d\nbatch size: %d, learning rate: %f\n'
                             % (self.num_train_samples, self.num_test_samples, self.batch_size, self.learning_rate))
-            outfile.write('%f acc threshold, %d max epochs (%d max batches)\n' % (acc_threshold, max_epochs, max_batches))
+            outfile.write('%f acc threshold, %d max epochs (%d max batches)\n' % (self.acc_threshold, max_epochs, max_batches))
             outfile.write('eval interval: %d batches\n' % eval_interval)
             outfile.write('ps return threshold: %f\n\n' % self.ps_return_threshold)
             outfile.close()
@@ -332,7 +333,7 @@ class Cluster:
 
 
             # STOPPING CONDITIONS
-            if test_accuracy >= acc_threshold or eval_num >= max_eval_intervals:
+            if test_accuracy >= self.acc_threshold or eval_num >= max_eval_intervals:
                 break
 
 
