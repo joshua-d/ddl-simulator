@@ -1,13 +1,15 @@
-import threading
+from threading import Thread, Condition
 from time import sleep
 import random
 from Node import Node, UpdatePolicy
 
+from MessageTypes import *
+
 
 class Worker(Node):
 
-    def __init__(self, id, parents, update_policies, param_locations, ni, model_builder, dataset_iterator, optimizer, slow, cluster):
-        super().__init__(id, parents, update_policies, param_locations, ni)
+    def __init__(self, id, parents, parent_update_policies, param_locations, ni, model_builder, dataset_iterator, optimizer, slow, cluster):
+        super().__init__(id, parents, parent_update_policies, param_locations, ni)
 
         self.model, self.params, self.forward_pass, _ = model_builder()
         self.dataset_iterator = dataset_iterator
@@ -18,7 +20,7 @@ class Worker(Node):
 
         # Bool to determine if worker should apply grads to its own cache - if parent has AVERAGE policy
         self.optimize_model_cache = False
-        for policy in update_policies.values():
+        for policy in parent_update_policies.values():
             if policy == UpdatePolicy.AVERAGE:
                 self.optimize_model_cache = True
 
@@ -30,11 +32,26 @@ class Worker(Node):
 
         # steps_scheduled decremented only once the gradients for the step are ON the network
         self.steps_scheduled = 0
-        self.steps_scheduled_cond = threading.Condition()
+        self.steps_scheduled_cond = Condition()
 
         self.steps_completed = 0
 
-        self.working_thread = threading.Thread(target=self.work, daemon=True)
+        self.working_thread = Thread(target=self.work, daemon=True)
+
+        
+
+        
+    def handle_msg(self, msg):
+        # Right now, workers will only receive ReplacementParamsMsgs from their parent PSs 
+        if type(msg) == ReplacementParamsMsg:
+            self.incoming_parent_msgs.append(msg)
+
+            # If all params are in, wake up working thread
+            if len(self.incoming_parent_msgs) == len(self.parents):
+                with self.parent_params_ready_cond:
+                    self.parent_params_ready = True
+                    self.parent_params_ready_cond.notify()
+            
 
 
     def _increment_step_counter(self):
@@ -57,11 +74,7 @@ class Worker(Node):
         return vals_by_param_id
 
 
-    def wait_for_params(self):
-        param_updates = self.ni.worker_wait_for_params(self)
-
-        for param_update in param_updates:
-            param_update.apply(params=self.params, optimizer=None)
+    
 
 
     def get_next_batch(self):
@@ -89,11 +102,18 @@ class Worker(Node):
         else:
             params = None
 
-        self.update_parents(gradients, params)
+        # print('Worker %d updating parents' % self.id)
+        for parent_id in self.parents:
+            if self.parent_update_policies[parent_id] == UpdatePolicy.AVERAGE:
+                self.ni.send_params_average(self.id, parent_id, params)
+            elif self.parent_update_policies[parent_id] == UpdatePolicy.GRADIENT:
+                self.ni.send_params_gradient(self.id, parent_id, gradients)
 
         self._increment_step_counter()
 
-        self.wait_for_params()
+        # print('Worker %d waiting for params' % self.id)
+        self.wait_for_parent_params()
+        # print('Worker %d got params' % self.id)
 
 
     def work(self):
@@ -102,4 +122,5 @@ class Worker(Node):
 
 
     def start(self):
+        self.msg_handler_thread.start()
         self.working_thread.start()

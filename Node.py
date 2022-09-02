@@ -1,5 +1,5 @@
 from enum import Enum
-import threading
+from threading import Condition, Thread
 
 
 class UpdatePolicy(Enum):
@@ -10,14 +10,14 @@ class UpdatePolicy(Enum):
 
 class Node:
 
-    def __init__(self, id, parents, update_policies, param_locations, ni):
+    def __init__(self, id, parents, parent_update_policies, param_locations, ni):
         self.id = id
 
         # List of node IDs
         self.parents = parents
 
         # Map of parent node ID to update policy
-        self.update_policies = update_policies
+        self.parent_update_policies = parent_update_policies
 
         # Map of parent node ID to param IDs that it holds
         self.param_locations = param_locations
@@ -29,35 +29,47 @@ class Node:
         #   Looking ahead to a different structure, consider renaming - primary_update_queue, PS has secondary?
         # Queue for param updates from parents
         self.parent_update_queue = []
-        self.parent_update_queue_cond = threading.Condition()
+        self.parent_update_queue_cond = Condition()
+
+        self.msg_queue = []
+        self.msg_queue_cond = Condition()
+
+        self.msg_handler_thread = Thread(target=self.process_msgs, daemon=True)
+
+        self.parent_params_ready = False
+        self.parent_params_ready_cond = Condition()
+        self.incoming_parent_msgs = []
 
 
-    # TODO consider building update parent function so it doesn't have to check parent update policy all the time
-    # TODO naming - param_values, vals_by_param_id, params...
-    # gradients: map of param id to gradient
-    # param_values: map of param id to param value
-    def update_parents(self, gradients, param_values):
+    def process_msgs(self):
+        while True:
+            with self.msg_queue_cond:
+                while len(self.msg_queue) == 0:
+                    self.msg_queue_cond.wait()
 
-        for parent_id in self.parents:
+                msg_queue_buffer = self.msg_queue
+                self.msg_queue = []
 
-            update_policy = self.update_policies[parent_id]
+            for msg in msg_queue_buffer:
+                self.handle_msg(msg)
 
-            if update_policy == UpdatePolicy.GRADIENT:
 
-                # Generate grads_by_param_id
-                grads_by_param_id = {}
-                for param_id in self.param_locations[parent_id]:
-                    grads_by_param_id[param_id] = gradients[param_id]
+    def handle_msg(self):
+        pass
 
-                # Call NI to send
-                self.ni.send_params_gradient(self.id, parent_id, grads_by_param_id)
 
-            elif update_policy == UpdatePolicy.AVERAGE:
+    # Waits for all params from parents to arrive, then updates own model cache
+    def wait_for_parent_params(self):
+        # Wait until all params have come in
+        with self.parent_params_ready_cond:
+            while not self.parent_params_ready:
+                self.parent_params_ready_cond.wait()
+            self.parent_params_ready = False
 
-                # Generate vals_by_param_id
-                vals_by_param_id = {}
-                for param_id in self.param_locations[parent_id]:
-                    vals_by_param_id[param_id] = param_values[param_id]
+        # Update own model cache
+        for params_msg in self.incoming_parent_msgs:
+            for param_id in params_msg.params:
+                self.params[param_id].assign(params_msg.params[param_id])
 
-                # Call NI to send
-                self.ni.send_params_average(self.id, parent_id, vals_by_param_id)
+        # Clear incoming_parent_msgs
+        self.incoming_parent_msgs = []

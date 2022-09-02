@@ -9,7 +9,7 @@ import keras_model
 import time
 import datetime
 
-from ParameterServer import ParameterServer
+from AsyncParameterServer import AsyncParameterServer
 from SyncParameterServer import SyncParameterServer
 from Worker import Worker
 from DatasetIterator import DatasetIterator
@@ -96,11 +96,11 @@ class Cluster:
 
             _, params, _, build_optimizer = self.model_builder()
 
-            # Build update_policies
-            update_policies = {}
+            # Build parent_update_policies
+            parent_update_policies = {}
             for parent_id in node_desc['parents']:
                 # TODO this line strictly assumes that node IDs are also their indexes in node_descs !!!!!
-                update_policies[parent_id] = update_policy_str_map[self.node_descs[parent_id]['update_policy']]
+                parent_update_policies[parent_id] = update_policy_str_map[self.node_descs[parent_id]['update_policy']]
 
             # Build param_locations
             # TODO this will be much different when model sharding is implemented
@@ -126,7 +126,7 @@ class Cluster:
 
                 # Set async or sync
                 if node_desc['train_style'] == 'async':
-                    PSClass = ParameterServer
+                    PSClass = AsyncParameterServer
                 elif node_desc['train_style'] == 'sync':
                     PSClass = SyncParameterServer
 
@@ -137,7 +137,7 @@ class Cluster:
                     node_desc['id'], 
                     node_desc['parents'], 
                     update_policy,
-                    update_policies, 
+                    parent_update_policies, 
                     param_locations, 
                     self.ni, 
                     params, 
@@ -159,7 +159,7 @@ class Cluster:
                 worker = Worker(
                     node_desc['id'],
                     node_desc['parents'],
-                    update_policies,
+                    parent_update_policies,
                     param_locations,
                     self.ni,
                     self.model_builder,
