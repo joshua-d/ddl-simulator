@@ -118,12 +118,6 @@ class Cluster:
 
             if node_desc['node_type'] == 'ps':
 
-                # Get update_interval
-                if len(node_desc['parents']) > 0:
-                    update_interval = node_desc['update_interval']
-                else:
-                    update_interval = inf # TODO make sure top level PS never updates
-
                 # Set async or sync
                 if node_desc['train_style'] == 'async':
                     PSClass = AsyncParameterServer
@@ -142,8 +136,8 @@ class Cluster:
                     self.ni, 
                     params, 
                     build_optimizer(self.learning_rate), 
-                    update_interval,
-                    self.ps_return_threshold
+                    None,
+                    None # TODO removed update interval and ps return threshold, leaving fields in PS classes for now
                 )
 
                 self.nodes[ps.id] = ps
@@ -199,7 +193,7 @@ class Cluster:
 
         self.node_descs = self._get_config_item(config, 'nodes')
 
-        self.ps_return_threshold = self._get_config_item(config, 'ps_return_threshold')
+        self.ps_return_threshold = 0 # TODO removed functionality
 
         self.data_chunk_size = self._get_config_item(config, 'data_chunk_size')
 

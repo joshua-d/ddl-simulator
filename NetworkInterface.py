@@ -1,8 +1,5 @@
 from time import sleep
 from NetworkEmulator import NetworkEmulator
-from GradientParamUpdate import GradientParamUpdate
-from ReplacementParamUpdate import ReplacementParamUpdate
-from AverageParamUpdate import AverageParamUpdate
 
 from MessageTypes import *
 

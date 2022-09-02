@@ -1,6 +1,5 @@
 from threading import Lock, Thread, Condition
 from Node import Node, UpdatePolicy
-from time import perf_counter
 
 from MessageTypes import *
 
@@ -79,7 +78,6 @@ class AsyncParameterServer(Node):
                 incoming_child_msgs_buffer = self.incoming_child_msgs
                 self.incoming_child_msgs = []
 
-            # print('PS %d got %d child msgs' % (self.id, len(incoming_child_msgs_buffer)))
 
             with self.params_lock:
 
@@ -96,16 +94,13 @@ class AsyncParameterServer(Node):
                                 for param_id in self.param_locations[parent_id]:
                                     parent_update_params[param_id] = params_msg.params[param_id]
 
-                                # print('PS %d updating parent %d' % (self.id, parent_id))
                                 self.ni.send_params_average(self.id, parent_id, parent_update_params)
 
                             # TODO don't need to store in model cache here - just relay straight down
                             # Get updates from parents
-                            # print('PS %d waiting for params' % self.id)
                             self.wait_for_parent_params()
 
                             # async, so params get sent to child after each params_msg
-                            # print('PS %d sending to child %d' % (self.id, params_msg.from_id))
                             self.ni.ps_send_to_child(self.id, params_msg.from_id, self.get_params())
 
                     # Otherwise, average into model cache
@@ -118,7 +113,6 @@ class AsyncParameterServer(Node):
                                 self.params[param_id].assign(param_value)
 
                             # async, so params get sent to child after each params_msg
-                            # print('PS %d sending to child %d' % (self.id, params_msg.from_id))
                             self.ni.ps_send_to_child(self.id, params_msg.from_id, self.get_params())
 
 
@@ -133,7 +127,7 @@ class AsyncParameterServer(Node):
                                 if self.parent_update_policies[parent_id] == UpdatePolicy.AVERAGE:
                                     # optimize model cache with gradients
                                     apply_list = []
-                                    for param_id in grads_msg.gradients:
+                                    for param_id in self.params:
                                         apply_list.append((grads_msg.gradients[param_id], self.params[param_id]))
 
                                     self.optimizer.apply_gradients(apply_list)
@@ -141,9 +135,8 @@ class AsyncParameterServer(Node):
                                     # send params up
                                     parent_update_params = {}
                                     for param_id in self.param_locations[parent_id]:
-                                        parent_update_params[param_id] = params_msg.params[param_id]
+                                        parent_update_params[param_id] = self.params[param_id]
 
-                                    # print('PS %d updating parent %d' % (self.id, parent_id))
                                     self.ni.send_params_average(self.id, parent_id, parent_update_params)
 
                                 elif self.parent_update_policies[parent_id] == UpdatePolicy.GRADIENT:
@@ -152,16 +145,13 @@ class AsyncParameterServer(Node):
                                     for param_id in self.param_locations[parent_id]:
                                         parent_update_grads[param_id] = grads_msg.gradients[param_id]
 
-                                    # print('PS %d updating parent %d' % (self.id, parent_id))
                                     self.ni.send_params_gradient(self.id, parent_id, parent_update_grads)
 
                             # TODO see above todo
                             # Get updates from parents
-                            # print('PS %d waiting for params' % self.id)
                             self.wait_for_parent_params()
 
                             # async, so params get sent to child after each params_msg
-                            # print('PS %d sending to child %d' % (self.id, grads_msg.from_id))
                             self.ni.ps_send_to_child(self.id, grads_msg.from_id, self.get_params())
 
                     else:
@@ -169,13 +159,12 @@ class AsyncParameterServer(Node):
 
                             # optimize model cache with gradients
                             apply_list = []
-                            for param_id in grads_msg.gradients:
+                            for param_id in self.params:
                                 apply_list.append((grads_msg.gradients[param_id], self.params[param_id]))
 
                             self.optimizer.apply_gradients(apply_list)
 
                             # async, so params get sent to child after each params_msg
-                            # print('PS %d sending to child %d' % (self.id, grads_msg.from_id))
                             self.ni.ps_send_to_child(self.id, grads_msg.from_id, self.get_params())
 
 

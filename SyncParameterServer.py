@@ -52,7 +52,6 @@ class SyncParameterServer(AsyncParameterServer):
             incoming_child_msgs_buffer = self.incoming_child_msgs
             self.incoming_child_msgs = []
 
-            # print('PS %d child msgs in' % self.id)
 
 
             with self.params_lock:
@@ -86,7 +85,6 @@ class SyncParameterServer(AsyncParameterServer):
                     
 
             # Update parents
-            # print('PS %d updating parents' % self.id)
             params = self.get_params()
 
             for parent_id in self.parents:
@@ -97,10 +95,8 @@ class SyncParameterServer(AsyncParameterServer):
 
             # Get params from parents
             if len(self.parents) != 0:
-                # print('PS %d waiting for params' % self.id)
                 self.wait_for_parent_params()
 
             # Send to children
-            # print('PS %d sending to children' % self.id)
             for child_id in self.children:
                 self.ni.ps_send_to_child(self.id, child_id, self.get_params())

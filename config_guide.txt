@@ -1,13 +1,94 @@
-If base_msg_time is 0, bandwidth will be set based on the config.json value. Otherwise, bandwidth
-will be set based on base_msg_time.
-
-if sync, must specify num children
-
-
-ps_return_threshold: float - seconds to wait after receiving first update from worker for more updates
-to come in before sending back (async)
-
-
 inbound/outbound_bw: bw in megabits
 
 
+
+
+Example 2-lvl config:
+
+{
+    "bypass_NI": true,
+
+    "learning_rate": 0.001,
+    "batch_size": 32,
+
+    "num_train_samples": 60000,
+    "num_test_samples": 10000,
+
+    "slow_worker_lower_bound_ms": 0,
+    "slow_worker_upper_bound_ms": 200,
+
+    "data_chunk_size": 64,
+
+    "acc_threshold": 0.93,
+
+    "nodes": [
+        {
+            "node_type": "ps",
+            "id": 0,
+            "parents": [],
+            "update_policy": "gradient",
+            "train_style": "sync",
+
+            "inbound_bw": 50,
+            "outbound_bw": 50
+        },
+
+        {
+            "node_type": "ps",
+            "id": 1,
+            "parents": [0],
+            "update_policy": "gradient",
+            "train_style": "sync",
+
+            "inbound_bw": 50,
+            "outbound_bw": 50
+        },
+        {
+            "node_type": "ps",
+            "id": 2,
+            "parents": [0],
+            "update_policy": "gradient",
+            "train_style": "sync",
+
+            "inbound_bw": 50,
+            "outbound_bw": 50
+        },
+
+        {
+            "node_type": "worker",
+            "id": 3,
+            "parents": [1],
+            "slow": true,
+
+            "inbound_bw": 50,
+            "outbound_bw": 50
+        },
+        {
+            "node_type": "worker",
+            "id": 4,
+            "parents": [1],
+            "slow": false,
+
+            "inbound_bw": 50,
+            "outbound_bw": 50
+        },
+        {
+            "node_type": "worker",
+            "id": 5,
+            "parents": [2],
+            "slow": false,
+
+            "inbound_bw": 50,
+            "outbound_bw": 50
+        },
+        {
+            "node_type": "worker",
+            "id": 6,
+            "parents": [2],
+            "slow": false,
+
+            "inbound_bw": 50,
+            "outbound_bw": 50
+        }
+    ]
+}

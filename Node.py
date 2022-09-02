@@ -25,12 +25,6 @@ class Node:
         # Network Interface
         self.ni = ni
 
-        # TODO currently, all nodes have this, so here it is
-        #   Looking ahead to a different structure, consider renaming - primary_update_queue, PS has secondary?
-        # Queue for param updates from parents
-        self.parent_update_queue = []
-        self.parent_update_queue_cond = Condition()
-
         self.msg_queue = []
         self.msg_queue_cond = Condition()
 

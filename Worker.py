@@ -39,8 +39,6 @@ class Worker(Node):
         self.working_thread = Thread(target=self.work, daemon=True)
 
         
-
-        
     def handle_msg(self, msg):
         # Right now, workers will only receive ReplacementParamsMsgs from their parent PSs 
         if type(msg) == ReplacementParamsMsg:
@@ -52,7 +50,6 @@ class Worker(Node):
                     self.parent_params_ready = True
                     self.parent_params_ready_cond.notify()
             
-
 
     def _increment_step_counter(self):
         # Increment steps completed
@@ -72,9 +69,6 @@ class Worker(Node):
             vals_by_param_id[param_id] = self.params[param_id].value()
         
         return vals_by_param_id
-
-
-    
 
 
     def get_next_batch(self):
@@ -102,7 +96,6 @@ class Worker(Node):
         else:
             params = None
 
-        # print('Worker %d updating parents' % self.id)
         for parent_id in self.parents:
             if self.parent_update_policies[parent_id] == UpdatePolicy.AVERAGE:
                 self.ni.send_params_average(self.id, parent_id, params)
@@ -111,9 +104,7 @@ class Worker(Node):
 
         self._increment_step_counter()
 
-        # print('Worker %d waiting for params' % self.id)
         self.wait_for_parent_params()
-        # print('Worker %d got params' % self.id)
 
 
     def work(self):
