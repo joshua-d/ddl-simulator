@@ -6,12 +6,13 @@ from Node import Node, UpdatePolicy
 
 class Worker(Node):
 
-    def __init__(self, id, parents, update_policies, param_locations, ni, model_builder, dataset_iterator, optimizer, cluster):
+    def __init__(self, id, parents, update_policies, param_locations, ni, model_builder, dataset_iterator, optimizer, slow, cluster):
         super().__init__(id, parents, update_policies, param_locations, ni)
 
         self.model, self.params, self.forward_pass, _ = model_builder()
         self.dataset_iterator = dataset_iterator
         self.optimizer = optimizer
+        self.slow = slow
 
         self.cluster = cluster # TODO don't really want to have to do this, but need it for steps_completed stuff
 
@@ -79,7 +80,7 @@ class Worker(Node):
     def train_step(self):
         gradients = self.forward_pass(self.get_next_batch())
 
-        if self.id < self.cluster.num_slow_workers:
+        if self.slow:
             sleep(random.randint(self.cluster.slow_worker_lb, self.cluster.slow_worker_ub) / 1000)
 
         if self.optimize_model_cache:
