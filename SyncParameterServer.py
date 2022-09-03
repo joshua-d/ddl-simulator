@@ -1,5 +1,5 @@
 from AsyncParameterServer import AsyncParameterServer
-from Node import UpdatePolicy
+from Node import GanttEvent, UpdatePolicy
 from threading import Condition
 
 from MessageTypes import *
@@ -52,7 +52,7 @@ class SyncParameterServer(AsyncParameterServer):
             incoming_child_msgs_buffer = self.incoming_child_msgs
             self.incoming_child_msgs = []
 
-
+            self.open_gantt(GanttEvent.HANDLE_CHILD_UPDATE)
 
             with self.params_lock:
 
@@ -92,6 +92,8 @@ class SyncParameterServer(AsyncParameterServer):
                     self.ni.send_params_average(self.id, parent_id, params)
                 elif self.parent_update_policies[parent_id] == UpdatePolicy.GRADIENT:
                     self.ni.send_params_gradient(self.id, parent_id, agg_grads.gradients)
+
+            self.close_gantt()
 
             # Get params from parents
             if len(self.parents) != 0:

@@ -1,5 +1,5 @@
 from threading import Lock, Thread, Condition
-from Node import Node, UpdatePolicy
+from Node import GanttEvent, Node, UpdatePolicy
 
 from MessageTypes import *
 
@@ -79,6 +79,8 @@ class AsyncParameterServer(Node):
                 self.incoming_child_msgs = []
 
 
+            self.open_gantt(GanttEvent.HANDLE_CHILD_UPDATE)
+
             with self.params_lock:
 
                 if self.update_policy == UpdatePolicy.AVERAGE:
@@ -96,6 +98,8 @@ class AsyncParameterServer(Node):
 
                                 self.ni.send_params_average(self.id, parent_id, parent_update_params)
 
+                            self.close_gantt()
+
                             # TODO don't need to store in model cache here - just relay straight down
                             # Get updates from parents
                             self.wait_for_parent_params()
@@ -111,6 +115,8 @@ class AsyncParameterServer(Node):
                             for param_id in self.params:
                                 param_value = (self.params[param_id].value() + params_msg.params[param_id]) / 2
                                 self.params[param_id].assign(param_value)
+
+                            self.close_gantt()
 
                             # async, so params get sent to child after each params_msg
                             self.ni.ps_send_to_child(self.id, params_msg.from_id, self.get_params())
@@ -147,6 +153,8 @@ class AsyncParameterServer(Node):
 
                                     self.ni.send_params_gradient(self.id, parent_id, parent_update_grads)
 
+                            self.close_gantt()
+
                             # TODO see above todo
                             # Get updates from parents
                             self.wait_for_parent_params()
@@ -163,6 +171,8 @@ class AsyncParameterServer(Node):
                                 apply_list.append((grads_msg.gradients[param_id], self.params[param_id]))
 
                             self.optimizer.apply_gradients(apply_list)
+
+                            self.close_gantt()
 
                             # async, so params get sent to child after each params_msg
                             self.ni.ps_send_to_child(self.id, grads_msg.from_id, self.get_params())

@@ -14,13 +14,19 @@ from SyncParameterServer import SyncParameterServer
 from Worker import Worker
 from DatasetIterator import DatasetIterator
 from NetworkInterface import NetworkInterface, NetworkInterfaceBypass
-from Node import UpdatePolicy
+from Node import UpdatePolicy, record_gantt, GanttEvent
 
 
 update_policy_str_map = {
     'replace': UpdatePolicy.REPLACE,
     'gradient': UpdatePolicy.GRADIENT,
     'average': UpdatePolicy.AVERAGE
+}
+
+gantt_color_map = {
+    GanttEvent.WORKER_STEP: '#dcdcdc',
+    GanttEvent.PARAM_UPDATE: '#003366',
+    GanttEvent.HANDLE_CHILD_UPDATE: '#669999'
 }
 
 
@@ -218,6 +224,27 @@ class Cluster:
         return self.test_model
 
 
+    def generate_gantt_file(self):
+        columns = ""
+        for node in self.nodes.values():
+            with node.gantt_lock:
+
+                times_str = ""
+
+                for gantt in node.gantt_list:
+                    times_str += '{{"starting_time": {0}, "ending_time": {1}, "raw": "", color: "{2}"}},\n'.format(gantt[1], gantt[2], gantt_color_map[gantt[0]])
+
+                column = '{{ "label": {0}, "times": [ {1} ]}},'.format(node.id, times_str)
+                columns += column
+
+
+        res = "var labelTestData1 = [" + columns + ']'
+
+        outfile = open('gantt/gantt_data.js', 'w')
+        outfile.write(res)
+        outfile.close()
+
+
     def start(self):
 
         # Editable stopping condition vars
@@ -357,3 +384,6 @@ class Cluster:
 
             outfile.write(']\n')
             outfile.close()
+
+        if record_gantt:
+            self.generate_gantt_file()

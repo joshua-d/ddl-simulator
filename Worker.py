@@ -1,7 +1,7 @@
 from threading import Thread, Condition
 from time import sleep
 import random
-from Node import Node, UpdatePolicy
+from Node import Node, UpdatePolicy, GanttEvent
 
 from MessageTypes import *
 
@@ -85,6 +85,7 @@ class Worker(Node):
 
 
     def train_step(self):
+        self.open_gantt(GanttEvent.WORKER_STEP)
         gradients = self.forward_pass(self.get_next_batch())
 
         if self.slow:
@@ -103,6 +104,8 @@ class Worker(Node):
                 self.ni.send_params_gradient(self.id, parent_id, gradients)
 
         self._increment_step_counter()
+
+        self.close_gantt()
 
         self.wait_for_parent_params()
 
