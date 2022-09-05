@@ -226,8 +226,15 @@ class Cluster:
 
 
     def generate_gantt_file(self):
-        columns = ""
+        rows = ""
+
         for node in self.nodes.values():
+
+            if type(node) == Worker:
+                label = str(node.id) + ' Wk'
+            else:
+                label = str(node.id) + ' PS'
+
             with node.gantt_lock:
 
                 times_str = ""
@@ -235,21 +242,21 @@ class Cluster:
                 for gantt in node.gantt_list:
 
                     if gantt[2] == GanttEvent.WORKING:
-                        raw_str = "Working"
+                        raw_str = "Working - S: {0}, E: {1}".format(gantt[0], gantt[1])
                     elif gantt[2] == GanttEvent.PARAM_UPDATE:
-                        raw_str = "Updating params"
+                        raw_str = "Updating params - S: {0}, E: {1}".format(gantt[0], gantt[1])
                     elif gantt[2] == GanttEvent.SENDING_PARAMS:
-                        raw_str = 'Sending to {0}'.format(gantt[3])
+                        raw_str = 'Sending to {0} - S: {1}, E: {2}'.format(gantt[3], gantt[0], gantt[1])
                     elif gantt[2] == GanttEvent.RECEIVING_PARAMS:
-                        raw_str = 'Receiving from {0}'.format(gantt[3])
+                        raw_str = 'Receiving from {0} - S: {1}, E: {2}'.format(gantt[3], gantt[0], gantt[1])
 
-                    times_str += '{{"starting_time": {0}, "ending_time": {1}, "raw": "{2}", color: "{3}"}},\n'.format(gantt[0], gantt[1], raw_str, gantt_color_map[gantt[2]])
+                    times_str += '{{"starting_time": {0}, "ending_time": {1}, "raw": "{2}", color: "{3}"}}, '.format(gantt[0], gantt[1], raw_str, gantt_color_map[gantt[2]])
 
-                column = '{{ "label": {0}, "times": [ {1} ]}},'.format(node.id, times_str)
-                columns += column
+            row = '{{ "label": "{0}", "times": [ {1} ]}},'.format(label, times_str)
+            rows += row
 
 
-        res = "var labelTestData1 = [" + columns + ']'
+        res = "var gantt_data = [" + rows + ']'
 
         outfile = open('gantt/gantt_data.js', 'w')
         outfile.write(res)

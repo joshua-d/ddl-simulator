@@ -35,6 +35,10 @@
     #timeline::-webkit-scrollbar {
         display: none;
     }
+
+    #resizeInputDiv {
+      margin-top: 100px;
+    }
   </style>
     
   <script type="text/javascript" src="gantt_data.js"></script>
@@ -57,7 +61,7 @@
           })
 
         var svg = d3.select("#timeline").append("svg").attr("width", "100%")
-          .datum(labelTestData1).call(chart);
+          .datum(gantt_data).call(chart);
       }
       
       function resizeTimeline(width) {
@@ -67,6 +71,9 @@
     
       window.onload = function () {
           timelineHover(3000);
+          document.getElementById('resizeButton').onclick = function() {
+            resizeTimeline(parseInt(document.getElementById('resizeInput').value))
+          }
       }
       
   </script>
@@ -77,5 +84,9 @@
     <div id="hoverRes">
       <div class="coloredDiv" style="background-color: rgb(255, 102, 0);"></div>
       <div id="name"></div>
+    </div>
+    <div id="resizeInputDiv">
+      <input id="resizeInput">
+      <button id="resizeButton">Resize</button>
     </div>
 </body>
