@@ -205,7 +205,7 @@ class Cluster:
 
         self.data_chunk_size = self._get_config_item(config, 'data_chunk_size')
 
-        self.acc_threshold = self._get_config_item(config, 'acc_threshold')
+        self.acc_thresholds = self._get_config_item(config, 'acc_thresholds')
 
         self.record_gantt = self._get_config_item(config, 'record_gantt')
         self.rg_fg = self._get_config_item(config, 'rg_fine_grained')
@@ -314,7 +314,7 @@ class Cluster:
 
             outfile.write('num train samples: %d, num test samples: %d\nbatch size: %d, learning rate: %f\n'
                             % (self.num_train_samples, self.num_test_samples, self.batch_size, self.learning_rate))
-            outfile.write('%f acc threshold, %d max epochs (%d max batches)\n' % (self.acc_threshold, max_epochs, max_batches))
+            outfile.write('%f acc threshold, %d max epochs (%d max batches)\n' % (self.acc_thresholds[-1], max_epochs, max_batches))
             outfile.write('eval interval: %d batches\n' % eval_interval)
             outfile.write('ps return threshold: %f\n\n' % self.ps_return_threshold)
             outfile.close()
@@ -323,6 +323,7 @@ class Cluster:
         # Eval vars
         x_test, y_test = keras_model.test_dataset(self.num_test_samples)
         accuracies = []
+        threshold_results = []
 
         
         # Start nodes
@@ -385,14 +386,19 @@ class Cluster:
                     outfile.close()
                 accuracies = []
 
+            # Check if next acc threshold has been reached
+            if test_accuracy >= self.acc_thresholds[0]:
+                epochs = eval_num*eval_interval / batches_per_epoch
+                batches = eval_num*eval_interval
+                seconds = time.time() - start_time
+                threshold_results.append((self.acc_thresholds.pop(0), epochs, batches, seconds))
 
             # STOPPING CONDITIONS
-            if test_accuracy >= self.acc_threshold or eval_num >= max_eval_intervals:
+            if len(self.acc_thresholds) == 0 or eval_num >= max_eval_intervals:
                 break
 
 
         # Training done, complete logging
-        time_elapsed = time.time() - start_time
         
         with open(logging_filename, 'a') as outfile:
             for accuracy in accuracies:
@@ -402,7 +408,9 @@ class Cluster:
         with open(logging_filename, 'r+') as outfile:
             data = outfile.read()
             outfile.seek(0)
-            outfile.write('%d batches, %f epochs\n%f seconds\n\n' % (eval_num*eval_interval, eval_num*eval_interval / batches_per_epoch, time_elapsed))
+
+            for res in threshold_results:
+                outfile.write('%f:\n%f epochs\n%d batches\n%f seconds\n\n' % res)
             
             for worker in self.workers:
                 outfile.write('Worker %d: %d steps\n' % (worker.id, worker.steps_completed))
