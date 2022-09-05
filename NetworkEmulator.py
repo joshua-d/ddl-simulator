@@ -29,7 +29,7 @@ class Message:
 
 class NetworkEmulator:
 
-    def __init__(self, node_bws, worker_ids, mid_lvl_ps_ids, nodes, record_gantt):
+    def __init__(self, node_bws, worker_ids, mid_lvl_ps_ids, nodes, record_gantt, rg_fg):
 
         self.inbound_max, self.outbound_max = node_bws
 
@@ -64,6 +64,7 @@ class NetworkEmulator:
         self.mid_lvl_ps_ids = mid_lvl_ps_ids
         self.nodes = nodes
         self.record_gantt = record_gantt
+        self.rg_fg = rg_fg # record gantt fine grained
 
         
 
@@ -106,7 +107,7 @@ class NetworkEmulator:
                     if msg not in final_msgs:
 
                         # mark gantt
-                        if least_offering != msg.send_rate and msg.gantt_node_id is not None:
+                        if least_offering != msg.send_rate and msg.gantt_node_id is not None and self.rg_fg:
                             self.nodes[msg.gantt_node_id].close_gantt(msg.gantt_event, (msg.gantt_data, msg.send_rate))
                             self.nodes[msg.gantt_node_id].open_gantt()
 
@@ -129,7 +130,7 @@ class NetworkEmulator:
                     if msg not in final_msgs:
 
                         # mark gantt
-                        if least_offering != msg.send_rate and msg.gantt_node_id is not None:
+                        if least_offering != msg.send_rate and msg.gantt_node_id is not None and self.rg_fg:
                             self.nodes[msg.gantt_node_id].close_gantt(msg.gantt_event, (msg.gantt_data, msg.send_rate))
                             self.nodes[msg.gantt_node_id].open_gantt()
 

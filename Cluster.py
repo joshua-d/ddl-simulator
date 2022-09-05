@@ -208,6 +208,7 @@ class Cluster:
         self.acc_threshold = self._get_config_item(config, 'acc_threshold')
 
         self.record_gantt = self._get_config_item(config, 'record_gantt')
+        self.rg_fg = self._get_config_item(config, 'rg_fine_grained')
 
 
     def _get_config_item(self, config, item):
@@ -229,7 +230,7 @@ class Cluster:
         return self.test_model
 
 
-    def generate_gantt_file(self):
+    def generate_gantt_file(self, time_stamp):
         rows = ""
 
         for node in self.nodes.values():
@@ -266,7 +267,7 @@ class Cluster:
 
         res = "var gantt_data = [" + rows + ']'
 
-        outfile = open('gantt/gantt_data.js', 'w')
+        outfile = open('gantt/gantt_datas/gantt_data_%s.js' % time_stamp, 'w')
         outfile.write(res)
         outfile.close()
 
@@ -412,4 +413,4 @@ class Cluster:
             outfile.close()
 
         if self.record_gantt:
-            self.generate_gantt_file()
+            self.generate_gantt_file(time_stamp)

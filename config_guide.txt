@@ -1,5 +1,6 @@
 inbound/outbound_bw: bw in megabits
 
+rg_fine_grained: if recording gantt, update gantt every time message send rate changes
 
 
 
@@ -20,6 +21,9 @@ Example 2-lvl config:
     "data_chunk_size": 64,
 
     "acc_threshold": 0.93,
+
+    "record_gantt": true,
+    "rg_fine_grained": true,
 
     "nodes": [
         {
