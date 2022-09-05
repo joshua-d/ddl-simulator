@@ -24,9 +24,10 @@ update_policy_str_map = {
 }
 
 gantt_color_map = {
-    GanttEvent.WORKER_STEP: '#dcdcdc',
+    GanttEvent.WORKING: '#5da5c9',
     GanttEvent.PARAM_UPDATE: '#003366',
-    GanttEvent.HANDLE_CHILD_UPDATE: '#669999'
+    GanttEvent.SENDING_PARAMS: '#c9c9c9',
+    GanttEvent.RECEIVING_PARAMS: '#919191'
 }
 
 
@@ -232,7 +233,17 @@ class Cluster:
                 times_str = ""
 
                 for gantt in node.gantt_list:
-                    times_str += '{{"starting_time": {0}, "ending_time": {1}, "raw": "", color: "{2}"}},\n'.format(gantt[1], gantt[2], gantt_color_map[gantt[0]])
+
+                    if gantt[2] == GanttEvent.WORKING:
+                        raw_str = "Working"
+                    elif gantt[2] == GanttEvent.PARAM_UPDATE:
+                        raw_str = "Updating params"
+                    elif gantt[2] == GanttEvent.SENDING_PARAMS:
+                        raw_str = 'Sending to {0}'.format(gantt[3])
+                    elif gantt[2] == GanttEvent.RECEIVING_PARAMS:
+                        raw_str = 'Receiving from {0}'.format(gantt[3])
+
+                    times_str += '{{"starting_time": {0}, "ending_time": {1}, "raw": "{2}", color: "{3}"}},\n'.format(gantt[0], gantt[1], raw_str, gantt_color_map[gantt[2]])
 
                 column = '{{ "label": {0}, "times": [ {1} ]}},'.format(node.id, times_str)
                 columns += column

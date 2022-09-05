@@ -79,8 +79,6 @@ class AsyncParameterServer(Node):
                 self.incoming_child_msgs = []
 
 
-            self.open_gantt(GanttEvent.HANDLE_CHILD_UPDATE)
-
             with self.params_lock:
 
                 if self.update_policy == UpdatePolicy.AVERAGE:
@@ -98,8 +96,6 @@ class AsyncParameterServer(Node):
 
                                 self.ni.send_params_average(self.id, parent_id, parent_update_params)
 
-                            self.close_gantt()
-
                             # TODO don't need to store in model cache here - just relay straight down
                             # Get updates from parents
                             self.wait_for_parent_params()
@@ -111,12 +107,14 @@ class AsyncParameterServer(Node):
                     else:
                         for params_msg in incoming_child_msgs_buffer:
 
+                            self.open_gantt()
+
                             # Average into model cache
                             for param_id in self.params:
                                 param_value = (self.params[param_id].value() + params_msg.params[param_id]) / 2
                                 self.params[param_id].assign(param_value)
 
-                            self.close_gantt()
+                            self.close_gantt(GanttEvent.PARAM_UPDATE)
 
                             # async, so params get sent to child after each params_msg
                             self.ni.ps_send_to_child(self.id, params_msg.from_id, self.get_params())
@@ -131,6 +129,9 @@ class AsyncParameterServer(Node):
                             for parent_id in self.parents:
                                 
                                 if self.parent_update_policies[parent_id] == UpdatePolicy.AVERAGE:
+
+                                    self.open_gantt()
+
                                     # optimize model cache with gradients
                                     apply_list = []
                                     for param_id in self.params:
@@ -143,6 +144,8 @@ class AsyncParameterServer(Node):
                                     for param_id in self.param_locations[parent_id]:
                                         parent_update_params[param_id] = self.params[param_id]
 
+                                    self.close_gantt(GanttEvent.PARAM_UPDATE)
+
                                     self.ni.send_params_average(self.id, parent_id, parent_update_params)
 
                                 elif self.parent_update_policies[parent_id] == UpdatePolicy.GRADIENT:
@@ -152,8 +155,6 @@ class AsyncParameterServer(Node):
                                         parent_update_grads[param_id] = grads_msg.gradients[param_id]
 
                                     self.ni.send_params_gradient(self.id, parent_id, parent_update_grads)
-
-                            self.close_gantt()
 
                             # TODO see above todo
                             # Get updates from parents
@@ -165,6 +166,8 @@ class AsyncParameterServer(Node):
                     else:
                         for grads_msg in incoming_child_msgs_buffer:
 
+                            self.open_gantt()
+
                             # optimize model cache with gradients
                             apply_list = []
                             for param_id in self.params:
@@ -172,7 +175,7 @@ class AsyncParameterServer(Node):
 
                             self.optimizer.apply_gradients(apply_list)
 
-                            self.close_gantt()
+                            self.close_gantt(GanttEvent.PARAM_UPDATE)
 
                             # async, so params get sent to child after each params_msg
                             self.ni.ps_send_to_child(self.id, grads_msg.from_id, self.get_params())

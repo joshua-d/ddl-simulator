@@ -10,8 +10,18 @@ class NetworkInterface:
         self.PARAMS_SIZE = PARAMS_SIZE # size of a params msg
         self.GRADS_SIZE = GRADS_SIZE # size of a grads msg
         
+        # Generate ID guides for Gantt
+        worker_ids = []
+        mid_lvl_ps_ids = []
+        for node_desc in cluster.node_descs:
+            if node_desc['node_type'] == 'worker':
+                worker_ids.append(node_desc['id'])
+            elif node_desc['id'] != 0 and node_desc['node_type'] == 'ps':
+                mid_lvl_ps_ids.append(node_desc['id'])
+
+
         self.nc = NodeCommunication(cluster)
-        self.ne = NetworkEmulator(node_bws)
+        self.ne = NetworkEmulator(node_bws, worker_ids, mid_lvl_ps_ids, cluster.nodes)
 
         print('Params size: %d' % PARAMS_SIZE)
         print('Grads size: %d' % GRADS_SIZE)

@@ -52,7 +52,7 @@ class SyncParameterServer(AsyncParameterServer):
             incoming_child_msgs_buffer = self.incoming_child_msgs
             self.incoming_child_msgs = []
 
-            self.open_gantt(GanttEvent.HANDLE_CHILD_UPDATE)
+            self.open_gantt()
 
             with self.params_lock:
 
@@ -87,13 +87,13 @@ class SyncParameterServer(AsyncParameterServer):
             # Update parents
             params = self.get_params()
 
+            self.close_gantt(GanttEvent.PARAM_UPDATE)
+
             for parent_id in self.parents:
                 if self.parent_update_policies[parent_id] == UpdatePolicy.AVERAGE:
                     self.ni.send_params_average(self.id, parent_id, params)
                 elif self.parent_update_policies[parent_id] == UpdatePolicy.GRADIENT:
                     self.ni.send_params_gradient(self.id, parent_id, agg_grads.gradients)
-
-            self.close_gantt()
 
             # Get params from parents
             if len(self.parents) != 0:

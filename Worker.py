@@ -85,7 +85,7 @@ class Worker(Node):
 
 
     def train_step(self):
-        self.open_gantt(GanttEvent.WORKER_STEP)
+        self.open_gantt()
         gradients = self.forward_pass(self.get_next_batch())
 
         if self.slow:
@@ -97,6 +97,8 @@ class Worker(Node):
         else:
             params = None
 
+        self.close_gantt(GanttEvent.WORKING)
+
         for parent_id in self.parents:
             if self.parent_update_policies[parent_id] == UpdatePolicy.AVERAGE:
                 self.ni.send_params_average(self.id, parent_id, params)
@@ -104,8 +106,6 @@ class Worker(Node):
                 self.ni.send_params_gradient(self.id, parent_id, gradients)
 
         self._increment_step_counter()
-
-        self.close_gantt()
 
         self.wait_for_parent_params()
 

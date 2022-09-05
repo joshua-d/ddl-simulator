@@ -3,6 +3,8 @@ from threading import Thread, Condition
 import time
 from math import inf
 
+from Node import GanttEvent
+
 
 TIMING_THREAD_PERIOD = 0.001 # 1ms
 
@@ -22,7 +24,7 @@ class Message:
 
 class NetworkEmulator:
 
-    def __init__(self, node_bws):
+    def __init__(self, node_bws, worker_ids, mid_lvl_ps_ids, nodes):
 
         self.inbound_max, self.outbound_max = node_bws
 
@@ -51,6 +53,13 @@ class NetworkEmulator:
 
         # Data transmission thread
         self.dt_thread = Thread(target=self.process_dtjq, daemon=True)
+
+        # Gantt stuff
+        self.worker_ids = worker_ids
+        self.mid_lvl_ps_ids = mid_lvl_ps_ids
+        self.nodes = nodes
+
+        
 
 
     def _update_send_rates(self):
@@ -131,6 +140,15 @@ class NetworkEmulator:
 
             self._check_queue(from_id)
             self._update_send_rates()
+
+            if from_id in self.worker_ids:
+                self.nodes[from_id].open_gantt()
+            elif to_id in self.worker_ids:
+                self.nodes[to_id].open_gantt()
+            elif from_id in self.mid_lvl_ps_ids:
+                self.nodes[from_id].open_gantt()
+            elif to_id in self.mid_lvl_ps_ids:
+                self.nodes[to_id].open_gantt()
 
 
     def _ready_to_receive(self, from_id, to_id):
@@ -304,6 +322,16 @@ class NetworkEmulator:
                             self._check_queue(msg.to_id)
 
                         self._update_send_rates()
+
+                        # Gantt
+                        if msg.from_id in self.worker_ids:
+                            self.nodes[msg.from_id].close_gantt(GanttEvent.SENDING_PARAMS, msg.to_id)
+                        elif msg.to_id in self.worker_ids:
+                            self.nodes[msg.to_id].close_gantt(GanttEvent.RECEIVING_PARAMS, msg.from_id)
+                        elif msg.from_id in self.mid_lvl_ps_ids:
+                            self.nodes[msg.from_id].close_gantt(GanttEvent.SENDING_PARAMS, msg.to_id)
+                        elif msg.to_id in self.mid_lvl_ps_ids:
+                            self.nodes[msg.to_id].close_gantt(GanttEvent.RECEIVING_PARAMS, msg.from_id)
 
                     msg_idx += 1
 
