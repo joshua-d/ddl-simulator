@@ -2,13 +2,6 @@ from enum import Enum
 from threading import Condition, Thread, Lock
 from time import perf_counter
 
-
-class UpdatePolicy(Enum):
-    REPLACE = 1
-    GRADIENT = 2
-    AVERAGE = 3
-
-
 class GanttEvent(Enum):
     WORKING = 0
     PARAM_UPDATE = 1
@@ -16,7 +9,10 @@ class GanttEvent(Enum):
     RECEIVING_PARAMS = 3
 
 
-record_gantt = True
+class UpdatePolicy(Enum):
+    REPLACE = 1
+    GRADIENT = 2
+    AVERAGE = 3
 
 
 class Node:
@@ -48,6 +44,7 @@ class Node:
         self.gantt_list = []
         self.gantt_start = None
         self.gantt_lock = Lock()
+        self.record_gantt = ni.cluster.record_gantt
 
 
     def process_msgs(self):
@@ -89,10 +86,10 @@ class Node:
 
 
     def open_gantt(self):
-        if record_gantt:
+        if self.record_gantt:
             self.gantt_start = perf_counter()
 
     def close_gantt(self, gantt_event, data=None):
-        if record_gantt:
+        if self.record_gantt:
             with self.gantt_lock:
                 self.gantt_list.append((self.gantt_start, perf_counter(), gantt_event, data))

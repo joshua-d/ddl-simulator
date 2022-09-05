@@ -21,7 +21,7 @@ class NetworkInterface:
 
 
         self.nc = NodeCommunication(cluster)
-        self.ne = NetworkEmulator(node_bws, worker_ids, mid_lvl_ps_ids, cluster.nodes)
+        self.ne = NetworkEmulator(node_bws, worker_ids, mid_lvl_ps_ids, cluster.nodes, cluster.record_gantt)
 
         print('Params size: %d' % PARAMS_SIZE)
         print('Grads size: %d' % GRADS_SIZE)

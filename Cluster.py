@@ -14,20 +14,21 @@ from SyncParameterServer import SyncParameterServer
 from Worker import Worker
 from DatasetIterator import DatasetIterator
 from NetworkInterface import NetworkInterface, NetworkInterfaceBypass
-from Node import UpdatePolicy, record_gantt, GanttEvent
+from Node import UpdatePolicy, GanttEvent
 
-
-update_policy_str_map = {
-    'replace': UpdatePolicy.REPLACE,
-    'gradient': UpdatePolicy.GRADIENT,
-    'average': UpdatePolicy.AVERAGE
-}
 
 gantt_color_map = {
     GanttEvent.WORKING: '#5da5c9',
     GanttEvent.PARAM_UPDATE: '#003366',
     GanttEvent.SENDING_PARAMS: '#c9c9c9',
     GanttEvent.RECEIVING_PARAMS: '#919191'
+}
+
+
+update_policy_str_map = {
+    'replace': UpdatePolicy.REPLACE,
+    'gradient': UpdatePolicy.GRADIENT,
+    'average': UpdatePolicy.AVERAGE
 }
 
 
@@ -206,6 +207,9 @@ class Cluster:
 
         self.acc_threshold = self._get_config_item(config, 'acc_threshold')
 
+        self.record_gantt = self._get_config_item(config, 'record_gantt')
+
+
     def _get_config_item(self, config, item):
         if item not in config:
             raise Exception('%s not in config' % item)
@@ -246,9 +250,13 @@ class Cluster:
                     elif gantt[2] == GanttEvent.PARAM_UPDATE:
                         raw_str = "Updating params - S: {0}, E: {1}".format(gantt[0], gantt[1])
                     elif gantt[2] == GanttEvent.SENDING_PARAMS:
-                        raw_str = 'Sending to {0} - S: {1}, E: {2}'.format(gantt[3], gantt[0], gantt[1])
+                        if gantt[3][1] == 0:
+                            continue
+                        raw_str = 'Sending to {0} - SR: {1}, S: {2}, E: {3}'.format(gantt[3][0], gantt[3][1] / 1000000, gantt[0], gantt[1])
                     elif gantt[2] == GanttEvent.RECEIVING_PARAMS:
-                        raw_str = 'Receiving from {0} - S: {1}, E: {2}'.format(gantt[3], gantt[0], gantt[1])
+                        if gantt[3][1] == 0:
+                            continue
+                        raw_str = 'Receiving from {0} - SR: {1}, S: {2}, E: {3}'.format(gantt[3][0], gantt[3][1] / 1000000, gantt[0], gantt[1])
 
                     times_str += '{{"starting_time": {0}, "ending_time": {1}, "raw": "{2}", color: "{3}"}}, '.format(gantt[0], gantt[1], raw_str, gantt_color_map[gantt[2]])
 
@@ -403,5 +411,5 @@ class Cluster:
             outfile.write(']\n')
             outfile.close()
 
-        if record_gantt:
+        if self.record_gantt:
             self.generate_gantt_file()

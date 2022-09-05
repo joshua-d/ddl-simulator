@@ -21,10 +21,15 @@ class Message:
 
         self.send_rate = send_rate
 
+        # Used to update gantt on send rate change
+        self.gantt_node_id = None
+        self.gantt_event = None
+        self.gantt_data = None
+
 
 class NetworkEmulator:
 
-    def __init__(self, node_bws, worker_ids, mid_lvl_ps_ids, nodes):
+    def __init__(self, node_bws, worker_ids, mid_lvl_ps_ids, nodes, record_gantt):
 
         self.inbound_max, self.outbound_max = node_bws
 
@@ -58,6 +63,7 @@ class NetworkEmulator:
         self.worker_ids = worker_ids
         self.mid_lvl_ps_ids = mid_lvl_ps_ids
         self.nodes = nodes
+        self.record_gantt = record_gantt
 
         
 
@@ -98,6 +104,12 @@ class NetworkEmulator:
             if incoming:
                 for msg in self.active_msgs[least_offering_node_id]:
                     if msg not in final_msgs:
+
+                        # mark gantt
+                        if least_offering != msg.send_rate and msg.gantt_node_id is not None:
+                            self.nodes[msg.gantt_node_id].close_gantt(msg.gantt_event, (msg.gantt_data, msg.send_rate))
+                            self.nodes[msg.gantt_node_id].open_gantt()
+
                         msg.send_rate = least_offering
                         final_msgs.append(msg)
                         
@@ -115,6 +127,12 @@ class NetworkEmulator:
             else:
                 for msg in self.active_msgs[least_offering_node_id]:
                     if msg not in final_msgs:
+
+                        # mark gantt
+                        if least_offering != msg.send_rate and msg.gantt_node_id is not None:
+                            self.nodes[msg.gantt_node_id].close_gantt(msg.gantt_event, (msg.gantt_data, msg.send_rate))
+                            self.nodes[msg.gantt_node_id].open_gantt()
+
                         msg.send_rate = least_offering
                         final_msgs.append(msg)
                         
@@ -141,14 +159,27 @@ class NetworkEmulator:
             self._check_queue(from_id)
             self._update_send_rates()
 
-            if from_id in self.worker_ids:
-                self.nodes[from_id].open_gantt()
-            elif to_id in self.worker_ids:
-                self.nodes[to_id].open_gantt()
-            elif from_id in self.mid_lvl_ps_ids:
-                self.nodes[from_id].open_gantt()
-            elif to_id in self.mid_lvl_ps_ids:
-                self.nodes[to_id].open_gantt()
+            if self.record_gantt:
+                if from_id in self.worker_ids:
+                    self.nodes[from_id].open_gantt()
+                    msg.gantt_node_id = from_id
+                    msg.gantt_event = GanttEvent.SENDING_PARAMS
+                    msg.gantt_data = to_id
+                elif to_id in self.worker_ids:
+                    self.nodes[to_id].open_gantt()
+                    msg.gantt_node_id = to_id
+                    msg.gantt_event = GanttEvent.RECEIVING_PARAMS
+                    msg.gantt_data = from_id
+                elif from_id in self.mid_lvl_ps_ids:
+                    self.nodes[from_id].open_gantt()
+                    msg.gantt_node_id = from_id
+                    msg.gantt_event = GanttEvent.SENDING_PARAMS
+                    msg.gantt_data = to_id
+                elif to_id in self.mid_lvl_ps_ids:
+                    self.nodes[to_id].open_gantt()
+                    msg.gantt_node_id = to_id
+                    msg.gantt_event = GanttEvent.RECEIVING_PARAMS
+                    msg.gantt_data = to_id
 
 
     def _ready_to_receive(self, from_id, to_id):
@@ -321,17 +352,20 @@ class NetworkEmulator:
                         if len(to_active) == 0:
                             self._check_queue(msg.to_id)
 
+                        final_msg_send_rate = msg.send_rate
+
                         self._update_send_rates()
 
                         # Gantt
-                        if msg.from_id in self.worker_ids:
-                            self.nodes[msg.from_id].close_gantt(GanttEvent.SENDING_PARAMS, msg.to_id)
-                        elif msg.to_id in self.worker_ids:
-                            self.nodes[msg.to_id].close_gantt(GanttEvent.RECEIVING_PARAMS, msg.from_id)
-                        elif msg.from_id in self.mid_lvl_ps_ids:
-                            self.nodes[msg.from_id].close_gantt(GanttEvent.SENDING_PARAMS, msg.to_id)
-                        elif msg.to_id in self.mid_lvl_ps_ids:
-                            self.nodes[msg.to_id].close_gantt(GanttEvent.RECEIVING_PARAMS, msg.from_id)
+                        if self.record_gantt:
+                            if msg.from_id in self.worker_ids:
+                                self.nodes[msg.from_id].close_gantt(GanttEvent.SENDING_PARAMS, (msg.to_id, final_msg_send_rate))
+                            elif msg.to_id in self.worker_ids:
+                                self.nodes[msg.to_id].close_gantt(GanttEvent.RECEIVING_PARAMS, (msg.from_id, final_msg_send_rate))
+                            elif msg.from_id in self.mid_lvl_ps_ids:
+                                self.nodes[msg.from_id].close_gantt(GanttEvent.SENDING_PARAMS, (msg.to_id, final_msg_send_rate))
+                            elif msg.to_id in self.mid_lvl_ps_ids:
+                                self.nodes[msg.to_id].close_gantt(GanttEvent.RECEIVING_PARAMS, (msg.from_id, final_msg_send_rate))
 
                     msg_idx += 1
 
