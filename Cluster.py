@@ -243,11 +243,16 @@ class Cluster:
             with node.gantt_lock:
 
                 times_str = ""
+                step_num = 1
 
                 for gantt in node.gantt_list:
 
+                    block_label_str = ""
+
                     if gantt[2] == GanttEvent.WORKING:
                         raw_str = "Working - S: {0}, E: {1}".format(gantt[0], gantt[1])
+                        block_label_str = ', "label": {0}'.format(step_num)
+                        step_num += 1
                     elif gantt[2] == GanttEvent.PARAM_UPDATE:
                         raw_str = "Updating params - S: {0}, E: {1}".format(gantt[0], gantt[1])
                     elif gantt[2] == GanttEvent.SENDING_PARAMS:
@@ -259,7 +264,7 @@ class Cluster:
                             continue
                         raw_str = 'Receiving from {0} - SR: {1}, S: {2}, E: {3}'.format(gantt[3][0], gantt[3][1] / 1000000, gantt[0], gantt[1])
 
-                    times_str += '{{"starting_time": {0}, "ending_time": {1}, "raw": "{2}", color: "{3}"}}, '.format(gantt[0], gantt[1], raw_str, gantt_color_map[gantt[2]])
+                    times_str += '{{"starting_time": {0}, "ending_time": {1}, "raw": "{2}", color: "{3}"{4}}}, '.format(gantt[0], gantt[1], raw_str, gantt_color_map[gantt[2]], block_label_str)
 
             row = '{{ "label": "{0}", "times": [ {1} ]}},'.format(label, times_str)
             rows += row
