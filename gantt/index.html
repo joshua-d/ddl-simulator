@@ -36,15 +36,21 @@
         display: none;
     }
 
-    #resizeInputDiv {
+    #fileSelectDiv {
       margin-top: 100px;
+    }
+
+    #resizeInputDiv {
+      margin-top: 20px;
     }
   </style>
     
-  <script type="text/javascript" src="gantt_data.js"></script>
   <script type="text/javascript">
+
+      var gantt_data;
+      var width = 8000;
       
-      function timelineHover(width) {
+      function timelineHover() {
         var chart = d3.timeline()
           .width(width)
           .stack()
@@ -64,13 +70,23 @@
           .datum(gantt_data).call(chart);
       }
       
-      function resizeTimeline(width) {
+      function resizeTimeline(newWidth) {
+          width = newWidth;
           document.getElementById('timeline').innerHTML = "";
-          timelineHover(width)
+          timelineHover();
+          document.getElementById('currentSize').textContent = newWidth;
       }
     
       window.onload = function () {
-          timelineHover(8000);
+          document.getElementById('fileInput').addEventListener('change', function() {  
+              var fr=new FileReader();
+              fr.onload=function(){
+                  gantt_data = JSON.parse(fr.result);
+                  document.getElementById('timeline').innerHTML = "";
+                  timelineHover();
+              }
+              fr.readAsText(this.files[0]);
+          });
           
           document.getElementById('resizeButton').onclick = function() {
             resizeTimeline(parseInt(document.getElementById('resizeInput').value))
@@ -86,7 +102,11 @@
       <div class="coloredDiv" style="background-color: rgb(255, 102, 0);"></div>
       <div id="name"></div>
     </div>
+    <div id="fileSelectDiv">
+      <input type="file" id="fileInput">
+    </div>
     <div id="resizeInputDiv">
+      <div>Current Size: <span id="currentSize">8000</span></div>
       <input id="resizeInput">
       <button id="resizeButton">Resize</button>
     </div>

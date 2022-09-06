@@ -264,13 +264,13 @@ class Cluster:
                             continue
                         raw_str = 'Receiving from {0} - SR: {1}, S: {2}, E: {3}'.format(gantt[3][0], gantt[3][1] / 1000000, gantt[0], gantt[1])
 
-                    times_str += '{{"starting_time": {0}, "ending_time": {1}, "raw": "{2}", color: "{3}"{4}}}, '.format(gantt[0], gantt[1], raw_str, gantt_color_map[gantt[2]], block_label_str)
+                    times_str += '{{"starting_time": {0}, "ending_time": {1}, "raw": "{2}", "color": "{3}"{4}}},'.format(gantt[0], gantt[1], raw_str, gantt_color_map[gantt[2]], block_label_str)
 
-            row = '{{ "label": "{0}", "times": [ {1} ]}},'.format(label, times_str)
+            row = '{{ "label": "{0}", "times": [ {1} ]}},'.format(label, times_str[0:-1])
             rows += row
 
 
-        res = "var gantt_data = [" + rows + ']'
+        res = "[" + rows[0:-1] + ']'
 
         outfile = open('gantt/gantt_datas/gantt_data_%s.js' % time_stamp, 'w')
         outfile.write(res)
