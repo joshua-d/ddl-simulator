@@ -272,7 +272,7 @@ class Cluster:
 
         res = "[" + rows[0:-1] + ']'
 
-        outfile = open('gantt/gantt_datas/gantt_data_%s.js' % time_stamp, 'w')
+        outfile = open('gantt/gantt_datas/gantt_data_%s.json' % time_stamp, 'w')
         outfile.write(res)
         outfile.close()
 

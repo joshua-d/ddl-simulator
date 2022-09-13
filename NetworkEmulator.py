@@ -180,7 +180,7 @@ class NetworkEmulator:
                     self.nodes[to_id].open_gantt()
                     msg.gantt_node_id = to_id
                     msg.gantt_event = GanttEvent.RECEIVING_PARAMS
-                    msg.gantt_data = to_id
+                    msg.gantt_data = from_id
 
 
     def _ready_to_receive(self, from_id, to_id):
