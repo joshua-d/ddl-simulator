@@ -82,6 +82,20 @@
               var fr=new FileReader();
               fr.onload=function(){
                   gantt_data = JSON.parse(fr.result);
+                  
+                  // Get total time
+                  let max_time = 0;
+
+                  for (let row of gantt_data) {
+                    let row_time = row.times[row.times.length - 1].starting_time - row.times[0].starting_time;
+                    if (row_time > max_time) {
+                      max_time = row_time;
+                    }
+                  }
+
+                  width = Math.floor(max_time*100);
+                  document.getElementById('currentSize').textContent = width;
+
                   document.getElementById('timeline').innerHTML = "";
                   timelineHover();
               }
@@ -106,7 +120,7 @@
       <input type="file" id="fileInput">
     </div>
     <div id="resizeInputDiv">
-      <div>Current Size: <span id="currentSize">8000</span></div>
+      <div>Current Size: <span id="currentSize"></span></div>
       <input id="resizeInput">
       <button id="resizeButton">Resize</button>
     </div>

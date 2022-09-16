@@ -51,6 +51,24 @@ class Worker(Node):
                     self.parent_params_ready_cond.notify()
             
 
+    def wait_for_parent_params(self):
+        # Wait until all params have come in
+        with self.parent_params_ready_cond:
+            while not self.parent_params_ready:
+                self.parent_params_ready_cond.wait()
+            self.parent_params_ready = False
+
+        self.open_gantt()
+
+        # Update own model cache
+        for params_msg in self.incoming_parent_msgs:
+            for param_id in params_msg.params:
+                self.params[param_id].assign(params_msg.params[param_id])
+
+        # Clear incoming_parent_msgs
+        self.incoming_parent_msgs = []
+
+
     def _increment_step_counter(self):
         # Increment steps completed
         with self.cluster.steps_completed_cond:
@@ -85,7 +103,6 @@ class Worker(Node):
 
 
     def train_step(self):
-        self.open_gantt()
         gradients = self.forward_pass(self.get_next_batch())
 
         if self.slow:
@@ -111,6 +128,7 @@ class Worker(Node):
 
 
     def work(self):
+        self.open_gantt()
         while True:
             self.train_step()
 

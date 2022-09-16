@@ -57,6 +57,26 @@ class AsyncParameterServer(Node):
                     self.parent_params_ready_cond.notify()
 
 
+    def wait_for_parent_params(self):
+        # Wait until all params have come in
+        with self.parent_params_ready_cond:
+            while not self.parent_params_ready:
+                self.parent_params_ready_cond.wait()
+            self.parent_params_ready = False
+
+        self.open_gantt()
+
+        # Update own model cache
+        for params_msg in self.incoming_parent_msgs:
+            for param_id in params_msg.params:
+                self.params[param_id].assign(params_msg.params[param_id])
+
+        self.close_gantt(GanttEvent.PARAM_UPDATE)
+
+        # Clear incoming_parent_msgs
+        self.incoming_parent_msgs = []
+
+
     def get_params(self):
         # { param_id: param's value }
         vals_by_param_id = {}
