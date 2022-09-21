@@ -1,4 +1,4 @@
-from enum import Enum
+import datetime
 from NetworkEmulatorLite import NetworkEmulatorLite
 
 
@@ -52,12 +52,14 @@ event_types = [
     PSApplyEvent
 ]
 
-class EventType(Enum):
-    WORKER_STEP = 0,
-    SEND_PARAMS = 1,
-    RECEIVE_PARAMS = 2,
-    PS_AGGR = 3,
-    PS_APPLY = 4
+
+gantt_color_map = {
+    WorkerStepEvent: '#5da5c9',
+    PSAggrEvent: '#003366',
+    PSApplyEvent: '#003366',
+    SendParamsEvent: '#c9c9c9',
+    ReceiveParamsEvent: '#919191'
+}
 
 
 class Worker:
@@ -140,7 +142,7 @@ class NetworkSequenceGenerator:
 
         
 
-    def _process_msg(self, msg):
+    def _process_msg(self, msg, queued_child_msg=False):
 
         if type(self.nodes[msg.to_id]) == ParameterServer:
 
@@ -165,12 +167,13 @@ class NetworkSequenceGenerator:
 
                     # Process msgs from children
                     for child_msg in ps.child_msg_queue:
-                        self._process_msg(child_msg)
+                        self._process_msg(child_msg, queued_child_msg=True)
                     
                     ps.child_msg_queue = []
                     
                 else:
                     # Got update from child while waiting for parent
+                    self.events.append(ReceiveParamsEvent(self.ne.current_time, self.ne.current_time, msg.from_id, msg.to_id))
                     ps.child_msg_queue.append(msg)
 
             else:
@@ -180,7 +183,8 @@ class NetworkSequenceGenerator:
                     # Process params immediately
 
                     # Add receive and apply events
-                    self.events.append(ReceiveParamsEvent(self.ne.current_time, self.ne.current_time, msg.from_id, msg.to_id))
+                    if not queued_child_msg:
+                        self.events.append(ReceiveParamsEvent(self.ne.current_time, self.ne.current_time, msg.from_id, msg.to_id))
                     self.events.append(PSApplyEvent(self.ne.current_time, self.ne.current_time + ps.apply_time, ps.id))
 
                     # If this is a mid level ps, send up to parent
@@ -199,7 +203,9 @@ class NetworkSequenceGenerator:
                     # Only process if all param sets are in
 
                     ps.n_param_sets_received += 1
-                    self.events.append(ReceiveParamsEvent(self.ne.current_time, self.ne.current_time, msg.from_id, msg.to_id))
+                    
+                    if not queued_child_msg:
+                        self.events.append(ReceiveParamsEvent(self.ne.current_time, self.ne.current_time, msg.from_id, msg.to_id))
 
                     if ps.n_param_sets_received == len(ps.children):
 
@@ -244,6 +250,89 @@ class NetworkSequenceGenerator:
         for msg in sent_msgs:
             self._process_msg(msg)
             
+    def generate_gantt(self):
+        # This can only be run once generation is done <3
+
+        # Set send/receive start times
+        event_idx = 0
+        while event_idx < len(self.events):
+            event = self.events[event_idx]
+            if type(event) == SendParamsEvent:
+                comp_event_idx = event_idx + 1
+                while comp_event_idx < len(self.events):
+                    comp_event = self.events[comp_event_idx]
+                    if type(comp_event) == ReceiveParamsEvent and comp_event.sender_id == event.sender_id and comp_event.receiver_id == event.receiver_id:
+                        event.end_time = comp_event.end_time
+                        comp_event.start_time = event.start_time
+                        break
+                    comp_event_idx += 1
+            event_idx += 1
+
+        # Make node gantt channels
+        gantts = {}
+        for node in self.nodes:
+            gantts[node.id] = []
+
+        # Populate gantt channels
+        for event in self.events:
+            if type(event) == WorkerStepEvent:
+                gantts[event.worker_id].append(event)
+            elif type(event) == PSAggrEvent or type(event) == PSApplyEvent:
+                gantts[event.ps_id].append(event)
+            elif type(event) == SendParamsEvent:
+                if type(self.nodes[event.receiver_id]) == Worker or event.sender_id == 0: # TODO need to change this logic for > 2 levels
+                    gantts[event.receiver_id].append(event)
+                else:
+                    gantts[event.sender_id].append(event)
+
+        # Get time stamp
+        now = datetime.datetime.now()
+        time_str = str(now.time())
+        time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
+
+        # Generate file
+        rows = ""
+
+        for node in self.nodes:
+
+            if type(node) == Worker:
+                label = str(node.id) + ' Wk'
+            else:
+                label = str(node.id) + ' PS'
+
+
+            times_str = ""
+            step_num = 1
+
+            for event in gantts[node.id]:
+
+                block_label_str = ""
+
+                if type(event) == WorkerStepEvent:
+                    raw_str = "Working - S: {0}, E: {1}, D: {2}".format(event.start_time, event.end_time, event.end_time - event.start_time)
+                    block_label_str = ', "label": {0}'.format(step_num)
+                    step_num += 1
+                    color = '#5da5c9'
+                elif type(event) == PSAggrEvent or type(event) == PSApplyEvent:
+                    raw_str = "Updating params - S: {0}, E: {1}, D: {2}".format(event.start_time, event.end_time, event.end_time - event.start_time)
+                    color = '#003366'
+                elif type(event) == SendParamsEvent and event.sender_id == node.id:
+                    raw_str = 'Sending to {0} - S: {1}, E: {2}, D: {3}'.format(event.receiver_id, event.start_time, event.end_time, event.end_time - event.start_time)
+                    color = '#c9c9c9'
+                elif type(event) == SendParamsEvent and event.receiver_id == node.id:
+                    raw_str = 'Receiving from {0} - S: {1}, E: {2}, D: {3}'.format(event.sender_id, event.start_time, event.end_time, event.end_time - event.start_time)
+                    color = '#919191'
+
+                times_str += '{{"starting_time": {0}, "ending_time": {1}, "raw": "{2}", "color": "{3}"{4}}},'.format(event.start_time, event.end_time, raw_str, color, block_label_str)
+
+            row = '{{ "label": "{0}", "times": [ {1} ]}},'.format(label, times_str[0:-1])
+            rows += row
+
+        res = "[" + rows[0:-1] + ']'
+
+        outfile = open('gantt/gantt_datas/gantt_data_%s.json' % time_stamp, 'w')
+        outfile.write(res)
+        outfile.close()
 
 
 import json
@@ -253,7 +342,7 @@ node_desc_str = """
         "node_type": "ps",
         "id": 0,
         "parent": null,
-        "sync_style": "sync",
+        "sync_style": "async",
         "aggr_time": 1,
         "apply_time": 1,
 
@@ -264,7 +353,7 @@ node_desc_str = """
         "node_type": "ps",
         "id": 1,
         "parent": 0,
-        "sync_style": "sync",
+        "sync_style": "async",
         "aggr_time": 1,
         "apply_time": 1,
 
@@ -275,7 +364,7 @@ node_desc_str = """
         "node_type": "ps",
         "id": 2,
         "parent": 0,
-        "sync_style": "sync",
+        "sync_style": "async",
         "aggr_time": 1,
         "apply_time": 1,
 
@@ -326,8 +415,7 @@ node_descs = json.loads(node_desc_str)
 
 nsg = NetworkSequenceGenerator(node_descs)
 
-nsg.generate()
-nsg.generate()
-nsg.generate()
-nsg.generate()
-nsg.generate()
+for _ in range(20):
+    nsg.generate()
+
+nsg.generate_gantt()
