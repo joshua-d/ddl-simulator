@@ -2,7 +2,7 @@ from math import inf
 
 
 class Message:
-    def __init__(self, from_id, to_id, size, in_time, last_checked, send_rate, msg_id):
+    def __init__(self, from_id, to_id, size, in_time, last_checked, send_rate):
         self.from_id = from_id
         self.to_id = to_id
         self.size = size
@@ -12,8 +12,6 @@ class Message:
         self.last_checked = last_checked
 
         self.send_rate = send_rate
-
-        self.id = msg_id
 
         self.start_time = 0
         self.end_time = 0
@@ -115,8 +113,8 @@ class NetworkEmulatorLite:
                                 incoming_offering[aux_msg] += distribute_amt
 
 
-    def send_msg(self, from_id, to_id, msg_size, in_time, msg_id):
-        msg = Message(from_id, to_id, msg_size, in_time, in_time, 0, msg_id)
+    def send_msg(self, from_id, to_id, msg_size, in_time):
+        msg = Message(from_id, to_id, msg_size, in_time, in_time, 0)
 
         self.future_msgs.append(msg)
 

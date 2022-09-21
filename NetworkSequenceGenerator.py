@@ -116,7 +116,7 @@ class NetworkSequenceGenerator:
         # Set up starting events
         for worker in self.workers:
             self.events.append(WorkerStepEvent(0, worker.step_time, worker.id))
-            self.ne.send_msg(worker.id, worker.parent.id, PARAMS_SIZE, worker.step_time, None) # TODO msg id
+            self.ne.send_msg(worker.id, worker.parent.id, PARAMS_SIZE, worker.step_time)
 
         
 
@@ -134,10 +134,10 @@ class NetworkSequenceGenerator:
 
                     # Immediately send to child(ren)
                     if ps.sync_style == 'async':
-                        self.ne.send_msg(ps.id, ps.waiting_child_id, PARAMS_SIZE, self.ne.current_time, None)
+                        self.ne.send_msg(ps.id, ps.waiting_child_id, PARAMS_SIZE, self.ne.current_time)
                     elif ps.sync_style == 'sync':
                         for child in ps.children:
-                            self.ne.send_msg(ps.id, child.id, PARAMS_SIZE, self.ne.current_time, None)
+                            self.ne.send_msg(ps.id, child.id, PARAMS_SIZE, self.ne.current_time)
 
                     ps.waiting_for_parent = False
 
@@ -165,13 +165,13 @@ class NetworkSequenceGenerator:
 
                     # If this is a mid level ps, send up to parent
                     if ps.parent is not None:
-                        self.ne.send_msg(ps.id, ps.parent.id, PARAMS_SIZE, ps.next_available_work_time, None)
+                        self.ne.send_msg(ps.id, ps.parent.id, PARAMS_SIZE, ps.next_available_work_time)
                         ps.waiting_for_parent = True
                         ps.waiting_child_id = msg.from_id
 
                     # Otherwise, send down to child
                     else:
-                        self.ne.send_msg(ps.id, msg.from_id, PARAMS_SIZE, ps.next_available_work_time, None)
+                        self.ne.send_msg(ps.id, msg.from_id, PARAMS_SIZE, ps.next_available_work_time)
 
                 elif ps.sync_style == 'sync':
                     # Only process if all param sets are in
@@ -187,13 +187,13 @@ class NetworkSequenceGenerator:
 
                         # If this is a mid level ps, send up to parent
                         if ps.parent is not None:
-                            self.ne.send_msg(ps.id, ps.parent.id, PARAMS_SIZE, self.ne.current_time + ps.aggr_time + ps.apply_time, None)
+                            self.ne.send_msg(ps.id, ps.parent.id, PARAMS_SIZE, self.ne.current_time + ps.aggr_time + ps.apply_time)
                             ps.waiting_for_parent = True
 
                         # Otherwise, send down to children
                         else:
                             for child in ps.children:
-                                self.ne.send_msg(ps.id, child.id, PARAMS_SIZE, self.ne.current_time + ps.aggr_time + ps.apply_time, None)
+                                self.ne.send_msg(ps.id, child.id, PARAMS_SIZE, self.ne.current_time + ps.aggr_time + ps.apply_time)
 
                         ps.n_param_sets_received = 0
 
@@ -206,7 +206,7 @@ class NetworkSequenceGenerator:
             self.events.append(WorkerStepEvent(self.ne.current_time, self.ne.current_time + worker.step_time, worker.id))
 
             # Send params to parent
-            self.ne.send_msg(worker.id, worker.parent.id, PARAMS_SIZE, self.ne.current_time + worker.step_time, None)
+            self.ne.send_msg(worker.id, worker.parent.id, PARAMS_SIZE, self.ne.current_time + worker.step_time)
 
 
     def generate(self):
