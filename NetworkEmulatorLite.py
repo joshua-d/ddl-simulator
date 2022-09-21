@@ -2,12 +2,13 @@ from math import inf
 
 
 class Message:
-    def __init__(self, from_id, to_id, size, last_checked, send_rate, msg_id):
+    def __init__(self, from_id, to_id, size, in_time, last_checked, send_rate, msg_id):
         self.from_id = from_id
         self.to_id = to_id
         self.size = size
 
         self.amt_sent = 0
+        self.in_time = in_time
         self.last_checked = last_checked
 
         self.send_rate = send_rate
@@ -37,6 +38,8 @@ class NetworkEmulatorLite:
         self.sending_msgs = []
 
         self.current_time = 0
+
+        self.future_msgs = []
 
 
     def _update_send_rates(self):
@@ -110,13 +113,12 @@ class NetworkEmulatorLite:
 
 
     def send_msg(self, from_id, to_id, msg_size, in_time, msg_id):
-        msg = Message(from_id, to_id, msg_size, in_time, 0, msg_id)
+        msg = Message(from_id, to_id, msg_size, in_time, in_time, 0, msg_id)
 
-        self.queued_msgs[from_id].append(msg)
-        self.queued_msgs[to_id].append(msg)
+        self.future_msgs.append(msg)
 
-        self._check_queue(from_id, in_time)
-        self._update_send_rates()
+
+        
 
 
     def _ready_to_receive(self, from_id, to_id):
@@ -241,17 +243,25 @@ class NetworkEmulatorLite:
 
     def move(self):
 
-        # Find next earliest send time
-        earliest_send_time = inf
+        # Find next earliest completion time
+        earliest_completion_time = inf
 
         for msg in self.sending_msgs:
-            msg_send_time = (msg.size - msg.amt_sent) / msg.send_rate
-            if msg_send_time < earliest_send_time:
-                earliest_send_time = msg_send_time
+            msg_completion_time = self.current_time + (msg.size - msg.amt_sent) / msg.send_rate
+            if msg_completion_time < earliest_completion_time:
+                earliest_completion_time = msg_completion_time
 
-        # Move to next earliest send time
-        self.current_time += earliest_send_time
+        # Find next earliest in time
+        earliest_in_time = inf
 
+        for msg in self.future_msgs:
+            if msg.in_time < earliest_in_time:
+                earliest_in_time = msg.in_time
+
+        # Move to next earliest completion time or in time
+        self.current_time = min(earliest_completion_time, earliest_in_time)
+
+        # Process sending msgs
         sent_msgs = []
 
         msg_idx = 0
@@ -290,6 +300,23 @@ class NetworkEmulatorLite:
             final_msg_send_rate = msg.send_rate
 
             self._update_send_rates()
+
+        # Move future msgs in
+        msg_idx = 0
+        while msg_idx < len(self.future_msgs):
+            msg = self.future_msgs[msg_idx]
+
+            if msg.in_time == self.current_time:
+                self.future_msgs.pop(msg_idx)
+                msg_idx -= 1
+
+                self.queued_msgs[msg.from_id].append(msg)
+                self.queued_msgs[msg.to_id].append(msg)
+
+                self._check_queue(msg.from_id, self.current_time)
+                self._update_send_rates()
+
+            msg_idx += 1
 
         # Return sent msgs
         return sent_msgs
