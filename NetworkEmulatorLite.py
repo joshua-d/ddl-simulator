@@ -15,6 +15,9 @@ class Message:
 
         self.id = msg_id
 
+        self.start_time = 0
+        self.end_time = 0
+
 
 class NetworkEmulatorLite:
 
@@ -193,6 +196,7 @@ class NetworkEmulatorLite:
 
                     # set entry time and move into sending_msgs
                     queued_msg.last_checked = check_time
+                    queued_msg.start_time = check_time
                     self.sending_msgs.append(queued_msg)
                     
                     self.total_msgs += 1
@@ -232,6 +236,7 @@ class NetworkEmulatorLite:
 
                     # set entry time and move into sending_msgs
                     queued_msg.last_checked = check_time
+                    queued_msg.start_time = check_time
                     self.sending_msgs.append(queued_msg)
                     
                     self.total_msgs += 1
@@ -276,6 +281,7 @@ class NetworkEmulatorLite:
                 self.sending_msgs.pop(msg_idx)
                 msg_idx -= 1
                 sent_msgs.append(msg)
+                msg.end_time = self.current_time
 
             msg_idx += 1
 
