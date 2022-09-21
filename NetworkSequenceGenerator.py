@@ -55,11 +55,14 @@ class ParameterServer:
         self.sync_style = sync_style
         self.aggr_time = aggr_time
         self.apply_time = apply_time
+
         self.n_param_sets_received = 0
 
         self.waiting_for_parent = False
         self.child_msg_queue = []
         self.waiting_child_id = None
+
+        self.next_available_work_time = 0
 
 
 class NetworkSequenceGenerator:
@@ -156,17 +159,19 @@ class NetworkSequenceGenerator:
 
                     # Add receive and apply events
                     self.events.append(ReceiveParamsEvent(msg.start_time, msg.end_time, msg.from_id, msg.to_id))
-                    self.events.append(PSApplyEvent(self.ne.current_time, self.ne.current_time + ps.apply_time, ps.id))
+                    apply_start_time = max(self.ne.current_time, ps.next_available_work_time)
+                    self.events.append(PSApplyEvent(apply_start_time, apply_start_time + ps.apply_time, ps.id))
+                    ps.next_available_work_time = apply_start_time + ps.apply_time
 
                     # If this is a mid level ps, send up to parent
                     if ps.parent is not None:
-                        self.ne.send_msg(ps.id, ps.parent.id, PARAMS_SIZE, self.ne.current_time + ps.apply_time, None)
+                        self.ne.send_msg(ps.id, ps.parent.id, PARAMS_SIZE, ps.next_available_work_time, None)
                         ps.waiting_for_parent = True
                         ps.waiting_child_id = msg.from_id
 
                     # Otherwise, send down to child
                     else:
-                        self.ne.send_msg(ps.id, msg.from_id, PARAMS_SIZE, self.ne.current_time + ps.apply_time, None)
+                        self.ne.send_msg(ps.id, msg.from_id, PARAMS_SIZE, ps.next_available_work_time, None)
 
                 elif ps.sync_style == 'sync':
                     # Only process if all param sets are in
@@ -290,7 +295,7 @@ node_desc_str = """
         "node_type": "ps",
         "id": 0,
         "parent": null,
-        "sync_style": "async",
+        "sync_style": "sync",
         "aggr_time": 1,
         "apply_time": 1,
 
@@ -301,7 +306,7 @@ node_desc_str = """
         "node_type": "ps",
         "id": 1,
         "parent": 0,
-        "sync_style": "sync",
+        "sync_style": "async",
         "aggr_time": 1,
         "apply_time": 1,
 
@@ -312,7 +317,7 @@ node_desc_str = """
         "node_type": "ps",
         "id": 2,
         "parent": 0,
-        "sync_style": "sync",
+        "sync_style": "async",
         "aggr_time": 1,
         "apply_time": 1,
 
