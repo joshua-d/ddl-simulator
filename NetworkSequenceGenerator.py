@@ -18,6 +18,13 @@ class WorkerStepEvent(Event):
         self.worker_id = worker_id
 
 
+class SendParamsEvent(Event):
+    def __init__(self, start_time, end_time, sender_id, receiver_id):
+        super().__init__(start_time, end_time)
+        self.sender_id = sender_id
+        self.receiver_id = receiver_id
+
+
 class ReceiveParamsEvent(Event):
     def __init__(self, start_time, end_time, sender_id, receiver_id):
         super().__init__(start_time, end_time)
@@ -116,6 +123,7 @@ class NetworkSequenceGenerator:
         # Set up starting events
         for worker in self.workers:
             self.events.append(WorkerStepEvent(0, worker.step_time, worker.id))
+            self.events.append(SendParamsEvent(worker.step_time, worker.step_time, worker.id, worker.parent.id))
             self.ne.send_msg(worker.id, worker.parent.id, PARAMS_SIZE, worker.step_time)
 
         
@@ -134,9 +142,11 @@ class NetworkSequenceGenerator:
 
                     # Immediately send to child(ren)
                     if ps.sync_style == 'async':
+                        self.events.append(SendParamsEvent(self.ne.current_time, self.ne.current_time, ps.id, ps.waiting_child_id))
                         self.ne.send_msg(ps.id, ps.waiting_child_id, PARAMS_SIZE, self.ne.current_time)
                     elif ps.sync_style == 'sync':
                         for child in ps.children:
+                            self.events.append(SendParamsEvent(self.ne.current_time, self.ne.current_time, ps.id, child.id))
                             self.ne.send_msg(ps.id, child.id, PARAMS_SIZE, self.ne.current_time)
 
                     ps.waiting_for_parent = False
@@ -157,20 +167,25 @@ class NetworkSequenceGenerator:
                 if ps.sync_style == 'async':
                     # Process params immediately
 
-                    # Add receive and apply events
+                    # Add receive event
                     self.events.append(ReceiveParamsEvent(msg.start_time, msg.end_time, msg.from_id, msg.to_id))
-                    apply_start_time = max(self.ne.current_time, ps.next_available_work_time)
-                    self.events.append(PSApplyEvent(apply_start_time, apply_start_time + ps.apply_time, ps.id))
-                    ps.next_available_work_time = apply_start_time + ps.apply_time
-
+                    
                     # If this is a mid level ps, send up to parent
+                    # We're adding a zero time apply to make event sequence more useful TODO
                     if ps.parent is not None:
+                        ps.next_available_work_time = max(self.ne.current_time, ps.next_available_work_time)
+                        self.events.append(PSApplyEvent(ps.next_available_work_time, ps.next_available_work_time, ps.id))
+                        self.events.append(SendParamsEvent(ps.next_available_work_time, ps.next_available_work_time, ps.id, ps.parent.id))
                         self.ne.send_msg(ps.id, ps.parent.id, PARAMS_SIZE, ps.next_available_work_time)
                         ps.waiting_for_parent = True
                         ps.waiting_child_id = msg.from_id
 
-                    # Otherwise, send down to child
+                    # Otherwise, apply and then send down to child
                     else:
+                        apply_start_time = max(self.ne.current_time, ps.next_available_work_time)
+                        self.events.append(PSApplyEvent(apply_start_time, apply_start_time + ps.apply_time, ps.id))
+                        ps.next_available_work_time = apply_start_time + ps.apply_time
+                        self.events.append(SendParamsEvent(ps.next_available_work_time, ps.next_available_work_time, ps.id, msg.from_id))
                         self.ne.send_msg(ps.id, msg.from_id, PARAMS_SIZE, ps.next_available_work_time)
 
                 elif ps.sync_style == 'sync':
@@ -187,12 +202,14 @@ class NetworkSequenceGenerator:
 
                         # If this is a mid level ps, send up to parent
                         if ps.parent is not None:
+                            self.events.append(SendParamsEvent(self.ne.current_time + ps.aggr_time + ps.apply_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id, ps.parent.id))
                             self.ne.send_msg(ps.id, ps.parent.id, PARAMS_SIZE, self.ne.current_time + ps.aggr_time + ps.apply_time)
                             ps.waiting_for_parent = True
 
                         # Otherwise, send down to children
                         else:
                             for child in ps.children:
+                                self.events.append(SendParamsEvent(self.ne.current_time + ps.aggr_time + ps.apply_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id, child.id))
                                 self.ne.send_msg(ps.id, child.id, PARAMS_SIZE, self.ne.current_time + ps.aggr_time + ps.apply_time)
 
                         ps.n_param_sets_received = 0
@@ -206,6 +223,7 @@ class NetworkSequenceGenerator:
             self.events.append(WorkerStepEvent(self.ne.current_time, self.ne.current_time + worker.step_time, worker.id))
 
             # Send params to parent
+            self.events.append(SendParamsEvent(self.ne.current_time + worker.step_time, self.ne.current_time + worker.step_time, worker.id, worker.parent.id))
             self.ne.send_msg(worker.id, worker.parent.id, PARAMS_SIZE, self.ne.current_time + worker.step_time)
 
 
@@ -295,7 +313,7 @@ node_desc_str = """
         "node_type": "ps",
         "id": 0,
         "parent": null,
-        "sync_style": "sync",
+        "sync_style": "async",
         "aggr_time": 1,
         "apply_time": 1,
 
