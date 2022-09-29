@@ -14,7 +14,7 @@ class Worker:
         self.optimizer = optimizer
 
         # List of param sets
-        self.incoming_params = []
+        self.incoming_parent_params = []
 
         # Dataset stuff
         chunk = next(dataset_iterator)
@@ -59,8 +59,9 @@ class ParameterServer:
         self.sync_style = sync_style
         self.params = params
 
-        # List of param sets
-        self.incoming_params = []
+        # Lists of param sets
+        self.incoming_child_params = []
+        self.incoming_parent_params = []
 
     # Sync
     def aggr_and_apply_params(self, param_sets):
@@ -77,18 +78,15 @@ class ParameterServer:
     # Async
     def apply_params(self, param_set):
         if self.parent is not None:
-            # Assign params for relay
+            # Assign params for relay (up or down!)
             for param_id in self.params:
                 self.params[param_id].assign(param_set[param_id])
         else:
             # Average params into current (async only works on one set of params at a time)
+            # Only top level ps does this
             for param_id in self.params:
                 param_value = (self.params[param_id].value() + param_set[param_id]) / 2
                 self.params[param_id].assign(param_value)
-
-    def replace_params(self, param_set):
-        for param_id in self.params:
-            self.params[param_id].assign(param_set[param_id])
 
     def get_params(self):
         params = {}
@@ -175,14 +173,18 @@ class ClusterLite:
 
         if type(event) == SendParamsEvent:
             params = self.nodes[event.sender_id].get_params()
-            self.nodes[event.receiver_id].incoming_params.append(params)
+            node = self.nodes[event.receiver_id]
+            if type(node) == Worker or node.parent == event.sender_id:
+                node.incoming_parent_params.append(params)
+            else:
+                node.incoming_child_params.append(params)
 
         elif type(event) == ReceiveParamsEvent:
             receiver = self.nodes[event.receiver_id]
             if type(receiver) == Worker:
                 # Worker should only have 1 param set in incoming params
-                params = receiver.incoming_params[0]
-                receiver.incoming_params = []
+                params = receiver.incoming_parent_params[0]
+                receiver.incoming_parent_params = []
                 receiver.replace_params(params)
 
         elif type(event) == WorkerStepEvent:
@@ -192,12 +194,17 @@ class ClusterLite:
         elif type(event) == PSApplyEvent:
             ps = self.nodes[event.ps_id]
             if ps.sync_style == 'async':
-                params = ps.incoming_params.pop(0)
+                params = ps.incoming_child_params.pop(0)
                 ps.apply_params(params)
             elif ps.sync_style == 'sync':
-                param_sets = ps.incoming_params
-                ps.incoming_params = []
+                param_sets = ps.incoming_child_params
+                ps.incoming_child_params = []
                 ps.aggr_and_apply_params(param_sets)
+
+        elif type(event) == PSParentApplyEvent:
+            ps = self.nodes[event.ps_id]
+            params = ps.incoming_parent_params.pop(0)
+            ps.apply_params(params)
 
     def run(self):
 

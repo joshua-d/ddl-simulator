@@ -44,6 +44,12 @@ class PSApplyEvent(Event):
         self.ps_id = ps_id
 
 
+class PSParentApplyEvent(Event):
+    def __init__(self, start_time, end_time, ps_id):
+        super().__init__(start_time, end_time)
+        self.ps_id = ps_id
+
+
 
 class Worker:
     def __init__(self, id, step_time):
@@ -139,6 +145,9 @@ class NetworkSequenceGenerator:
                     # Handle update from parent
 
                     self.events.append(ReceiveParamsEvent(msg.start_time, msg.end_time, msg.from_id, msg.to_id))
+
+                    # We're adding a zero time apply to make event sequence more useful, see below in async relay too TODO
+                    self.events.append(PSParentApplyEvent(msg.end_time, msg.end_time, ps.id))
 
                     # Immediately send to child(ren)
                     if ps.sync_style == 'async':
