@@ -22,6 +22,8 @@ class Worker:
         self.data_chunk_iterator = iter(chunk)
         self.batch_idx = 0
 
+        self.steps_complete = 0
+
     def get_next_batch(self):
         batch = next(self.data_chunk_iterator)
         self.batch_idx += 1
@@ -37,6 +39,7 @@ class Worker:
     def train_step(self):
         gradients = self.forward_pass(self.get_next_batch())
         self.optimizer.apply_gradients(zip(gradients, self.params.values()))
+        self.steps_complete += 1
 
     def replace_params(self, param_set):
         for param_id in param_set:
@@ -76,7 +79,7 @@ class ParameterServer:
         if self.parent is not None:
             # Assign params for relay
             for param_id in self.params:
-                self.params[param_id].assign(param_set[param_id].value())
+                self.params[param_id].assign(param_set[param_id])
         else:
             # Average params into current (async only works on one set of params at a time)
             for param_id in self.params:
@@ -99,6 +102,7 @@ class ClusterLite:
     def __init__(self, model_builder, dataset_fn, config):
         self.model_builder = model_builder
         self.dataset_fn = dataset_fn
+        self.config = config
 
         self.nodes = {}
 
@@ -111,9 +115,7 @@ class ClusterLite:
         self.steps_complete = 0
 
         self.nsg = NetworkSequenceGenerator(self.node_descs)
-
-        for _ in range(2000):
-            self.nsg.generate()
+        self.gen_buf = 100
 
     def _create_nodes(self):
 
@@ -144,9 +146,6 @@ class ClusterLite:
         self.num_train_samples = self._get_config_item(config, 'num_train_samples')
         self.num_test_samples = self._get_config_item(config, 'num_test_samples')
 
-        self.slow_worker_lb = self._get_config_item(config, 'slow_worker_lower_bound_ms')
-        self.slow_worker_ub = self._get_config_item(config, 'slow_worker_upper_bound_ms')
-
         self.node_descs = self._get_config_item(config, 'nodes')
 
         self.ps_return_threshold = 0 # TODO removed functionality
@@ -154,10 +153,8 @@ class ClusterLite:
         self.data_chunk_size = self._get_config_item(config, 'data_chunk_size')
 
         self.acc_thresholds = self._get_config_item(config, 'acc_thresholds')
-
-        self.record_gantt = self._get_config_item(config, 'record_gantt')
-        self.rg_fg = self._get_config_item(config, 'rg_fine_grained')
-
+        self.eval_interval = self._get_config_item(config, 'eval_interval')
+        self.max_epochs = self._get_config_item(config, 'max_epochs')
 
     def _get_config_item(self, config, item):
         if item not in config:
@@ -204,30 +201,115 @@ class ClusterLite:
 
     def run(self):
 
+        # Prepare vars
+        log_interval = 50
+
+        batches_per_epoch = int(self.num_train_samples / self.batch_size)
+        max_eval_intervals = int((batches_per_epoch / self.eval_interval) * self.max_epochs)
+
+        now = datetime.datetime.now()
+        time_str = str(now.time())
+        time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
+
+        logging_filename = 'eval_logs/sim_%s.txt' % (time_stamp)
+
+        # Eval vars
         x_test, y_test = keras_model.test_dataset(self.num_test_samples)
+        accuracies = []
+        threshold_results = []
+
+        # Begin training
+        print('Beginning training')
+        next_steps_milestone = self.eval_interval
+        eval_num = 0
 
         while True:
+            eval_num += 1
 
-            event = self.nsg.events.pop(0)
-            self.process_event(event)
+            # Process events until next steps milestone
+            while self.steps_complete < next_steps_milestone:
+                if len(self.nsg.events) == 0:
+                    for _ in range(self.gen_buf):
+                        self.nsg.generate()
+                current_event = self.nsg.events.pop(0)
+                self.process_event(current_event)
 
-            if self.steps_complete != 0 and self.steps_complete % 100 == 0:
-                # Evaluate model
-                predictions = self.get_test_model().predict(x_test)            
+            next_steps_milestone += self.eval_interval
 
-                num_correct = 0
-                for prediction, target in zip(predictions, y_test):
-                    answer = 0
-                    answer_val = prediction[0]
-                    for poss_ans_ind in range(len(prediction)):
-                        if prediction[poss_ans_ind] > answer_val:
-                            answer = poss_ans_ind
-                            answer_val = prediction[poss_ans_ind]
-                    if answer == target:
-                        num_correct += 1
+            print('Finished %d steps' % self.steps_complete)
 
-                test_accuracy = float(num_correct) / self.num_test_samples
-                print('Test accuracy: %f' % test_accuracy)
+            # Evaluate model
+            predictions = self.get_test_model().predict(x_test)            
+
+            num_correct = 0
+            for prediction, target in zip(predictions, y_test):
+                answer = 0
+                answer_val = prediction[0]
+                for poss_ans_ind in range(len(prediction)):
+                    if prediction[poss_ans_ind] > answer_val:
+                        answer = poss_ans_ind
+                        answer_val = prediction[poss_ans_ind]
+                if answer == target:
+                    num_correct += 1
+
+            test_accuracy = float(num_correct) / self.num_test_samples
+            print('Test accuracy: %f' % test_accuracy)
+
+            accuracies.append(test_accuracy)
+
+            # Log
+            if eval_num % log_interval == 0:
+                with open(logging_filename, 'a') as outfile:
+                    for accuracy in accuracies:
+                        outfile.write('%f\n' % accuracy)
+                    outfile.close()
+                accuracies = []
+
+            # Check if next acc threshold has been reached
+            if test_accuracy >= self.acc_thresholds[0]:
+                epochs = self.steps_complete / batches_per_epoch
+                # Mark end time of last step event of this interval
+                threshold_results.append((self.acc_thresholds.pop(0), epochs, self.steps_complete, current_event.end_time))
+
+            # STOPPING CONDITIONS
+            if len(self.acc_thresholds) == 0 or eval_num >= max_eval_intervals:
+                break
+
+
+        # Training done, complete logging
+        
+        with open(logging_filename, 'a') as outfile:
+            for accuracy in accuracies:
+                outfile.write('%f\n' % accuracy)
+            outfile.close()
+
+        with open(logging_filename, 'r+') as outfile:
+            data = outfile.read()
+            outfile.seek(0)
+
+            for res in threshold_results:
+                outfile.write('%f:\n%f epochs\n%d batches\n%f end time\n\n' % res)
+            
+            for node in self.nodes.values():
+                if type(node) == Worker:
+                    outfile.write('Worker %d: %d steps\n' % (node.id, node.steps_complete))
+            
+            outfile.write('\n')
+            outfile.write(data)
+
+            outfile.write('\n')
+            for k in self.config:
+                if k == 'nodes' or k == 'acc_thresholds':
+                    continue
+                outfile.write('%s: %s\n' % (k, self.config[k]))
+
+            outfile.write('\n[\n')
+
+            for node_desc in self.node_descs:
+                outfile.write('\t' + str(node_desc) + '\n')
+
+            outfile.write(']\n')
+            outfile.close()
 
 
 
