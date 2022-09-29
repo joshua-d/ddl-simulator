@@ -1,6 +1,6 @@
-from threading import Thread, Condition
+import datetime
 from DatasetIterator import DatasetIterator
-from NetworkSequenceGenerator import *
+from NetworkSequenceGenerator import NetworkSequenceGenerator, WorkerStepEvent, SendParamsEvent, ReceiveParamsEvent, PSAggrEvent, PSApplyEvent, PSParentApplyEvent
 import keras_model
 
 
@@ -95,7 +95,7 @@ class ParameterServer:
         return params
             
             
-class ClusterLite:
+class TwoPassCluster:
 
     def __init__(self, model_builder, dataset_fn, config):
         self.model_builder = model_builder
@@ -114,6 +114,7 @@ class ClusterLite:
 
         self.nsg = NetworkSequenceGenerator(self.node_descs)
         self.gen_buf = 100
+        self.n_generated = 0
 
     def _create_nodes(self):
 
@@ -153,6 +154,8 @@ class ClusterLite:
         self.acc_thresholds = self._get_config_item(config, 'acc_thresholds')
         self.eval_interval = self._get_config_item(config, 'eval_interval')
         self.max_epochs = self._get_config_item(config, 'max_epochs')
+
+        self.generate_gantt = self._get_config_item(config, 'generate_gantt')
 
     def _get_config_item(self, config, item):
         if item not in config:
@@ -206,7 +209,7 @@ class ClusterLite:
             params = ps.incoming_parent_params.pop(0)
             ps.apply_params(params)
 
-    def run(self):
+    def start(self):
 
         # Prepare vars
         log_interval = 50
@@ -238,6 +241,7 @@ class ClusterLite:
                 if len(self.nsg.events) == 0:
                     for _ in range(self.gen_buf):
                         self.nsg.generate()
+                    self.n_generated += self.gen_buf
                 current_event = self.nsg.events.pop(0)
                 self.process_event(current_event)
 
@@ -318,18 +322,8 @@ class ClusterLite:
             outfile.write(']\n')
             outfile.close()
 
-
-
-from model_and_data_builder import model_builder, dataset_fn
-
-def load_config(config_file_path):
-    with open(config_file_path) as config_file:
-        config = json.load(config_file)
-        config_file.close()
-    return config
-
-config = load_config('config.json')
-
-cluster = ClusterLite(model_builder, dataset_fn, config)
-
-cluster.run()
+        if self.generate_gantt:
+            new_nsg = NetworkSequenceGenerator(self.node_descs)
+            for _ in range(self.n_generated):
+                new_nsg.generate()
+            new_nsg.generate_gantt()

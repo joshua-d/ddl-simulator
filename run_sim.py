@@ -1,7 +1,7 @@
 import json
 
 from model_and_data_builder import model_builder, dataset_fn
-from Cluster import Cluster
+from TwoPassCluster import TwoPassCluster
 
 import sys
 
@@ -14,7 +14,7 @@ def load_config(config_file_path):
 
 
 def run_sim(config):
-    cluster = Cluster(model_builder, dataset_fn, config)
+    cluster = TwoPassCluster(model_builder, dataset_fn, config)
     cluster.start()
 
 

@@ -1,13 +1,10 @@
 inbound/outbound_bw: bw in megabits
 
-rg_fine_grained: if recording gantt, update gantt every time message send rate changes
-
-
 
 Example 2-lvl config:
 
 {
-    "bypass_NI": true,
+    "bypass_NI": false,
 
     "learning_rate": 0.001,
     "batch_size": 32,
@@ -15,84 +12,85 @@ Example 2-lvl config:
     "num_train_samples": 60000,
     "num_test_samples": 10000,
 
-    "slow_worker_lower_bound_ms": 0,
-    "slow_worker_upper_bound_ms": 200,
-
     "data_chunk_size": 64,
 
-    "acc_thresholds": [0.93, 0.95],
-
-    "record_gantt": true,
-    "rg_fine_grained": true,
+    "acc_thresholds": [0.60, 0.90],
+    "eval_interval": 100,
+    "max_epochs": 12,
 
     "nodes": [
         {
             "node_type": "ps",
             "id": 0,
-            "parents": [],
-            "update_policy": "gradient",
-            "train_style": "sync",
+            "parent": null,
+            "update_policy": "average",
+            "sync_style": "async",
+            "aggr_time": 1,
+            "apply_time": 1,
 
-            "inbound_bw": 50,
-            "outbound_bw": 50
+            "inbound_bw": 100,
+            "outbound_bw": 100
         },
-
         {
             "node_type": "ps",
             "id": 1,
-            "parents": [0],
-            "update_policy": "gradient",
-            "train_style": "sync",
+            "parent": 0,
+            "update_policy": "average",
+            "sync_style": "async",
+            "aggr_time": 1,
+            "apply_time": 1,
 
-            "inbound_bw": 50,
-            "outbound_bw": 50
+            "inbound_bw": 100,
+            "outbound_bw": 100
         },
         {
             "node_type": "ps",
             "id": 2,
-            "parents": [0],
-            "update_policy": "gradient",
-            "train_style": "sync",
+            "parent": 0,
+            "update_policy": "average",
+            "sync_style": "async",
+            "aggr_time": 1,
+            "apply_time": 1,
 
-            "inbound_bw": 50,
-            "outbound_bw": 50
+            "inbound_bw": 100,
+            "outbound_bw": 100
         },
 
         {
             "node_type": "worker",
             "id": 3,
-            "parents": [1],
-            "slow": true,
+            "parent": 1,
+            "step_time": 10,
 
-            "inbound_bw": 50,
-            "outbound_bw": 50
+            "inbound_bw": 100,
+            "outbound_bw": 100
         },
         {
             "node_type": "worker",
             "id": 4,
-            "parents": [1],
-            "slow": false,
+            "parent": 1,
+            "step_time": 1,
 
-            "inbound_bw": 50,
-            "outbound_bw": 50
+            "inbound_bw": 100,
+            "outbound_bw": 100
         },
         {
             "node_type": "worker",
             "id": 5,
-            "parents": [2],
-            "slow": false,
+            "parent": 2,
+            "step_time": 1,
 
-            "inbound_bw": 50,
-            "outbound_bw": 50
+            "inbound_bw": 100,
+            "outbound_bw": 100
         },
         {
             "node_type": "worker",
             "id": 6,
-            "parents": [2],
-            "slow": false,
+            "parent": 2,
+            "step_time": 1,
 
-            "inbound_bw": 50,
-            "outbound_bw": 50
+            "inbound_bw": 100,
+            "outbound_bw": 100
         }
     ]
 }

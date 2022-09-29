@@ -315,87 +315,25 @@ class NetworkSequenceGenerator:
         outfile.close()
 
 
-import json
-node_desc_str = """
-[
-    {
-        "node_type": "ps",
-        "id": 0,
-        "parent": null,
-        "sync_style": "async",
-        "aggr_time": 1,
-        "apply_time": 1,
+if __name__ == '__main__':
+    import json, sys
 
-        "inbound_bw": 100,
-        "outbound_bw": 100
-    },
-    {
-        "node_type": "ps",
-        "id": 1,
-        "parent": 0,
-        "sync_style": "async",
-        "aggr_time": 1,
-        "apply_time": 1,
+    def load_config(config_file_path):
+        with open(config_file_path) as config_file:
+            config = json.load(config_file)
+            config_file.close()
+        return config
 
-        "inbound_bw": 100,
-        "outbound_bw": 100
-    },
-    {
-        "node_type": "ps",
-        "id": 2,
-        "parent": 0,
-        "sync_style": "async",
-        "aggr_time": 1,
-        "apply_time": 1,
+    if len(sys.argv) > 1:
+        config_file_path = sys.argv[1]
+    else:
+        config_file_path = 'config.json'
 
-        "inbound_bw": 100,
-        "outbound_bw": 100
-    },
+    config = load_config(config_file_path)
 
-    {
-        "node_type": "worker",
-        "id": 3,
-        "parent": 1,
-        "step_time": 1,
+    nsg = NetworkSequenceGenerator(config['nodes'])
 
-        "inbound_bw": 100,
-        "outbound_bw": 100
-    },
-    {
-        "node_type": "worker",
-        "id": 4,
-        "parent": 1,
-        "step_time": 1,
+    for _ in range(200):
+        nsg.generate()
 
-        "inbound_bw": 100,
-        "outbound_bw": 100
-    },
-    {
-        "node_type": "worker",
-        "id": 5,
-        "parent": 2,
-        "step_time": 1,
-
-        "inbound_bw": 100,
-        "outbound_bw": 100
-    },
-    {
-        "node_type": "worker",
-        "id": 6,
-        "parent": 2,
-        "step_time": 1,
-
-        "inbound_bw": 100,
-        "outbound_bw": 100
-    }
-]
-"""
-
-node_descs = json.loads(node_desc_str)
-
-nsg = NetworkSequenceGenerator(node_descs)
-
-for _ in range(200):
-    nsg.generate()
-
-nsg.generate_gantt()
+    nsg.generate_gantt()
