@@ -161,10 +161,12 @@ class NetworkSequenceGenerator:
                     ps.waiting_for_parent = False
 
                     # Process msgs from children
-                    for child_msg in ps.child_msg_queue:
-                        self._process_msg(child_msg)
-                    
-                    ps.child_msg_queue = []
+                    if ps.sync_style == 'sync':
+                        for child_msg in ps.child_msg_queue:
+                            self._process_msg(child_msg)
+
+                    elif ps.sync_style == 'async':
+                        self._process_msg(ps.child_msg_queue.pop(0))
                     
                 else:
                     # Got update from child while waiting for parent

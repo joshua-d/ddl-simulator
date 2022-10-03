@@ -1,4 +1,4 @@
-from math import inf
+from math import inf, isclose
 
 
 class Message:
@@ -141,7 +141,7 @@ class NetworkEmulatorLite:
 
     def _ready_to_send(self, from_id, to_id):
 
-        if self.receiving and len(self.active_msgs[from_id]) != 0 or len(self.queued_msgs[from_id]) == 0: # TODO second case should never happen
+        if self.receiving[from_id] and len(self.active_msgs[from_id]) != 0 or len(self.queued_msgs[from_id]) == 0: # TODO second case should never happen
             return False
 
         queued = self.queued_msgs[from_id]
@@ -274,7 +274,7 @@ class NetworkEmulatorLite:
             msg.amt_sent += (self.current_time - msg.last_checked) * msg.send_rate
             msg.last_checked = self.current_time
 
-            if msg.amt_sent >= msg.size:
+            if msg.amt_sent > msg.size or isclose(msg.amt_sent, msg.size):
                 # message has sent, remove from sending_msgs and add to sent_msgs
                 self.sending_msgs.pop(msg_idx)
                 msg_idx -= 1
