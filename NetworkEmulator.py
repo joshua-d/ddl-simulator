@@ -202,7 +202,7 @@ class NetworkEmulator:
 
     def _ready_to_send(self, from_id, to_id):
 
-        if self.receiving and len(self.active_msgs[from_id]) != 0 or len(self.queued_msgs[from_id]) == 0: # TODO second case should never happen
+        if self.receiving[from_id] and len(self.active_msgs[from_id]) != 0 or len(self.queued_msgs[from_id]) == 0: # TODO second case should never happen
             return False
 
         queued = self.queued_msgs[from_id]
