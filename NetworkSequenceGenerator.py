@@ -1,9 +1,5 @@
-import datetime
+import datetime, random
 from NetworkEmulatorLite import NetworkEmulatorLite
-
-
-# TODO this
-PARAMS_SIZE = 100
 
 
 class Event:
@@ -52,11 +48,12 @@ class PSParentApplyEvent(Event):
 
 
 class Worker:
-    def __init__(self, id, step_time):
+    def __init__(self, id, step_time, st_variation):
         self.id = id
         self.parent = None
 
         self.step_time = step_time
+        self.st_variation = st_variation
 
 
 class ParameterServer:
@@ -80,7 +77,10 @@ class ParameterServer:
 
 class NetworkSequenceGenerator:
 
-    def __init__(self, node_descs):
+    def __init__(self, node_descs, msg_size):
+
+        # In bits
+        self.msg_size = msg_size
 
         self.nodes = []
         self.workers = []
@@ -102,18 +102,19 @@ class NetworkSequenceGenerator:
                     )
                 self.nodes.append(ps)
                 self.parameter_servers.append(ps)
-                inbound_max[ps.id] = node_desc['inbound_bw']
-                outbound_max[ps.id] = node_desc['outbound_bw']
+                inbound_max[ps.id] = node_desc['inbound_bw'] * 1000000
+                outbound_max[ps.id] = node_desc['outbound_bw'] * 1000000
 
             elif node_desc['node_type'] == 'worker':
                 w = Worker(
                         node_desc['id'],
-                        node_desc['step_time']
+                        node_desc['step_time'],
+                        node_desc['st_variation']
                     )
                 self.nodes.append(w)
                 self.workers.append(w)
-                inbound_max[w.id] = node_desc['inbound_bw']
-                outbound_max[w.id] = node_desc['outbound_bw']
+                inbound_max[w.id] = node_desc['inbound_bw'] * 1000000
+                outbound_max[w.id] = node_desc['outbound_bw'] * 1000000
 
         # Nodes in config must be in order of ID
         # Build parents and children lists
@@ -128,9 +129,10 @@ class NetworkSequenceGenerator:
 
         # Set up starting events
         for worker in self.workers:
-            self.events.append(WorkerStepEvent(0, worker.step_time, worker.id))
-            self.events.append(SendParamsEvent(worker.step_time, worker.step_time, worker.id, worker.parent.id))
-            self.ne.send_msg(worker.id, worker.parent.id, PARAMS_SIZE, worker.step_time)
+            step_time = worker.step_time - worker.st_variation + random.uniform(0, worker.st_variation*2)
+            self.events.append(WorkerStepEvent(0, step_time, worker.id))
+            self.events.append(SendParamsEvent(step_time, step_time, worker.id, worker.parent.id))
+            self.ne.send_msg(worker.id, worker.parent.id, self.msg_size, step_time)
 
         
 
@@ -152,11 +154,11 @@ class NetworkSequenceGenerator:
                     # Immediately send to child(ren)
                     if ps.sync_style == 'async':
                         self.events.append(SendParamsEvent(self.ne.current_time, self.ne.current_time, ps.id, ps.waiting_child_id))
-                        self.ne.send_msg(ps.id, ps.waiting_child_id, PARAMS_SIZE, self.ne.current_time)
+                        self.ne.send_msg(ps.id, ps.waiting_child_id, self.msg_size, self.ne.current_time)
                     elif ps.sync_style == 'sync':
                         for child in ps.children:
                             self.events.append(SendParamsEvent(self.ne.current_time, self.ne.current_time, ps.id, child.id))
-                            self.ne.send_msg(ps.id, child.id, PARAMS_SIZE, self.ne.current_time)
+                            self.ne.send_msg(ps.id, child.id, self.msg_size, self.ne.current_time)
 
                     ps.waiting_for_parent = False
 
@@ -187,7 +189,7 @@ class NetworkSequenceGenerator:
                         ps.next_available_work_time = max(self.ne.current_time, ps.next_available_work_time)
                         self.events.append(PSApplyEvent(ps.next_available_work_time, ps.next_available_work_time, ps.id))
                         self.events.append(SendParamsEvent(ps.next_available_work_time, ps.next_available_work_time, ps.id, ps.parent.id))
-                        self.ne.send_msg(ps.id, ps.parent.id, PARAMS_SIZE, ps.next_available_work_time)
+                        self.ne.send_msg(ps.id, ps.parent.id, self.msg_size, ps.next_available_work_time)
                         ps.waiting_for_parent = True
                         ps.waiting_child_id = msg.from_id
 
@@ -197,7 +199,7 @@ class NetworkSequenceGenerator:
                         self.events.append(PSApplyEvent(apply_start_time, apply_start_time + ps.apply_time, ps.id))
                         ps.next_available_work_time = apply_start_time + ps.apply_time
                         self.events.append(SendParamsEvent(ps.next_available_work_time, ps.next_available_work_time, ps.id, msg.from_id))
-                        self.ne.send_msg(ps.id, msg.from_id, PARAMS_SIZE, ps.next_available_work_time)
+                        self.ne.send_msg(ps.id, msg.from_id, self.msg_size, ps.next_available_work_time)
 
                 elif ps.sync_style == 'sync':
                     # Only process if all param sets are in
@@ -214,14 +216,14 @@ class NetworkSequenceGenerator:
                         # If this is a mid level ps, send up to parent
                         if ps.parent is not None:
                             self.events.append(SendParamsEvent(self.ne.current_time + ps.aggr_time + ps.apply_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id, ps.parent.id))
-                            self.ne.send_msg(ps.id, ps.parent.id, PARAMS_SIZE, self.ne.current_time + ps.aggr_time + ps.apply_time)
+                            self.ne.send_msg(ps.id, ps.parent.id, self.msg_size, self.ne.current_time + ps.aggr_time + ps.apply_time)
                             ps.waiting_for_parent = True
 
                         # Otherwise, send down to children
                         else:
                             for child in ps.children:
                                 self.events.append(SendParamsEvent(self.ne.current_time + ps.aggr_time + ps.apply_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id, child.id))
-                                self.ne.send_msg(ps.id, child.id, PARAMS_SIZE, self.ne.current_time + ps.aggr_time + ps.apply_time)
+                                self.ne.send_msg(ps.id, child.id, self.msg_size, self.ne.current_time + ps.aggr_time + ps.apply_time)
 
                         ps.n_param_sets_received = 0
 
@@ -231,11 +233,13 @@ class NetworkSequenceGenerator:
 
             # Add receive and step events
             self.events.append(ReceiveParamsEvent(msg.start_time, msg.end_time, msg.from_id, msg.to_id))
-            self.events.append(WorkerStepEvent(self.ne.current_time, self.ne.current_time + worker.step_time, worker.id))
+
+            step_time = worker.step_time - worker.st_variation + random.uniform(0, worker.st_variation*2)
+            self.events.append(WorkerStepEvent(self.ne.current_time, self.ne.current_time + step_time, worker.id))
 
             # Send params to parent
-            self.events.append(SendParamsEvent(self.ne.current_time + worker.step_time, self.ne.current_time + worker.step_time, worker.id, worker.parent.id))
-            self.ne.send_msg(worker.id, worker.parent.id, PARAMS_SIZE, self.ne.current_time + worker.step_time)
+            self.events.append(SendParamsEvent(self.ne.current_time + step_time, self.ne.current_time + step_time, worker.id, worker.parent.id))
+            self.ne.send_msg(worker.id, worker.parent.id, self.msg_size, self.ne.current_time + step_time)
 
 
     def generate(self):
@@ -333,7 +337,7 @@ if __name__ == '__main__':
 
     config = load_config(config_file_path)
 
-    nsg = NetworkSequenceGenerator(config['nodes'])
+    nsg = NetworkSequenceGenerator(config['nodes'], 17000000)
 
     for _ in range(200):
         nsg.generate()

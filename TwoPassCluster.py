@@ -1,4 +1,5 @@
 import datetime
+import numpy as np
 from DatasetIterator import DatasetIterator
 from NetworkSequenceGenerator import NetworkSequenceGenerator, WorkerStepEvent, SendParamsEvent, ReceiveParamsEvent, PSAggrEvent, PSApplyEvent, PSParentApplyEvent
 import keras_model
@@ -112,7 +113,8 @@ class TwoPassCluster:
 
         self.steps_complete = 0
 
-        self.nsg = NetworkSequenceGenerator(self.node_descs)
+        msg_size = self._get_model_size()
+        self.nsg = NetworkSequenceGenerator(self.node_descs, msg_size)
         self.gen_buf = 100
         self.n_generated = 0
 
@@ -171,6 +173,12 @@ class TwoPassCluster:
             self.test_model_params[param_id].assign(vals_by_param_id[param_id])
 
         return self.test_model
+
+    def _get_model_size(self):
+        total_bits = 0
+        for param in self.test_model_params.values():
+            total_bits += np.size(param) * np.size(param.dtype) * 8
+        return total_bits
 
     def process_event(self, event):
 
