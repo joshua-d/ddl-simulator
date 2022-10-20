@@ -64,6 +64,8 @@ class ParameterServer:
         self.incoming_child_params = []
         self.incoming_parent_params = []
 
+        self.received_first_update = False
+
     # Sync
     def aggr_and_apply_params(self, param_sets):
         # Average and assign params
@@ -78,10 +80,12 @@ class ParameterServer:
 
     # Async
     def apply_params(self, param_set):
-        if self.parent is not None:
+        if self.parent is not None or not self.received_first_update:
             # Assign params for relay (up or down!)
             for param_id in self.params:
                 self.params[param_id].assign(param_set[param_id])
+
+            self.received_first_update = True
         else:
             # Average params into current (async only works on one set of params at a time)
             # Only top level ps does this
