@@ -77,7 +77,7 @@ class ParameterServer:
 
 class NetworkSequenceGenerator:
 
-    def __init__(self, node_descs, msg_size, send_rate_multiplier):
+    def __init__(self, node_descs, msg_size):
 
         # In bits
         self.msg_size = msg_size
@@ -125,7 +125,7 @@ class NetworkSequenceGenerator:
                 node.parent.children.append(node)
 
         # Build NE
-        self.ne = NetworkEmulatorLiteFullDuplex((inbound_max, outbound_max), send_rate_multiplier)
+        self.ne = NetworkEmulatorLiteFullDuplex((inbound_max, outbound_max))
 
         # Set up starting events
         for worker in self.workers:
@@ -337,7 +337,7 @@ if __name__ == '__main__':
 
     config = load_config(config_file_path)
 
-    nsg = NetworkSequenceGenerator(config['nodes'], 17000000, config['send_rate_multiplier'])
+    nsg = NetworkSequenceGenerator(config['nodes'], 17000000)
 
     for _ in range(200):
         nsg.generate()

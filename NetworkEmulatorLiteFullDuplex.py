@@ -19,10 +19,9 @@ class Message:
 
 class NetworkEmulatorLiteFullDuplex:
 
-    def __init__(self, node_bws, send_rate_multiplier):
+    def __init__(self, node_bws):
 
         self.inbound_max, self.outbound_max = node_bws
-        self.send_rate_multiplier = send_rate_multiplier
 
         self.sending = {}
         self.receiving = {}
@@ -50,8 +49,17 @@ class NetworkEmulatorLiteFullDuplex:
         for node_id in self.inbound_max.keys():
             for msg in self.sending[node_id]:
                 incoming_offering[msg] = self.inbound_max[node_id] / len(self.sending[node_id])
+
+                # This part simulates half duplex
+                if len(self.receiving[node_id]) != 0:
+                    incoming_offering[msg] /= 2
+
             for msg in self.receiving[node_id]:
                 outgoing_offering[msg] = self.outbound_max[node_id] / len(self.receiving[node_id])
+
+                # This part simulates half duplex
+                if len(self.sending[node_id]) != 0:
+                    outgoing_offering[msg] /= 2
 
         final_msgs = []  # TODO perhaps more efficient if this was a map?
 
@@ -76,7 +84,7 @@ class NetworkEmulatorLiteFullDuplex:
                 for msg in self.receiving[least_offering_node_id]:
                     if msg not in final_msgs:
 
-                        msg.send_rate = least_offering * self.send_rate_multiplier
+                        msg.send_rate = least_offering
                         final_msgs.append(msg)
                         
                         distribute_msgs = []
@@ -94,7 +102,7 @@ class NetworkEmulatorLiteFullDuplex:
                 for msg in self.sending[least_offering_node_id]:
                     if msg not in final_msgs:
 
-                        msg.send_rate = least_offering * self.send_rate_multiplier
+                        msg.send_rate = least_offering
                         final_msgs.append(msg)
                         
                         distribute_msgs = []
