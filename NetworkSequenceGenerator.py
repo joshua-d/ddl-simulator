@@ -1,5 +1,5 @@
 import datetime, random
-from NetworkEmulatorLite import NetworkEmulatorLite
+from NetworkEmulatorLiteFullDuplex import NetworkEmulatorLiteFullDuplex
 
 
 class Event:
@@ -77,7 +77,7 @@ class ParameterServer:
 
 class NetworkSequenceGenerator:
 
-    def __init__(self, node_descs, msg_size):
+    def __init__(self, node_descs, msg_size, send_rate_multiplier):
 
         # In bits
         self.msg_size = msg_size
@@ -125,7 +125,7 @@ class NetworkSequenceGenerator:
                 node.parent.children.append(node)
 
         # Build NE
-        self.ne = NetworkEmulatorLite((inbound_max, outbound_max))
+        self.ne = NetworkEmulatorLiteFullDuplex((inbound_max, outbound_max), send_rate_multiplier)
 
         # Set up starting events
         for worker in self.workers:
@@ -337,7 +337,7 @@ if __name__ == '__main__':
 
     config = load_config(config_file_path)
 
-    nsg = NetworkSequenceGenerator(config['nodes'], 17000000)
+    nsg = NetworkSequenceGenerator(config['nodes'], 17000000, config['send_rate_multiplier'])
 
     for _ in range(200):
         nsg.generate()

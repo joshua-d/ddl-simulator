@@ -118,7 +118,7 @@ class TwoPassCluster:
         self.steps_complete = 0
 
         msg_size = self._get_model_size()
-        self.nsg = NetworkSequenceGenerator(self.node_descs, msg_size)
+        self.nsg = NetworkSequenceGenerator(self.node_descs, msg_size, self.send_rate_multiplier)
         self.gen_buf = 100
         self.n_generated = 0
 
@@ -160,6 +160,8 @@ class TwoPassCluster:
         self.acc_thresholds = self._get_config_item(config, 'acc_thresholds')
         self.eval_interval = self._get_config_item(config, 'eval_interval')
         self.max_epochs = self._get_config_item(config, 'max_epochs')
+
+        self.send_rate_multiplier = self._get_config_item(config, 'send_rate_multiplier')
 
         self.generate_gantt = self._get_config_item(config, 'generate_gantt')
 
