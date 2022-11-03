@@ -47,18 +47,18 @@ class NetworkEmulatorLiteFullDuplex:
         outgoing_offering = {}
 
         for node_id in self.inbound_max.keys():
-            for msg in self.sending[node_id]:
-                incoming_offering[msg] = self.inbound_max[node_id] / len(self.sending[node_id])
-
-                # This part simulates half duplex
-                if len(self.receiving[node_id]) != 0:
-                    incoming_offering[msg] /= 2
-
             for msg in self.receiving[node_id]:
-                outgoing_offering[msg] = self.outbound_max[node_id] / len(self.receiving[node_id])
+                incoming_offering[msg] = self.inbound_max[node_id] / len(self.receiving[node_id])
 
                 # This part simulates half duplex
                 if len(self.sending[node_id]) != 0:
+                    incoming_offering[msg] /= 2
+
+            for msg in self.sending[node_id]:
+                outgoing_offering[msg] = self.outbound_max[node_id] / len(self.sending[node_id])
+
+                # This part simulates half duplex
+                if len(self.receiving[node_id]) != 0:
                     outgoing_offering[msg] /= 2
 
         final_msgs = []  # TODO perhaps more efficient if this was a map?
@@ -196,3 +196,28 @@ class NetworkEmulatorLiteFullDuplex:
 
         # Return sent msgs
         return sent_msgs
+
+
+
+node_bws = ({
+    0: 10,
+    1: 10,
+    2: 10
+},
+{
+    0: 10,
+    1: 10,
+    2: 10
+})
+
+ne = NetworkEmulatorLiteFullDuplex(node_bws)
+
+ne.send_msg(0, 1, 100, 0)
+ne.send_msg(0, 1, 100, 0)
+ne.send_msg(2, 0, 100, 0)
+
+sent_msgs = []
+while len(sent_msgs) == 0:
+    sent_msgs = ne.move()
+    for msg in sent_msgs:
+        print('from {0} to {1}, start {2}, end {3}'.format(msg.from_id, msg.to_id, msg.start_time, msg.end_time))
