@@ -48,18 +48,24 @@ class NetworkEmulatorLiteFullDuplex:
 
         for node_id in self.inbound_max.keys():
             for msg in self.receiving[node_id]:
-                incoming_offering[msg] = self.inbound_max[node_id] / len(self.receiving[node_id])
-
+                
                 # This part simulates half duplex
                 if len(self.sending[node_id]) != 0:
-                    incoming_offering[msg] /= 2
+                    inbound_max = self.inbound_max[node_id] / 2
+                else:
+                    inbound_max = self.inbound_max[node_id]
+
+                incoming_offering[msg] = inbound_max / len(self.receiving[node_id])
 
             for msg in self.sending[node_id]:
-                outgoing_offering[msg] = self.outbound_max[node_id] / len(self.sending[node_id])
 
                 # This part simulates half duplex
                 if len(self.receiving[node_id]) != 0:
-                    outgoing_offering[msg] /= 2
+                    outbound_max = self.outbound_max[node_id] / 2
+                else:
+                    outbound_max = self.outbound_max[node_id]
+
+                outgoing_offering[msg] = outbound_max / len(self.sending[node_id])
 
         final_msgs = []  # TODO perhaps more efficient if this was a map?
 
@@ -88,7 +94,7 @@ class NetworkEmulatorLiteFullDuplex:
                         final_msgs.append(msg)
                         
                         distribute_msgs = []
-                        for aux_msg in self.receiving[msg.from_id]:
+                        for aux_msg in self.sending[msg.from_id]:
                             if aux_msg not in final_msgs:
                                 distribute_msgs.append(aux_msg)
 
@@ -106,7 +112,7 @@ class NetworkEmulatorLiteFullDuplex:
                         final_msgs.append(msg)
                         
                         distribute_msgs = []
-                        for aux_msg in self.sending[msg.to_id]:
+                        for aux_msg in self.receiving[msg.to_id]:
                             if aux_msg not in final_msgs:
                                 distribute_msgs.append(aux_msg)
 
@@ -198,26 +204,41 @@ class NetworkEmulatorLiteFullDuplex:
         return sent_msgs
 
 
+if __name__ == '__main__':
+    node_bws = ({
+        0: 10,
+        1: 10,
+        2: 10,
+        3: 10
+    },
+    {
+        0: 10,
+        1: 10,
+        2: 10,
+        3: 10
+    })
 
-node_bws = ({
-    0: 10,
-    1: 10,
-    2: 10
-},
-{
-    0: 10,
-    1: 10,
-    2: 10
-})
+    ne = NetworkEmulatorLiteFullDuplex(node_bws)
 
-ne = NetworkEmulatorLiteFullDuplex(node_bws)
+    ne.send_msg(0, 1, 100, 0)
+    ne.send_msg(0, 1, 100, 0)
+    ne.send_msg(2, 0, 100, 0)
+    # 2.5, 2.5, 5
 
-ne.send_msg(0, 1, 100, 0)
-ne.send_msg(0, 1, 100, 0)
-ne.send_msg(2, 0, 100, 0)
+    ne.send_msg(2, 0, 100, 10)
+    # 2.5, 2.5, 2.5, 2.5
 
-sent_msgs = []
-while len(sent_msgs) == 0:
-    sent_msgs = ne.move()
-    for msg in sent_msgs:
-        print('from {0} to {1}, start {2}, end {3}'.format(msg.from_id, msg.to_id, msg.start_time, msg.end_time))
+    ne.send_msg(1, 0, 100, 15)
+    # 2.5, 2.5, 1.66, 1.66, 1.66
+
+    ne.send_msg(1, 3, 100, 20)
+    # 2.5, 2.5, 1.66, 1.66, 1.66, 3.33
+
+    ne.send_msg(3, 1, 100, 25)
+
+    sent_msgs = []
+    while len(sent_msgs) == 0:
+        sent_msgs = ne.move()
+        for msg in sent_msgs:
+            print('from {0} to {1}, start {2}, end {3}'.format(msg.from_id, msg.to_id, msg.start_time, msg.end_time))
+        sent_msgs = []
