@@ -235,6 +235,9 @@ class TwoPassCluster:
 
         logging_filename = 'eval_logs/sim_%s.txt' % (time_stamp)
 
+        if self.generate_gantt:
+            saved_events = []
+
         # Eval vars
         x_test, y_test = keras_model.test_dataset(self.num_test_samples)
         accuracies = []
@@ -255,6 +258,8 @@ class TwoPassCluster:
                         self.nsg.generate()
                     self.n_generated += self.gen_buf
                 current_event = self.nsg.events.pop(0)
+                if self.generate_gantt:
+                    saved_events.append(current_event)
                 self.process_event(current_event)
 
             next_steps_milestone += self.eval_interval
@@ -335,7 +340,5 @@ class TwoPassCluster:
             outfile.close()
 
         if self.generate_gantt:
-            new_nsg = NetworkSequenceGenerator(self.node_descs)
-            for _ in range(self.n_generated):
-                new_nsg.generate()
-            new_nsg.generate_gantt()
+            self.nsg.events = saved_events
+            self.nsg.generate_gantt()

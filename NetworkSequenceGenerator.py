@@ -1,5 +1,6 @@
 import datetime, random
 from NetworkEmulatorLiteFullDuplex import NetworkEmulatorLiteFullDuplex
+import json
 
 
 class Event:
