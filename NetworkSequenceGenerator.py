@@ -276,7 +276,7 @@ class NetworkSequenceGenerator:
         time_str = str(now.time())
         time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
 
-        # Generate file
+        # Generate row array string
         rows = ""
 
         for node in self.nodes:
@@ -314,11 +314,87 @@ class NetworkSequenceGenerator:
             row = '{{ "label": "{0}", "times": [ {1} ]}},'.format(label, times_str[0:-1])
             rows += row
 
-        res = "[" + rows[0:-1] + ']'
+        row_array_str = "[" + rows[0:-1] + ']'
+
+        # Generate timing breakdown data
+        timing = self.get_timing_breakdown()
+
+        total_info = {
+            'computation': 0,
+            'transmission': 0,
+            'idle': 0
+        }
+        total_time = 0
+
+        for node_id in timing:
+            node_total_time = 0
+            for k in ['computation', 'transmission', 'idle']:
+                node_total_time += timing[node_id][k]
+                total_time += timing[node_id][k]
+                total_info[k] += timing[node_id][k]
+            for k in ['computation', 'transmission', 'idle']:
+                timing[node_id]['percent_' + k] = timing[node_id][k] / node_total_time
+
+        for k in ['computation', 'transmission', 'idle']:
+            total_info['percent_' + k] = total_info[k] / total_time
+
+        timing['total'] = total_info
+
+        timing_str = json.dumps(timing)
+
+        # Generate file
+        output = """
+        {{
+            "timing": {0},
+            "rows": {1}
+        }}
+        """.format(timing_str, row_array_str)
 
         outfile = open('gantt/gantt_datas/gantt_data_%s.json' % time_stamp, 'w')
-        outfile.write(res)
+        outfile.write(output)
         outfile.close()
+
+    def get_timing_breakdown(self):
+
+        timing = {}
+        events_by_node_id = {}
+        for node in self.nodes:
+            timing[node.id] = {
+                'computation': 0,
+                'transmission': 0,
+                'idle': 0
+            }
+            events_by_node_id[node.id] = []
+        
+        for event in self.events:
+            if type(event) == WorkerStepEvent:
+                events_by_node_id[event.worker_id].append(event)
+            elif type(event) == PSAggrEvent or type(event) == PSApplyEvent:
+                events_by_node_id[event.ps_id].append(event)
+            elif type(event) == ReceiveParamsEvent:
+                events_by_node_id[event.receiver_id].append(event)
+                events_by_node_id[event.sender_id].append(event)
+
+        for node_id in events_by_node_id:
+            events_by_node_id[node_id].sort(key=lambda e: e.start_time)
+
+            if len(events_by_node_id[node_id]) != 0:
+                timing[node_id]['idle'] += events_by_node_id[node_id][0].start_time
+                current_time = events_by_node_id[node_id][0].start_time
+
+            for event in events_by_node_id[node_id]:
+                if event.start_time > current_time:
+                    timing[node_id]['idle'] += event.start_time - current_time
+                    current_time = event.start_time
+
+                if event.end_time > current_time:
+                    if type(event) in [WorkerStepEvent, PSAggrEvent, PSApplyEvent]:
+                        timing[node_id]['computation'] += event.end_time - current_time
+                    elif type(event) == ReceiveParamsEvent:
+                        timing[node_id]['transmission'] += event.end_time - current_time
+                    current_time = event.end_time
+
+        return timing
 
 
 if __name__ == '__main__':
