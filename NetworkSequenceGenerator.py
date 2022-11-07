@@ -318,6 +318,7 @@ class NetworkSequenceGenerator:
         row_array_str = "[" + rows[0:-1] + ']'
 
         # Generate timing breakdown data
+        # TODO move this into get_timing_breakdown probably
         timing = self.get_timing_breakdown()
 
         total_info = {
@@ -373,7 +374,6 @@ class NetworkSequenceGenerator:
             elif type(event) == PSAggrEvent or type(event) == PSApplyEvent:
                 events_by_node_id[event.ps_id].append(event)
             elif type(event) == ReceiveParamsEvent:
-                events_by_node_id[event.receiver_id].append(event)
                 events_by_node_id[event.sender_id].append(event)
 
         for node_id in events_by_node_id:
@@ -384,17 +384,25 @@ class NetworkSequenceGenerator:
                 current_time = events_by_node_id[node_id][0].start_time
 
             for event in events_by_node_id[node_id]:
+
                 if event.start_time > current_time:
                     timing[node_id]['idle'] += event.start_time - current_time
                     current_time = event.start_time
 
-                if event.end_time > current_time:
-                    if type(event) in [WorkerStepEvent, PSAggrEvent, PSApplyEvent]:
-                        timing[node_id]['computation'] += event.end_time - current_time
-                    elif type(event) == ReceiveParamsEvent:
-                        timing[node_id]['transmission'] += event.end_time - current_time
+                if type(event) in [WorkerStepEvent, PSAggrEvent, PSApplyEvent]:
+                    if event.start_time < current_time < event.end_time:
+                        timing[node_id]['transmission'] -= current_time - event.start_time
+                    elif event.start_time < current_time:
+                        timing[node_id]['transmission'] -= event.end_time - event.start_time
+
+                    timing[node_id]['computation'] += event.end_time - event.start_time
                     current_time = event.end_time
 
+                elif type(event) == ReceiveParamsEvent:
+                    if event.end_time > current_time:
+                        timing[node_id]['transmission'] += event.end_time - current_time
+                        current_time = event.end_time
+                    
         return timing
 
 
