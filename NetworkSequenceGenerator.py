@@ -1,5 +1,5 @@
 import datetime, random
-from NetworkEmulatorLiteFullDuplex import NetworkEmulatorLiteFullDuplex
+from NetworkEmulatorLiteHalfDuplex import NetworkEmulatorLiteHalfDuplex
 import json
 
 
@@ -126,7 +126,7 @@ class NetworkSequenceGenerator:
                 node.parent.children.append(node)
 
         # Build NE
-        self.ne = NetworkEmulatorLiteFullDuplex((inbound_max, outbound_max))
+        self.ne = NetworkEmulatorLiteHalfDuplex((inbound_max, outbound_max))
 
         # Set up starting events
         for worker in self.workers:

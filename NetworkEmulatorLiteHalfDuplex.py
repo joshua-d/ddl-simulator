@@ -17,7 +17,7 @@ class Message:
         self.end_time = 0
 
 
-class NetworkEmulatorLiteFullDuplex:
+class NetworkEmulatorLiteHalfDuplex:
 
     def __init__(self, node_bws):
 
