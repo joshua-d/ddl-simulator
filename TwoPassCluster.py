@@ -65,6 +65,7 @@ class ParameterServer:
         self.incoming_parent_params = []
 
         self.received_first_update = False
+        self.has_async_child = False
 
     # Sync
     def aggr_and_apply_params(self, param_sets):
@@ -76,7 +77,12 @@ class ParameterServer:
                 param_value += param_set[param_id]
             
             param_value /= len(param_sets)
-            self.params[param_id].assign(param_value)
+
+            if not self.has_async_child:
+                self.params[param_id].assign(param_value)
+            else:
+                # Average into current instead of replacing
+                self.params[param_id].assign((param_value + self.params[param_id].value()) / 2)
 
     # Async
     def apply_params(self, param_set):
@@ -135,6 +141,8 @@ class TwoPassCluster:
             if node_desc['node_type'] == 'ps':
                 ps = ParameterServer(node_desc['id'], node_desc['parent'], node_desc['sync_style'], params)
                 self.nodes[ps.id] = ps
+                if node_desc['sync_style'] == 'async' and node_desc['parent'] is not None:
+                    self.nodes[node_desc['parent']].has_async_child = True
 
             elif node_desc['node_type'] == 'worker':
                 worker = Worker(node_desc['id'], params, forward_pass, dataset_iterator, build_optimizer(self.learning_rate))
