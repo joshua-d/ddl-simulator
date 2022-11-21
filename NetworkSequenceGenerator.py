@@ -168,7 +168,7 @@ class NetworkSequenceGenerator:
                         for child_msg in ps.child_msg_queue:
                             self._process_msg(child_msg)
 
-                    elif ps.sync_style == 'async':
+                    elif ps.sync_style == 'async' and len(ps.child_msg_queue) != 0:
                         self._process_msg(ps.child_msg_queue.pop(0))
                     
                 else:
@@ -253,7 +253,7 @@ class NetworkSequenceGenerator:
         for msg in sent_msgs:
             self._process_msg(msg)
             
-    def generate_gantt(self):
+    def generate_gantt(self, time_stamp):
 
         # Make node gantt channels
         gantts = {}
@@ -271,11 +271,6 @@ class NetworkSequenceGenerator:
                     gantts[event.receiver_id].append(event)
                 else:
                     gantts[event.sender_id].append(event)
-
-        # Get time stamp
-        now = datetime.datetime.now()
-        time_str = str(now.time())
-        time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
 
         # Generate row array string
         rows = ""

@@ -349,4 +349,4 @@ class TwoPassCluster:
 
         if self.generate_gantt:
             self.nsg.events = saved_events
-            self.nsg.generate_gantt()
+            self.nsg.generate_gantt(time_stamp)
