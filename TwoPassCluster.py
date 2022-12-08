@@ -67,6 +67,10 @@ class ParameterServer:
         self.received_first_update = False
         self.has_async_child = False
 
+        self.tsync_total = 0
+        self.tsync_n = 0
+        self.tsync_last = 0
+
     # Sync
     def aggr_and_apply_params(self, param_sets):
         # Average and assign params
@@ -224,6 +228,11 @@ class TwoPassCluster:
                 ps.incoming_child_params = []
                 ps.aggr_and_apply_params(param_sets)
 
+                # Measure tsync
+                ps.tsync_total += event.start_time - ps.tsync_last
+                ps.tsync_last = event.start_time
+                ps.tsync_n += 1
+
         elif type(event) == PSParentApplyEvent:
             ps = self.nodes[event.ps_id]
             params = ps.incoming_parent_params.pop(0)
@@ -330,6 +339,12 @@ class TwoPassCluster:
                 if type(node) == Worker:
                     outfile.write('Worker %d: %d steps\n' % (node.id, node.steps_complete))
             
+            outfile.write('\n')
+
+            for node in self.nodes.values():
+                if type(node) == ParameterServer and node.sync_style == 'sync':
+                    outfile.write('PS %d tsync: %f\n' % (node.id, node.tsync_total / node.tsync_n))
+
             outfile.write('\n')
             outfile.write(data)
 

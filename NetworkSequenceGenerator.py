@@ -417,7 +417,7 @@ if __name__ == '__main__':
 
     config = load_config(config_file_path)
 
-    nsg = NetworkSequenceGenerator(config['nodes'], 17000000)
+    nsg = NetworkSequenceGenerator(config['nodes'], 17039680)
 
     for _ in range(200):
         nsg.generate()
