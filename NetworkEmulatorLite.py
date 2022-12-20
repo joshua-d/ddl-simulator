@@ -1,10 +1,10 @@
-from math import inf, isclose
+from math import inf, isclose, sqrt
 
-# Linear growth coefficient, Mbps
-lgc = 0.1
+# Linear growth coefficient, b/s/s
+lgc = 1000000
 
-# Starting send rate, Mbps
-starting_sr = 0.1
+# Starting send rate, b/s
+starting_sr = 1000000
 
 class Message:
     def __init__(self, from_id, to_id, size, in_time, last_checked):
@@ -155,13 +155,16 @@ class NetworkEmulatorLite:
                 # sd: seconds until sr reaches designated
                 sd = abs(msg.dsg_send_rate - msg.send_rate)/lgc
 
-                # spc: seconds until completion - potential based on forever-moving sr
-                spc = 2 * data_left / (msg.send_rate + msg.dsg_send_rate) # simplified from data_left / (lower_sr + 0.5*(upper_sr - lower_sr))
+                sent_at_sd = msg.amt_sent + sd*(msg.send_rate + msg.dsg_send_rate)/2
 
-                if spc <= sd:
+                if sent_at_sd > msg.size:
+                    # spc: seconds until completion - potential based on forever-moving sr
+                    a = 0.5*lgc
+                    b = msg.send_rate
+                    c = -data_left
+                    spc = (-b + sqrt(b**2 - 4*a*c))/(2*a)
                     msg_completion_time = self.current_time + spc
                 else:
-                    sent_at_sd = msg.amt_sent + sd*(msg.send_rate + msg.dsg_send_rate)/2 # simplified from lower_sr*sd + 0.5(upper_sr - lower_sr)*sd
                     data_left = msg.size - sent_at_sd
                     msg_completion_time = self.current_time + sd + data_left/msg.dsg_send_rate
 
