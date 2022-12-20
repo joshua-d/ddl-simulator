@@ -1,8 +1,10 @@
 from math import inf, isclose
 
+# Linear growth coefficient, Mbps
+lgc = 0.1
 
 class Message:
-    def __init__(self, from_id, to_id, size, in_time, last_checked, send_rate):
+    def __init__(self, from_id, to_id, size, in_time, last_checked):
         self.from_id = from_id
         self.to_id = to_id
         self.size = size
@@ -11,7 +13,11 @@ class Message:
         self.in_time = in_time
         self.last_checked = last_checked
 
-        self.send_rate = send_rate
+        # Designated send rate
+        self.dsg_send_rate = 0
+
+        # Current send rate
+        self.send_rate = 0
 
         self.start_time = 0
         self.end_time = 0
@@ -41,7 +47,7 @@ class NetworkEmulatorLite:
         self.future_msgs = []
 
 
-    def _update_send_rates(self):
+    def _update_dsg_send_rates(self):
 
         # Prepare
         incoming_offering = {}
@@ -91,7 +97,7 @@ class NetworkEmulatorLite:
                 for msg in self.receiving[least_offering_node_id]:
                     if msg not in final_msgs:
 
-                        msg.send_rate = least_offering
+                        msg.dsg_send_rate = least_offering
                         final_msgs.append(msg)
                         
                         distribute_msgs = []
@@ -109,7 +115,7 @@ class NetworkEmulatorLite:
                 for msg in self.sending[least_offering_node_id]:
                     if msg not in final_msgs:
 
-                        msg.send_rate = least_offering
+                        msg.dsg_send_rate = least_offering
                         final_msgs.append(msg)
                         
                         distribute_msgs = []
@@ -125,7 +131,7 @@ class NetworkEmulatorLite:
 
 
     def send_msg(self, from_id, to_id, msg_size, in_time):
-        msg = Message(from_id, to_id, msg_size, in_time, in_time, 0)
+        msg = Message(from_id, to_id, msg_size, in_time, in_time)
 
         self.future_msgs.append(msg)
 
@@ -136,7 +142,30 @@ class NetworkEmulatorLite:
         earliest_completion_time = inf
 
         for msg in self.sending_msgs:
-            msg_completion_time = self.current_time + (msg.size - msg.amt_sent) / msg.send_rate
+
+            if msg.send_rate == msg.dsg_send_rate:
+                msg_completion_time = self.current_time + (msg.size - msg.amt_sent) / msg.dsg_send_rate
+            else:
+
+                data_left = msg.size - msg.amt_sent
+
+                upper_sr = max(msg.send_rate, msg.dsg_send_rate)
+                lower_sr = min(msg.send_rate, msg.dsg_send_rate)
+
+                # sd: seconds until sr reaches designated
+                sd = (upper_sr - lower_sr)/lgc
+
+                # spc: seconds until completion - potential based on forever-moving sr
+                spc = data_left / (lower_sr + 0.5*(upper_sr - lower_sr))
+
+                if spc <= sd:
+                    msg_completion_time = self.current_time + spc
+                else:
+                    sent_at_sd = msg.amt_sent + lower_sr*sd + 0.5(upper_sr - lower_sr)*sd
+                    data_left = msg.size - sent_at_sd
+                    msg_completion_time = self.current_time + sd + data_left/msg.dsg_send_rate
+
+
             if msg_completion_time < earliest_completion_time:
                 earliest_completion_time = msg_completion_time
 
@@ -157,7 +186,7 @@ class NetworkEmulatorLite:
         while msg_idx < len(self.sending_msgs):
             msg = self.sending_msgs[msg_idx]
 
-            msg.amt_sent += (self.current_time - msg.last_checked) * msg.send_rate
+            msg.amt_sent += (self.current_time - msg.last_checked) * msg.dsg_send_rate
             msg.last_checked = self.current_time
 
             if msg.amt_sent > msg.size or isclose(msg.amt_sent, msg.size):
@@ -178,7 +207,7 @@ class NetworkEmulatorLite:
 
             self.total_msgs -= 1
             
-            self._update_send_rates()
+            self._update_dsg_send_rates()
 
         # Move future msgs in
         msg_idx = 0
@@ -197,7 +226,7 @@ class NetworkEmulatorLite:
                 self.sending_msgs.append(msg)
                 self.total_msgs += 1
 
-                self._update_send_rates()
+                self._update_dsg_send_rates()
 
             msg_idx += 1
 
