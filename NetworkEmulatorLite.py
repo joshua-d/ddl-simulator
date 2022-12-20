@@ -156,12 +156,12 @@ class NetworkEmulatorLite:
                 sd = (upper_sr - lower_sr)/lgc
 
                 # spc: seconds until completion - potential based on forever-moving sr
-                spc = data_left / (lower_sr + 0.5*(upper_sr - lower_sr))
+                spc = 2 * data_left / (lower_sr + upper_sr) # simplified from data_left / (lower_sr + 0.5*(upper_sr - lower_sr))
 
                 if spc <= sd:
                     msg_completion_time = self.current_time + spc
                 else:
-                    sent_at_sd = msg.amt_sent + lower_sr*sd + 0.5(upper_sr - lower_sr)*sd
+                    sent_at_sd = msg.amt_sent + sd*(lower_sr + upper_sr)/2 # simplified from lower_sr*sd + 0.5(upper_sr - lower_sr)*sd
                     data_left = msg.size - sent_at_sd
                     msg_completion_time = self.current_time + sd + data_left/msg.dsg_send_rate
 
@@ -186,7 +186,25 @@ class NetworkEmulatorLite:
         while msg_idx < len(self.sending_msgs):
             msg = self.sending_msgs[msg_idx]
 
-            msg.amt_sent += (self.current_time - msg.last_checked) * msg.dsg_send_rate
+            # Update msg amt_sent, last_checked, and [current] send_rate
+            # TODO already calculated this stuff in completion time check - save somehow?
+            upper_sr = max(msg.send_rate, msg.dsg_send_rate)
+            lower_sr = min(msg.send_rate, msg.dsg_send_rate)
+            sd = (upper_sr - lower_sr)/lgc
+
+            if msg.last_checked + sd > self.current_time:
+                # sn: s now? at current time
+                sn = self.current_time - msg.last_checked
+                msg.amt_sent += sn*(lower_sr + upper_sr)/2
+                if msg.send_rate < msg.dsg_send_rate:
+                    msg.send_rate = msg.send_rate + lgc*sn
+                else:
+                    msg.send_rate = msg.dsg_send_rate - lgc*sn
+            else:
+                msg.amt_sent += sd*(lower_sr + upper_sr)/2
+                msg.amt_sent += msg.dsg_send_rate * (self.current_time - (msg.last_checked + sd))
+                msg.send_rate = msg.dsg_send_rate
+
             msg.last_checked = self.current_time
 
             if msg.amt_sent > msg.size or isclose(msg.amt_sent, msg.size):
