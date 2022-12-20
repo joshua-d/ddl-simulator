@@ -6,15 +6,19 @@ lgc = 1000000
 # Starting send rate, b/s
 starting_sr = 1000000
 
+# How often to increment sr, s
+sr_update_period = 0.100
+
 class Message:
-    def __init__(self, from_id, to_id, size, in_time, last_checked):
+    def __init__(self, from_id, to_id, size, in_time):
         self.from_id = from_id
         self.to_id = to_id
         self.size = size
 
         self.amt_sent = 0
         self.in_time = in_time
-        self.last_checked = last_checked
+        self.last_checked = in_time
+        self.last_sr_update = in_time
 
         # Designated send rate
         self.dsg_send_rate = 0
@@ -134,7 +138,7 @@ class NetworkEmulatorLite:
 
 
     def send_msg(self, from_id, to_id, msg_size, in_time):
-        msg = Message(from_id, to_id, msg_size, in_time, in_time)
+        msg = Message(from_id, to_id, msg_size, in_time)
 
         self.future_msgs.append(msg)
 
@@ -145,32 +149,18 @@ class NetworkEmulatorLite:
         earliest_completion_time = inf
 
         for msg in self.sending_msgs:
-
-            if msg.send_rate == msg.dsg_send_rate:
-                msg_completion_time = self.current_time + (msg.size - msg.amt_sent) / msg.dsg_send_rate
-            else:
-
-                data_left = msg.size - msg.amt_sent
-
-                # sd: seconds until sr reaches designated
-                sd = abs(msg.dsg_send_rate - msg.send_rate)/lgc
-
-                sent_at_sd = msg.amt_sent + sd*(msg.send_rate + msg.dsg_send_rate)/2
-
-                if sent_at_sd > msg.size:
-                    # spc: seconds until completion - potential based on forever-moving sr
-                    a = 0.5*lgc
-                    b = msg.send_rate
-                    c = -data_left
-                    spc = (-b + sqrt(b**2 - 4*a*c))/(2*a)
-                    msg_completion_time = self.current_time + spc
-                else:
-                    data_left = msg.size - sent_at_sd
-                    msg_completion_time = self.current_time + sd + data_left/msg.dsg_send_rate
-
+            msg_completion_time = self.current_time + (msg.size - msg.amt_sent) / msg.send_rate
 
             if msg_completion_time < earliest_completion_time:
                 earliest_completion_time = msg_completion_time
+
+        # Find next earliest sr update time
+        earliest_sr_update_time = inf
+
+        for msg in self.sending_msgs:
+            msg_sr_update_time = msg.last_sr_update + sr_update_period
+            if msg_sr_update_time < earliest_sr_update_time:
+                earliest_sr_update_time = msg_sr_update_time
 
         # Find next earliest in time
         earliest_in_time = inf
@@ -179,8 +169,8 @@ class NetworkEmulatorLite:
             if msg.in_time < earliest_in_time:
                 earliest_in_time = msg.in_time
 
-        # Move to next earliest completion time or in time
-        self.current_time = min(earliest_completion_time, earliest_in_time)
+        # Move to the time of the next earliest event
+        self.current_time = min(earliest_completion_time, earliest_sr_update_time, earliest_in_time)
 
         # Process sending msgs
         sent_msgs = []
@@ -190,22 +180,7 @@ class NetworkEmulatorLite:
             msg = self.sending_msgs[msg_idx]
 
             # Update msg amt_sent, last_checked, and [current] send_rate
-            # TODO already calculated this stuff in completion time check - save somehow?
-            sd = abs(msg.dsg_send_rate - msg.send_rate)/lgc
-
-            if msg.last_checked + sd > self.current_time:
-                # sn: s now? at current time
-                sn = self.current_time - msg.last_checked
-                msg.amt_sent += sn*(msg.send_rate + msg.dsg_send_rate)/2
-                if msg.send_rate < msg.dsg_send_rate:
-                    msg.send_rate = msg.send_rate + lgc*sn
-                else:
-                    msg.send_rate = msg.dsg_send_rate - lgc*sn
-            else:
-                msg.amt_sent += sd*(msg.send_rate + msg.dsg_send_rate)/2
-                msg.amt_sent += msg.dsg_send_rate * (self.current_time - (msg.last_checked + sd))
-                msg.send_rate = msg.dsg_send_rate
-
+            msg.amt_sent += (self.current_time - msg.last_checked) * msg.send_rate
             msg.last_checked = self.current_time
 
             if msg.amt_sent > msg.size or isclose(msg.amt_sent, msg.size):
@@ -214,6 +189,15 @@ class NetworkEmulatorLite:
                 msg_idx -= 1
                 sent_msgs.append(msg)
                 msg.end_time = self.current_time
+
+            elif isclose(self.current_time - msg.last_sr_update, sr_update_period):
+                if msg.send_rate < msg.dsg_send_rate:
+                    msg.send_rate += lgc * (self.current_time - msg.last_sr_update)
+                elif msg.send_rate > msg.dsg_send_rate:
+                    msg.send_rate -= lgc * (self.current_time - msg.last_sr_update)
+                if abs(msg.dsg_send_rate - msg.send_rate) < lgc:
+                    msg.send_rate = msg.dsg_send_rate
+                msg.last_sr_update = self.current_time
 
             msg_idx += 1
 
