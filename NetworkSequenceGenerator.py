@@ -422,4 +422,7 @@ if __name__ == '__main__':
     for _ in range(200):
         nsg.generate()
 
-    nsg.generate_gantt()
+    now = datetime.datetime.now()
+    time_str = str(now.time())
+    time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
+    nsg.generate_gantt(time_stamp)
