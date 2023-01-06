@@ -1,10 +1,10 @@
 from math import inf, isclose, sqrt
 
 # Linear growth coefficient, b/s/s
-lgc = 1000000
+lgc = 300_000_000
 
 # Starting send rate, b/s
-starting_sr = 1000000
+starting_sr = 1_000_000
 
 class Message:
     def __init__(self, from_id, to_id, size, in_time, last_checked):
@@ -146,20 +146,20 @@ class NetworkEmulatorLite:
 
         for msg in self.sending_msgs:
 
-            if msg.send_rate == msg.dsg_send_rate:
+            if msg.send_rate >= msg.dsg_send_rate:
                 msg_completion_time = self.current_time + (msg.size - msg.amt_sent) / msg.dsg_send_rate
             else:
 
                 data_left = msg.size - msg.amt_sent
 
                 # sd: seconds until sr reaches designated
-                sd = abs(msg.dsg_send_rate - msg.send_rate)/lgc
+                sd = abs(msg.dsg_send_rate - msg.send_rate)/(lgc/self.total_msgs)
 
                 sent_at_sd = msg.amt_sent + sd*(msg.send_rate + msg.dsg_send_rate)/2
 
                 if sent_at_sd > msg.size:
                     # spc: seconds until completion - potential based on forever-moving sr
-                    a = 0.5*lgc
+                    a = 0.5*(lgc/self.total_msgs)
                     b = msg.send_rate
                     c = -data_left
                     spc = (-b + sqrt(b**2 - 4*a*c))/(2*a)
@@ -190,17 +190,21 @@ class NetworkEmulatorLite:
             msg = self.sending_msgs[msg_idx]
 
             # Update msg amt_sent, last_checked, and [current] send_rate
+
+            if msg.send_rate > msg.dsg_send_rate:
+                msg.send_rate = msg.dsg_send_rate
+
             # TODO already calculated this stuff in completion time check - save somehow?
-            sd = abs(msg.dsg_send_rate - msg.send_rate)/lgc
+            sd = abs(msg.dsg_send_rate - msg.send_rate)/(lgc/self.total_msgs)
 
             if msg.last_checked + sd > self.current_time:
                 # sn: s now? at current time
                 sn = self.current_time - msg.last_checked
                 msg.amt_sent += sn*(msg.send_rate + msg.dsg_send_rate)/2
                 if msg.send_rate < msg.dsg_send_rate:
-                    msg.send_rate = msg.send_rate + lgc*sn
+                    msg.send_rate = msg.send_rate + (lgc/self.total_msgs)*sn
                 else:
-                    msg.send_rate = msg.dsg_send_rate - lgc*sn
+                    msg.send_rate = msg.dsg_send_rate - (lgc/self.total_msgs)*sn
             else:
                 msg.amt_sent += sd*(msg.send_rate + msg.dsg_send_rate)/2
                 msg.amt_sent += msg.dsg_send_rate * (self.current_time - (msg.last_checked + sd))

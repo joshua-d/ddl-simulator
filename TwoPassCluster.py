@@ -67,10 +67,6 @@ class ParameterServer:
         self.received_first_update = False
         self.has_async_child = False
 
-        self.tsync_total = 0
-        self.tsync_n = 0
-        self.tsync_last = 0
-
     # Sync
     def aggr_and_apply_params(self, param_sets):
         # Average and assign params
@@ -138,6 +134,8 @@ class TwoPassCluster:
         dataset = self.dataset_fn(self.num_train_samples)
         dataset_iterator = DatasetIterator(dataset, self.batch_size, self.data_chunk_size)
 
+        self.num_workers = 0
+
         for node_desc in self.node_descs:
 
             _, params, forward_pass, build_optimizer = self.model_builder()
@@ -151,6 +149,7 @@ class TwoPassCluster:
             elif node_desc['node_type'] == 'worker':
                 worker = Worker(node_desc['id'], params, forward_pass, dataset_iterator, build_optimizer(self.learning_rate))
                 self.nodes[worker.id] = worker
+                self.num_workers += 1
 
     def _parse_config(self, config):
 
@@ -229,11 +228,6 @@ class TwoPassCluster:
                 param_sets = ps.incoming_child_params
                 ps.incoming_child_params = []
                 ps.aggr_and_apply_params(param_sets)
-
-                # Measure tsync
-                ps.tsync_total += event.start_time - ps.tsync_last
-                ps.tsync_last = event.start_time
-                ps.tsync_n += 1
 
         elif type(event) == PSParentApplyEvent:
             ps = self.nodes[event.ps_id]
@@ -343,9 +337,18 @@ class TwoPassCluster:
             
             outfile.write('\n')
 
-            for node in self.nodes.values():
-                if type(node) == ParameterServer and node.sync_style == 'sync':
-                    outfile.write('PS %d tsync: %f\n' % (node.id, node.tsync_total / node.tsync_n))
+
+            if self.generate_gantt: # TODO generate gantt must be on for tsync to be logged
+                total_time = 0
+                n_events = 0
+                for event in saved_events:
+                    if type(event) == ReceiveParamsEvent:
+                        total_time += event.end_time - event.start_time
+                        n_events += 1
+
+                tsync = total_time / n_events
+                outfile.write('tsync: %f\n' % tsync)
+                outfile.write('BUC: %f\n' % (self.num_workers / tsync))
 
             outfile.write('\n')
             outfile.write(data)
