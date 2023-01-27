@@ -1,10 +1,10 @@
 from math import inf, isclose, sqrt
 
 # Linear growth coefficient, b/s/s
-lgc = 300_000_000
+base_lgc = 20_000_000
 
 # Starting send rate, b/s
-starting_sr = 1_000_000
+starting_sr = 1_000
 
 class Message:
     def __init__(self, from_id, to_id, size, in_time, last_checked):
@@ -18,6 +18,9 @@ class Message:
 
         # Designated send rate
         self.dsg_send_rate = 0
+
+        # Current lgc
+        self.lgc = 0
 
         # Current send rate
         self.send_rate = 0
@@ -100,10 +103,12 @@ class NetworkEmulatorLite:
                         least_offering = incoming_offering[msg]
                         least_offering_node_id = msg.to_id
                         incoming = True
+                        least_offering_lgc = base_lgc * least_offering / self.inbound_max[msg.to_id]
                     if outgoing_offering[msg] < least_offering:
                         least_offering = outgoing_offering[msg]
                         least_offering_node_id = msg.from_id
                         incoming = False
+                        least_offering_lgc = base_lgc * least_offering / self.outbound_max[msg.from_id]
 
             # Mark node's msgs as final, follow, distribute
             if incoming:
@@ -111,6 +116,7 @@ class NetworkEmulatorLite:
                     if msg not in final_msgs:
 
                         msg.dsg_send_rate = least_offering
+                        msg.lgc = least_offering_lgc
                         final_msgs.append(msg)
                         
                         distribute_msgs = []
@@ -129,6 +135,7 @@ class NetworkEmulatorLite:
                     if msg not in final_msgs:
 
                         msg.dsg_send_rate = least_offering
+                        msg.lgc = least_offering_lgc
                         final_msgs.append(msg)
                         
                         distribute_msgs = []
@@ -164,13 +171,13 @@ class NetworkEmulatorLite:
                 data_left = msg.size - msg.amt_sent
 
                 # sd: seconds until sr reaches designated
-                sd = abs(msg.dsg_send_rate - msg.send_rate)/lgc
+                sd = abs(msg.dsg_send_rate - msg.send_rate)/msg.lgc
 
                 sent_at_sd = msg.amt_sent + sd*(msg.send_rate + msg.dsg_send_rate)/2
 
                 if sent_at_sd > msg.size:
                     # spc: seconds until completion - potential based on forever-moving sr
-                    a = 0.5*lgc
+                    a = 0.5*msg.lgc
                     b = msg.send_rate
                     c = -data_left
                     spc = (-b + sqrt(b**2 - 4*a*c))/(2*a)
@@ -214,16 +221,16 @@ class NetworkEmulatorLite:
                 msg.send_rate = msg.dsg_send_rate
 
             # TODO already calculated this stuff in completion time check - save somehow?
-            sd = abs(msg.dsg_send_rate - msg.send_rate)/lgc
+            sd = abs(msg.dsg_send_rate - msg.send_rate)/msg.lgc
 
             if msg.last_checked + sd > self.current_time:
                 # sn: s now? at current time
                 sn = self.current_time - msg.last_checked
                 msg.amt_sent += sn*(msg.send_rate + msg.dsg_send_rate)/2
                 if msg.send_rate < msg.dsg_send_rate:
-                    msg.send_rate = msg.send_rate + lgc*sn
+                    msg.send_rate = msg.send_rate + msg.lgc*sn
                 else:
-                    msg.send_rate = msg.dsg_send_rate - lgc*sn
+                    msg.send_rate = msg.dsg_send_rate - msg.lgc*sn
             else:
                 msg.amt_sent += sd*(msg.send_rate + msg.dsg_send_rate)/2
                 msg.amt_sent += msg.dsg_send_rate * (self.current_time - (msg.last_checked + sd))
