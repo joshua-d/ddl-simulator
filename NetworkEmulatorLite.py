@@ -36,7 +36,9 @@ class NetworkEmulatorLite:
         self.sending = {}
         self.receiving = {}
 
-        for node_id in self.inbound_max.keys():
+        self.nodes = self.inbound_max.keys()
+
+        for node_id in self.nodes:
             self.sending[node_id] = []
             self.receiving[node_id] = []
 
@@ -50,7 +52,12 @@ class NetworkEmulatorLite:
         self.future_msgs = []
 
         # Effective bandwidth measurement
-        self.eff = [] # list of (time, dsr) tuples
+        self.eff_in = {}
+        self.eff_out = {}
+
+        for node_id in self.nodes:
+            self.eff_in[node_id] = []
+            self.eff_out[node_id] = []
 
 
     def _update_dsg_send_rates(self):
@@ -59,7 +66,7 @@ class NetworkEmulatorLite:
         incoming_offering = {}
         outgoing_offering = {}
 
-        for node_id in self.inbound_max.keys():
+        for node_id in self.nodes:
             for msg in self.receiving[node_id]:
                 
                 # This part simulates half duplex
@@ -271,12 +278,29 @@ class NetworkEmulatorLite:
         if eff_start is not None:
             if self.current_time >= eff_start and self.current_time <= eff_end:
 
-                summed_dsg_srs = 0
-                for msg in self.sending_msgs:
-                    summed_dsg_srs += msg.dsg_send_rate
+                # Get how much bw each node is using, in each direction
+                for node_id in self.nodes:
 
-                self.eff.append((self.current_time, summed_dsg_srs))
-            
+                    # inbound
+                    tsr = 0
+                    for msg in self.sending_msgs:
+                        if msg.to_id == node_id:
+                            tsr += msg.dsg_send_rate
+
+                    if len(self.eff_in[node_id]) == 0 or self.eff_in[node_id][-1][1] != tsr:
+                        self.eff_in[node_id].append((self.current_time, tsr))
+
+                    # outbound
+                    tsr = 0
+                    for msg in self.sending_msgs:
+                        if msg.from_id == node_id:
+                            tsr += msg.dsg_send_rate
+
+                    if len(self.eff_out[node_id]) == 0 or self.eff_out[node_id][-1][1] != tsr:
+                        self.eff_out[node_id].append((self.current_time, tsr))
+                    
+
+
 
         # Return sent msgs
         return sent_msgs

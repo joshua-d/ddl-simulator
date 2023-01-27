@@ -26,14 +26,14 @@ def load_config(config_file_path):
 
 
 
-# Get effective bw from NE eff
+# Get effective bw from a node's individual eff
 def parse_eff(eff):
     time_window = eff[-1][0] - eff[0][0]
     eff_bw = 0
     for i in range(len(eff) - 1):
         eff_bw += eff[i][1] * ((eff[i+1][0] - eff[i][0]) / time_window) # dsr * the fraction the time slice is of the entire window
     
-    return (eff_bw, time_window)
+    return eff_bw
 
 
 
@@ -77,10 +77,30 @@ if __name__ == '__main__':
         print('tsync: %f' % tsync)
         print('BUC: %f' % buc)
 
-        # Get eff bw
-        eff_bw, time_window = parse_eff(nsg.ne.eff)
-        print("Effective BW (Mbps): %f" % (eff_bw / 1_000_000))
-        print("Measured over: %f s" % time_window)
+        # Get PS eff bw
+        ps_eff_in = parse_eff(nsg.ne.eff_in[0])
+        ps_eff_out = parse_eff(nsg.ne.eff_out[0])
+        
+        avg_w_eff_in = 0
+        avg_w_eff_out = 0
+
+        for worker_id in range(1, worker_num + 1):
+            w_eff_in = parse_eff(nsg.ne.eff_in[worker_id])
+            w_eff_out = parse_eff(nsg.ne.eff_out[worker_id])
+            avg_w_eff_in += w_eff_in
+            avg_w_eff_out += w_eff_out
+
+        avg_w_eff_in /= worker_num
+        avg_w_eff_out /= worker_num
+
+        print('(Mbps)')
+        print('PS eff bw in: %f' % (ps_eff_in / 1_000_000))
+        print('PS eff bw out: %f' % (ps_eff_out / 1_000_000))
+
+        print('Avg worker eff bw in: %f' % (avg_w_eff_in / 1_000_000))
+        print('Avg worker eff bw out: %f' % (avg_w_eff_out / 1_000_000))
+        print('sum: %f' % ((avg_w_eff_in + avg_w_eff_out) / 1_000_000))
+        print()
 
         # now = datetime.datetime.now()
         # time_str = str(now.time())
