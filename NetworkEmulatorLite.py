@@ -269,7 +269,7 @@ class NetworkEmulatorLite:
 
         # DSGSRs are accurate, calculate effective bandwidth
         if eff_start is not None:
-            if self.current_time >= eff_start and self.current_time < eff_end:
+            if self.current_time >= eff_start and self.current_time <= eff_end:
 
                 summed_dsg_srs = 0
                 for msg in self.sending_msgs:

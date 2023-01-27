@@ -25,6 +25,18 @@ def load_config(config_file_path):
         return config
 
 
+
+# Get effective bw from NE eff
+def parse_eff(eff):
+    time_window = eff[-1][0] - eff[0][0]
+    eff_bw = 0
+    for i in range(len(eff) - 1):
+        eff_bw += eff[i][1] * ((eff[i+1][0] - eff[i][0]) / time_window) # dsr * the fraction the time slice is of the entire window
+    
+    return (eff_bw, time_window)
+
+
+
 if __name__ == '__main__':
 
     worker_nums = [1, 2, 4, 6, 8, 10, 12, 14, 16]
@@ -49,7 +61,7 @@ if __name__ == '__main__':
         nsg = NetworkSequenceGenerator(config['nodes'], 22_800_000)
 
         for _ in range(5000):
-            nsg.generate()
+            nsg.generate(0.001, 100.001)
 
         # Get tsync and BUC
         total_time = 0
@@ -64,6 +76,11 @@ if __name__ == '__main__':
         print(worker_num)
         print('tsync: %f' % tsync)
         print('BUC: %f' % buc)
+
+        # Get eff bw
+        eff_bw, time_window = parse_eff(nsg.ne.eff)
+        print("Effective BW (Mbps): %f" % (eff_bw / 1_000_000))
+        print("Measured over: %f s" % time_window)
 
         # now = datetime.datetime.now()
         # time_str = str(now.time())
