@@ -128,7 +128,7 @@ class TwoPassCluster:
         self.steps_complete = 0
 
         msg_size = self._get_model_size()
-        self.nsg = NetworkSequenceGenerator(self.node_descs, msg_size)
+        self.nsg = NetworkSequenceGenerator(self.node_descs, msg_size, self.network_style == 'hd')
         self.gen_buf = 100
         self.n_generated = 0
 
@@ -162,6 +162,8 @@ class TwoPassCluster:
         # Num train samples per epoch - passed into dataset_fn
         self.num_train_samples = self._get_config_item(config, 'num_train_samples')
         self.num_test_samples = self._get_config_item(config, 'num_test_samples')
+
+        self.network_style = self._get_config_item(config, 'network_style')
 
         self.node_descs = self._get_config_item(config, 'nodes')
 

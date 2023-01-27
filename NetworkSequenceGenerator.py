@@ -1,5 +1,5 @@
 import datetime, random
-from NetworkEmulatorLiteHalfDuplex import NetworkEmulatorLiteHalfDuplex
+from NetworkEmulatorLite import NetworkEmulatorLite
 import json
 
 
@@ -78,7 +78,7 @@ class ParameterServer:
 
 class NetworkSequenceGenerator:
 
-    def __init__(self, node_descs, msg_size):
+    def __init__(self, node_descs, msg_size, half_duplex):
 
         # In bits
         self.msg_size = msg_size
@@ -126,7 +126,7 @@ class NetworkSequenceGenerator:
                 node.parent.children.append(node)
 
         # Build NE
-        self.ne = NetworkEmulatorLiteHalfDuplex((inbound_max, outbound_max))
+        self.ne = NetworkEmulatorLite((inbound_max, outbound_max), half_duplex)
 
         # Set up starting events
         for worker in self.workers:
