@@ -243,11 +243,11 @@ class NetworkSequenceGenerator:
             self.ne.send_msg(worker.id, worker.parent.id, self.msg_size, self.ne.current_time + step_time)
 
 
-    def generate(self):
+    def generate(self, eff_start=None, eff_end=None):
         # Move NE until a msg has sent
-        sent_msgs = self.ne.move()
+        sent_msgs = self.ne.move(eff_start, eff_end)
         while len(sent_msgs) == 0:
-            sent_msgs = self.ne.move()
+            sent_msgs = self.ne.move(eff_start, eff_end)
 
         # Process sent msgs
         for msg in sent_msgs:

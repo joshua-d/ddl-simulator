@@ -49,6 +49,9 @@ class NetworkEmulatorLite:
 
         self.future_msgs = []
 
+        # Effective bandwidth measurement
+        self.eff = [] # list of (time, dsr) tuples
+
 
     def _update_dsg_send_rates(self):
 
@@ -139,7 +142,8 @@ class NetworkEmulatorLite:
         self.future_msgs.append(msg)
 
 
-    def move(self):
+    # TODO: eff_start cannot be 0
+    def move(self, eff_start=None, eff_end=None):
 
         # Find next earliest completion time
         earliest_completion_time = inf
@@ -179,8 +183,16 @@ class NetworkEmulatorLite:
             if msg.in_time < earliest_in_time:
                 earliest_in_time = msg.in_time
 
-        # Move to next earliest completion time or in time
-        self.current_time = min(earliest_completion_time, earliest_in_time)
+        # Move to next earliest completion time or in time (or eff checkpoint!)
+        if eff_start is not None:
+            if self.current_time < eff_start:
+                self.current_time = min(earliest_completion_time, earliest_in_time, eff_start)
+            elif self.current_time < eff_end:
+                self.current_time = min(earliest_completion_time, earliest_in_time, eff_end)
+            else:
+                self.current_time = min(earliest_completion_time, earliest_in_time)
+        else:
+            self.current_time = min(earliest_completion_time, earliest_in_time)
 
         # Process sending msgs
         sent_msgs = []
@@ -253,6 +265,18 @@ class NetworkEmulatorLite:
                 msg.send_rate = min(starting_sr, msg.dsg_send_rate)
 
             msg_idx += 1
+
+
+        # DSGSRs are accurate, calculate effective bandwidth
+        if eff_start is not None:
+            if self.current_time >= eff_start and self.current_time < eff_end:
+
+                summed_dsg_srs = 0
+                for msg in self.sending_msgs:
+                    summed_dsg_srs += msg.dsg_send_rate
+
+                self.eff.append((self.current_time, summed_dsg_srs))
+            
 
         # Return sent msgs
         return sent_msgs
