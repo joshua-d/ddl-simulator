@@ -164,13 +164,13 @@ class NetworkEmulatorLite:
                 data_left = msg.size - msg.amt_sent
 
                 # sd: seconds until sr reaches designated
-                sd = abs(msg.dsg_send_rate - msg.send_rate)/(lgc/self.total_msgs)
+                sd = abs(msg.dsg_send_rate - msg.send_rate)/lgc
 
                 sent_at_sd = msg.amt_sent + sd*(msg.send_rate + msg.dsg_send_rate)/2
 
                 if sent_at_sd > msg.size:
                     # spc: seconds until completion - potential based on forever-moving sr
-                    a = 0.5*(lgc/self.total_msgs)
+                    a = 0.5*lgc
                     b = msg.send_rate
                     c = -data_left
                     spc = (-b + sqrt(b**2 - 4*a*c))/(2*a)
@@ -214,16 +214,16 @@ class NetworkEmulatorLite:
                 msg.send_rate = msg.dsg_send_rate
 
             # TODO already calculated this stuff in completion time check - save somehow?
-            sd = abs(msg.dsg_send_rate - msg.send_rate)/(lgc/self.total_msgs)
+            sd = abs(msg.dsg_send_rate - msg.send_rate)/lgc
 
             if msg.last_checked + sd > self.current_time:
                 # sn: s now? at current time
                 sn = self.current_time - msg.last_checked
                 msg.amt_sent += sn*(msg.send_rate + msg.dsg_send_rate)/2
                 if msg.send_rate < msg.dsg_send_rate:
-                    msg.send_rate = msg.send_rate + (lgc/self.total_msgs)*sn
+                    msg.send_rate = msg.send_rate + lgc*sn
                 else:
-                    msg.send_rate = msg.dsg_send_rate - (lgc/self.total_msgs)*sn
+                    msg.send_rate = msg.dsg_send_rate - lgc*sn
             else:
                 msg.amt_sent += sd*(msg.send_rate + msg.dsg_send_rate)/2
                 msg.amt_sent += msg.dsg_send_rate * (self.current_time - (msg.last_checked + sd))

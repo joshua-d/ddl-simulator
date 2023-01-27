@@ -58,10 +58,10 @@ if __name__ == '__main__':
             config['nodes'].append(json.loads(make_worker_desc(i+1)))
 
         # Generate
-        nsg = NetworkSequenceGenerator(config['nodes'], 22_800_000)
+        nsg = NetworkSequenceGenerator(config['nodes'], 22_800_000, config['network_style'] == 'hd')
 
         for _ in range(5000):
-            nsg.generate(0.001, 100.001)
+            nsg.generate(120, 240)
 
         # Get tsync and BUC
         total_time = 0
@@ -102,7 +102,8 @@ if __name__ == '__main__':
         print('sum: %f' % ((avg_w_eff_in + avg_w_eff_out) / 1_000_000))
         print()
 
-        # now = datetime.datetime.now()
-        # time_str = str(now.time())
-        # time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
-        # nsg.generate_gantt(time_stamp + str(worker_num))
+        if config['generate_gantt']:
+            now = datetime.datetime.now()
+            time_str = str(now.time())
+            time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
+            nsg.generate_gantt(time_stamp + '_' + str(worker_num))
