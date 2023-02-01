@@ -1,13 +1,13 @@
 from math import inf, isclose, sqrt
 
 # Linear growth coefficient, b/s/s
-base_lgc = 100_000_000
+base_lgc = 98_000_000
 
 # Starting send rate, b/s
 starting_sr = 1
 
 # How often to increment sr, s
-sr_update_period = 0.100
+sr_update_period = 0.010
 
 class Message:
     def __init__(self, from_id, to_id, size, in_time):
@@ -220,7 +220,9 @@ class NetworkEmulatorLite:
                 if msg.send_rate < msg.dsg_send_rate:
                     msg.send_rate += msg.lgc * (self.current_time - msg.last_sr_update)
                 elif msg.send_rate > msg.dsg_send_rate:
-                    msg.send_rate -= msg.lgc * (self.current_time - msg.last_sr_update)
+                    # msg.send_rate -= msg.lgc * (self.current_time - msg.last_sr_update)
+                    # Drop to dsr instantly
+                    msg.send_rate = msg.dsg_send_rate
                 if abs(msg.dsg_send_rate - msg.send_rate) < msg.lgc:
                     msg.send_rate = msg.dsg_send_rate
                 msg.last_sr_update = self.current_time

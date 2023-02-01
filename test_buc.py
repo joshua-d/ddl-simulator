@@ -60,16 +60,16 @@ if __name__ == '__main__':
         # Generate
         nsg = NetworkSequenceGenerator(config['nodes'], 22_800_000, config['network_style'] == 'hd')
 
-        for _ in range(5000):
+        for _ in range(1000):
             nsg.generate(120, 240)
 
         # Get tsync and BUC
+        receive_events = list(filter(lambda e: type(e) == ReceiveParamsEvent, nsg.events))#[32:96]
         total_time = 0
         n_events = 0
-        for event in nsg.events:
-            if type(event) == ReceiveParamsEvent:
-                total_time += event.end_time - event.start_time
-                n_events += 1
+        for event in receive_events:
+            total_time += event.end_time - event.start_time
+            n_events += 1
 
         tsync = total_time / n_events
         buc = worker_num / tsync
