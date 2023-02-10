@@ -1,12 +1,11 @@
 import socket
-from time import perf_counter
+from time import perf_counter, sleep
  
-IP = socket.gethostbyname(socket.gethostname())
+IP = '192.168.12.1' # socket.gethostbyname(socket.gethostname())
 PORT = 4455
 ADDR = (IP, PORT)
-SIZE = 2_500_000
+SIZE = 5_000_000
 FORMAT = "utf-8"
-N_SENDS = 200
  
 def main():
     print("[STARTING] Server is starting.")
@@ -18,13 +17,10 @@ def main():
     while True:
         conn, addr = server.accept()
         print(f"[NEW CONNECTION] {addr} connected.")
- 
-        total_start = perf_counter()
-        for i in range(N_SENDS):
-            data = conn.recv(SIZE).decode(FORMAT)
-        total_end = perf_counter()
-        
-        print(f'Total time: {total_end - total_start}')
+
+        while True:
+            data = conn.recv(4096).decode(FORMAT)
+
  
 if __name__ == "__main__":
     main()
