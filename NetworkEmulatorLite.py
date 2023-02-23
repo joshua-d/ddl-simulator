@@ -107,12 +107,10 @@ class NetworkEmulatorLite:
                         least_offering = incoming_offering[msg]
                         least_offering_node_id = msg.to_id
                         incoming = True
-                        least_offering_lgc = base_lgc * least_offering / self.inbound_max[msg.to_id]
                     if outgoing_offering[msg] < least_offering:
                         least_offering = outgoing_offering[msg]
                         least_offering_node_id = msg.from_id
                         incoming = False
-                        least_offering_lgc = base_lgc * least_offering / self.outbound_max[msg.from_id]
 
             # Mark node's msgs as final, follow, distribute
             if incoming:
@@ -120,7 +118,7 @@ class NetworkEmulatorLite:
                     if msg not in final_msgs:
 
                         msg.dsg_send_rate = least_offering
-                        msg.lgc = least_offering_lgc
+                        msg.lgc = base_lgc * least_offering / min(self.inbound_max[msg.to_id], self.outbound_max[msg.from_id])
                         final_msgs.append(msg)
                         
                         distribute_msgs = []
@@ -139,7 +137,7 @@ class NetworkEmulatorLite:
                     if msg not in final_msgs:
 
                         msg.dsg_send_rate = least_offering
-                        msg.lgc = least_offering_lgc
+                        msg.lgc = base_lgc * least_offering / min(self.inbound_max[msg.to_id], self.outbound_max[msg.from_id])
                         final_msgs.append(msg)
                         
                         distribute_msgs = []
@@ -219,12 +217,11 @@ class NetworkEmulatorLite:
             elif isclose(self.current_time - msg.last_sr_update, sr_update_period):
                 if msg.send_rate < msg.dsg_send_rate:
                     msg.send_rate += msg.lgc * (self.current_time - msg.last_sr_update)
-                elif msg.send_rate > msg.dsg_send_rate:
+                if msg.send_rate > msg.dsg_send_rate:
                     # msg.send_rate -= msg.lgc * (self.current_time - msg.last_sr_update)
                     # Drop to dsr instantly
                     msg.send_rate = msg.dsg_send_rate
-                if abs(msg.dsg_send_rate - msg.send_rate) < msg.lgc:
-                    msg.send_rate = msg.dsg_send_rate
+                    
                 msg.last_sr_update = self.current_time
 
             msg_idx += 1
