@@ -1,7 +1,7 @@
 from math import inf, isclose, sqrt
 
-# Linear growth coefficient, b/s/s
-base_lgc = 98_000_000
+# Linear growth coefficient, factor multiplied with dsr
+base_lgc = 1
 
 # Starting send rate, b/s
 starting_sr = 1
@@ -24,7 +24,7 @@ class Message:
         self.dsg_send_rate = 0
 
         # Current lgc
-        self.lgc = 0
+        self.lgr = 0
 
         # Current send rate
         self.send_rate = 0
@@ -118,7 +118,7 @@ class NetworkEmulatorLite:
                     if msg not in final_msgs:
 
                         msg.dsg_send_rate = least_offering
-                        msg.lgc = base_lgc * least_offering / min(self.inbound_max[msg.to_id], self.outbound_max[msg.from_id])
+                        msg.lgr = base_lgc * msg.dsg_send_rate
                         final_msgs.append(msg)
                         
                         distribute_msgs = []
@@ -137,7 +137,7 @@ class NetworkEmulatorLite:
                     if msg not in final_msgs:
 
                         msg.dsg_send_rate = least_offering
-                        msg.lgc = base_lgc * least_offering / min(self.inbound_max[msg.to_id], self.outbound_max[msg.from_id])
+                        msg.lgr = base_lgc * msg.dsg_send_rate
                         final_msgs.append(msg)
                         
                         distribute_msgs = []
@@ -216,9 +216,9 @@ class NetworkEmulatorLite:
 
             elif isclose(self.current_time - msg.last_sr_update, sr_update_period):
                 if msg.send_rate < msg.dsg_send_rate:
-                    msg.send_rate += msg.lgc * (self.current_time - msg.last_sr_update)
+                    msg.send_rate += msg.lgr * (self.current_time - msg.last_sr_update)
                 if msg.send_rate > msg.dsg_send_rate:
-                    # msg.send_rate -= msg.lgc * (self.current_time - msg.last_sr_update)
+                    # msg.send_rate -= msg.lgr * (self.current_time - msg.last_sr_update)
                     # Drop to dsr instantly
                     msg.send_rate = msg.dsg_send_rate
                     
