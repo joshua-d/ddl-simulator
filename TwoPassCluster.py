@@ -4,6 +4,11 @@ from DatasetIterator import DatasetIterator
 from NetworkSequenceGenerator import NetworkSequenceGenerator, WorkerStepEvent, SendParamsEvent, ReceiveParamsEvent, PSAggrEvent, PSApplyEvent, PSParentApplyEvent
 import keras_model
 
+from time import perf_counter
+
+train_step_time = 0
+n_steps_counted = 0
+
 
 class Worker:
     def __init__(self, id, params, forward_pass, dataset_iterator, optimizer):
@@ -38,8 +43,18 @@ class Worker:
         return batch
 
     def train_step(self):
-        gradients = self.forward_pass(self.get_next_batch())
+        global train_step_time
+        global n_steps_counted
+
+        batch = self.get_next_batch()
+        start_time = perf_counter()
+        gradients = self.forward_pass(batch)
         self.optimizer.apply_gradients(zip(gradients, self.params.values()))
+        end_time = perf_counter()
+
+        train_step_time += end_time - start_time
+        n_steps_counted += 1
+
         self.steps_complete += 1
 
     def replace_params(self, param_set):
@@ -52,6 +67,12 @@ class Worker:
             params[param_id] = self.params[param_id].value()
         return params
 
+
+aggr_and_apply_time = 0
+n_aaa_counted = 0
+
+apply_time = 0
+n_apply_counted = 0
 
 class ParameterServer:
     def __init__(self, id, parent, sync_style, params):
@@ -69,6 +90,11 @@ class ParameterServer:
 
     # Sync
     def aggr_and_apply_params(self, param_sets):
+
+        global aggr_and_apply_time
+        global n_aaa_counted
+
+        start_time = perf_counter()
         # Average and assign params
         for param_id in self.params:
             param_value = 0
@@ -84,8 +110,18 @@ class ParameterServer:
                 # Average into current instead of replacing
                 self.params[param_id].assign((param_value + self.params[param_id].value()) / 2)
 
+        end_time = perf_counter()
+
+        aggr_and_apply_time += end_time - start_time
+        n_aaa_counted += 1
+
     # Async
     def apply_params(self, param_set):
+
+        global apply_time
+        global n_apply_counted
+
+        start_time = perf_counter()
         if self.parent is not None or not self.received_first_update:
             # Assign params for relay (up or down!)
             for param_id in self.params:
@@ -98,6 +134,11 @@ class ParameterServer:
             for param_id in self.params:
                 param_value = (self.params[param_id].value() + param_set[param_id]) / 2
                 self.params[param_id].assign(param_value)
+
+        end_time = perf_counter()
+
+        apply_time += end_time - start_time
+        n_apply_counted += 1
 
     def get_params(self):
         params = {}
@@ -273,6 +314,11 @@ class TwoPassCluster:
             next_steps_milestone += self.eval_interval
 
             print('Finished %d steps' % self.steps_complete)
+            print('Average step time %f' % (train_step_time / n_steps_counted))
+            if n_aaa_counted != 0:
+                print('Avg apply and aggr time %f' % (aggr_and_apply_time / n_aaa_counted))
+            if n_apply_counted != 0:
+                print('Avg apply time %f' % (apply_time / n_apply_counted))
 
             # Evaluate model
             predictions = self.get_test_model().predict(x_test)            
