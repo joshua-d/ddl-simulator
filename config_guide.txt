@@ -1,5 +1,7 @@
 inbound/outbound_bw: bw in megabits
 
+network_style: "hd" or "fd" for half-duplex or full-duplex
+
 
 Example 2-lvl config:
 
@@ -11,6 +13,8 @@ Example 2-lvl config:
 
     "num_train_samples": 60000,
     "num_test_samples": 10000,
+
+    "network_style": "hd",
 
     "data_chunk_size": 64,
 

@@ -17,11 +17,12 @@ class Message:
         self.end_time = 0
 
 
-class NetworkEmulatorLiteHalfDuplex:
+class NetworkEmulatorLite:
 
-    def __init__(self, node_bws):
+    def __init__(self, node_bws, half_duplex):
 
         self.inbound_max, self.outbound_max = node_bws
+        self.half_duplex = half_duplex
 
         self.sending = {}
         self.receiving = {}
@@ -50,7 +51,7 @@ class NetworkEmulatorLiteHalfDuplex:
             for msg in self.receiving[node_id]:
                 
                 # This part simulates half duplex
-                if len(self.sending[node_id]) != 0:
+                if self.half_duplex and len(self.sending[node_id]) != 0:
                     inbound_max = self.inbound_max[node_id] / 2
                 else:
                     inbound_max = self.inbound_max[node_id]
@@ -60,7 +61,7 @@ class NetworkEmulatorLiteHalfDuplex:
             for msg in self.sending[node_id]:
 
                 # This part simulates half duplex
-                if len(self.receiving[node_id]) != 0:
+                if self.half_duplex and len(self.receiving[node_id]) != 0:
                     outbound_max = self.outbound_max[node_id] / 2
                 else:
                     outbound_max = self.outbound_max[node_id]
@@ -218,7 +219,7 @@ if __name__ == '__main__':
         3: 10
     })
 
-    ne = NetworkEmulatorLiteFullDuplex(node_bws)
+    ne = NetworkEmulatorLite(node_bws, True)
 
     ne.send_msg(0, 1, 100, 0)
     ne.send_msg(0, 1, 100, 0)

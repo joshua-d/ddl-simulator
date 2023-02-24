@@ -141,3 +141,4 @@ config.json
 experiments/exp
 gantt/gantt_datas/
 gantt/gantt_data.js
+comp/

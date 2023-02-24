@@ -88,6 +88,10 @@ class ParameterServer:
         self.received_first_update = False
         self.has_async_child = False
 
+        self.tsync_total = 0
+        self.tsync_n = 0
+        self.tsync_last = 0
+
     # Sync
     def aggr_and_apply_params(self, param_sets):
 
@@ -165,7 +169,7 @@ class TwoPassCluster:
         self.steps_complete = 0
 
         msg_size = self._get_model_size()
-        self.nsg = NetworkSequenceGenerator(self.node_descs, msg_size)
+        self.nsg = NetworkSequenceGenerator(self.node_descs, msg_size, self.network_style == 'hd')
         self.gen_buf = 100
         self.n_generated = 0
 
@@ -199,6 +203,8 @@ class TwoPassCluster:
         # Num train samples per epoch - passed into dataset_fn
         self.num_train_samples = self._get_config_item(config, 'num_train_samples')
         self.num_test_samples = self._get_config_item(config, 'num_test_samples')
+
+        self.network_style = self._get_config_item(config, 'network_style')
 
         self.node_descs = self._get_config_item(config, 'nodes')
 
@@ -264,6 +270,11 @@ class TwoPassCluster:
                 param_sets = ps.incoming_child_params
                 ps.incoming_child_params = []
                 ps.aggr_and_apply_params(param_sets)
+
+                # Measure tsync
+                ps.tsync_total += event.start_time - ps.tsync_last
+                ps.tsync_last = event.start_time
+                ps.tsync_n += 1
 
         elif type(event) == PSParentApplyEvent:
             ps = self.nodes[event.ps_id]
@@ -377,6 +388,12 @@ class TwoPassCluster:
                     outfile.write('Worker %d: %d steps\n' % (node.id, node.steps_complete))
             
             outfile.write('\n')
+
+            for node in self.nodes.values():
+                if type(node) == ParameterServer and node.sync_style == 'sync':
+                    outfile.write('PS %d tsync: %f\n' % (node.id, node.tsync_total / node.tsync_n))
+
+            outfile.write('\n')
             outfile.write(data)
 
             outfile.write('\n')
@@ -395,4 +412,4 @@ class TwoPassCluster:
 
         if self.generate_gantt:
             self.nsg.events = saved_events
-            self.nsg.generate_gantt()
+            self.nsg.generate_gantt(time_stamp)
