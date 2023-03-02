@@ -9,12 +9,12 @@ def load_config(config_file_path):
     return config
 
 
-def modified_generate(self, end_time, eff_start=None, eff_end=None):
+def modified_generate(self, end_time, end_batch=None, eff_start=None, eff_end=None):
     # Move NE until a msg has sent
     sent_msgs = self.ne.move(eff_start, eff_end)
 
     while len(sent_msgs) == 0:
-        if self.ne.current_time >= end_time:
+        if (end_time is not None and self.ne.current_time >= end_time) or (end_batch is not None and self.n_batches >= end_batch):
             return True
         sent_msgs = self.ne.move(eff_start, eff_end)
         
@@ -22,7 +22,7 @@ def modified_generate(self, end_time, eff_start=None, eff_end=None):
     for msg in sent_msgs:
         self._process_msg(msg)
 
-    if self.ne.current_time >= end_time:
+    if (end_time is not None and self.ne.current_time >= end_time) or (end_batch is not None and self.n_batches >= end_batch):
         return True
 
     return False
@@ -38,21 +38,34 @@ def parse_eff(eff):
     return eff_bw
 
 
-def do_trainless(config, model_size, end_time, eff_start=None, eff_end=None):
+def do_trainless(config, model_size, end_time, end_batch=None, eff_start=None, eff_end=None):
     worker_num = len(list(filter(lambda n: n['node_type'] == 'worker', config['nodes'])))
     print(f'{worker_num} workers, {end_time} seconds')
 
     # Generate
     nsg = NetworkSequenceGenerator(config['nodes'], model_size, config['network_style'] == 'hd')
 
-    while not modified_generate(nsg, end_time, eff_start, eff_end):
+    while not modified_generate(nsg, end_time, end_batch, eff_start, eff_end):
         pass
 
-    # Get n batches
+    # Get n batches and end time
     step_events = list(filter(lambda e: type(e) == WorkerStepEvent, nsg.events))
+    step_events.sort(key=lambda e: e.start_time)
+
+    if end_batch is not None:
+        step_events = step_events[0:end_batch]
+    
     n_batches = len(step_events)
+
+    if end_time is None:
+        end_time = 0
+        for e in step_events:
+            if e.end_time > end_time:
+                end_time = e.end_time
+
     bps = n_batches / end_time
     print(f'n batches: {n_batches}')
+    print(f'end time: {end_time}')
     print(f'bps: {bps}')
 
     # Get tsync and BUC

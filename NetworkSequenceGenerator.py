@@ -92,6 +92,8 @@ class NetworkSequenceGenerator:
         inbound_max = {}
         outbound_max = {}
 
+        self.n_batches = 0
+
         # Build node objs from config
         for node_desc in node_descs:
             if node_desc['node_type'] == 'ps':
@@ -132,6 +134,7 @@ class NetworkSequenceGenerator:
         for worker in self.workers:
             step_time = worker.step_time - worker.st_variation + random.uniform(0, worker.st_variation*2)
             self.events.append(WorkerStepEvent(0, step_time, worker.id))
+            self.n_batches += 1
             self.events.append(SendParamsEvent(step_time, step_time, worker.id, worker.parent.id))
             self.ne.send_msg(worker.id, worker.parent.id, self.msg_size, step_time)
 
@@ -237,6 +240,7 @@ class NetworkSequenceGenerator:
 
             step_time = worker.step_time - worker.st_variation + random.uniform(0, worker.st_variation*2)
             self.events.append(WorkerStepEvent(self.ne.current_time, self.ne.current_time + step_time, worker.id))
+            self.n_batches += 1
 
             # Send params to parent
             self.events.append(SendParamsEvent(self.ne.current_time + step_time, self.ne.current_time + step_time, worker.id, worker.parent.id))
