@@ -38,7 +38,10 @@ def parse_eff(eff):
     return eff_bw
 
 
+gantt_id = 0
+
 def do_trainless(config, model_size, end_time, end_batch=None, eff_start=None, eff_end=None):
+    global gantt_id
     worker_num = len(list(filter(lambda n: n['node_type'] == 'worker', config['nodes'])))
     print(f'{worker_num} workers, {end_time} seconds')
 
@@ -110,7 +113,10 @@ def do_trainless(config, model_size, end_time, end_batch=None, eff_start=None, e
         now = datetime.datetime.now()
         time_str = str(now.time())
         time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
-        nsg.generate_gantt(time_stamp + '_' + str(worker_num))
+        nsg.generate_gantt(time_stamp + '_' + str(gantt_id))
+        gantt_id += 1
+
+    return end_time
 
 
 if __name__ == '__main__':

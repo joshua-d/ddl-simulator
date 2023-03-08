@@ -1,6 +1,7 @@
 from trainless_stats import do_trainless
 from NetworkSequenceGenerator import NetworkSequenceGenerator, ReceiveParamsEvent
 import datetime, json, sys
+from math import floor
 
 
 def make_worker_desc(n):
@@ -10,11 +11,11 @@ def make_worker_desc(n):
             "id": %d,
             "parent": 0,
 
-            "step_time": 0.050,
-            "st_variation": 0.050,
+            "step_time": 1,
+            "st_variation": 0.250,
 
-            "inbound_bw": 100,
-            "outbound_bw": 100
+            "inbound_bw": 1000,
+            "outbound_bw": 1000
     }
     """ % n
 
@@ -37,6 +38,8 @@ if __name__ == '__main__':
 
     config = load_config(config_file_path)
 
+    end_times = []
+
     for worker_num in worker_nums:
 
         # Remove all workers
@@ -46,5 +49,9 @@ if __name__ == '__main__':
         for i in range(worker_num):
             config['nodes'].append(json.loads(make_worker_desc(i+1)))
 
-        do_trainless(config, 22_800_000, 300)
+        # 1 epoch = 52 batches
+        end_times.append(do_trainless(config, 22_800_000, None, 1560))
         print()
+
+    for end_time in end_times:
+         print(floor(end_time))

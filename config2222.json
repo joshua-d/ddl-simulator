@@ -1,0 +1,182 @@
+{
+    "bypass_NI": false,
+
+    "learning_rate": 0.001,
+    "batch_size": 32,
+
+    "num_train_samples": 60000,
+    "num_test_samples": 10000,
+
+	"network_style": "hd",
+
+    "data_chunk_size": 64,
+
+    "acc_thresholds": [0.95],
+
+    "eval_interval": 100,
+    "max_epochs": 12,
+
+    "generate_gantt": true,
+
+    "nodes": [
+        {
+            "node_type": "ps",
+            "id": 0,
+            "parent": null,
+            "update_policy": "average",
+            "sync_style": "sync",
+
+            "aggr_time": 0.003,
+            "apply_time": 0.003,
+
+            "inbound_bw": 100,
+            "outbound_bw": 100
+        },
+        {
+            "node_type": "ps",
+            "id": 1,
+            "parent": 0,
+            "update_policy": "average",
+            "sync_style": "sync",
+
+            "aggr_time": 0.003,
+            "apply_time": 0.003,
+
+            "inbound_bw": 100,
+            "outbound_bw": 100
+        },
+        {
+            "node_type": "ps",
+            "id": 2,
+            "parent": 0,
+            "update_policy": "average",
+            "sync_style": "sync",
+
+            "aggr_time": 0.003,
+            "apply_time": 0.003,
+
+            "inbound_bw": 100,
+            "outbound_bw": 100
+        },
+
+        {
+            "node_type": "ps",
+            "id": 3,
+            "parent": 0,
+            "update_policy": "average",
+            "sync_style": "sync",
+
+            "aggr_time": 0.003,
+            "apply_time": 0.003,
+
+            "inbound_bw": 100,
+            "outbound_bw": 100
+        },
+        {
+            "node_type": "ps",
+            "id": 4,
+            "parent": 0,
+            "update_policy": "average",
+            "sync_style": "sync",
+
+            "aggr_time": 0.003,
+            "apply_time": 0.003,
+
+            "inbound_bw": 100,
+            "outbound_bw": 100
+        },
+
+        {
+            "node_type": "worker",
+            "id": 5,
+            "parent": 1,
+
+            "step_time": 0.015,
+            "st_variation": 0.0025,
+
+            "inbound_bw": 100,
+            "outbound_bw": 100
+        },
+        {
+            "node_type": "worker",
+            "id": 6,
+            "parent": 1,
+            
+            "step_time": 0.015,
+            "st_variation": 0.0025,
+
+            "inbound_bw": 100,
+            "outbound_bw": 100
+        },
+        {
+            "node_type": "worker",
+            "id": 7,
+            "parent": 2,
+
+            "step_time": 0.015,
+            "st_variation": 0.0025,
+
+            "inbound_bw": 100,
+            "outbound_bw": 100
+        },
+        {
+            "node_type": "worker",
+            "id": 8,
+            "parent": 2,
+
+            "step_time": 0.015,
+            "st_variation": 0.0025,
+
+            "inbound_bw": 100,
+            "outbound_bw": 100
+        },
+
+
+        {
+            "node_type": "worker",
+            "id": 9,
+            "parent": 3,
+            
+            "step_time": 0.015,
+            "st_variation": 0.0025,
+
+            "inbound_bw": 100,
+            "outbound_bw": 100
+        },
+        {
+            "node_type": "worker",
+            "id": 10,
+            "parent": 3,
+            
+            "step_time": 0.015,
+            "st_variation": 0.0025,
+
+            "inbound_bw": 100,
+            "outbound_bw": 100
+        },
+        {
+            "node_type": "worker",
+            "id": 11,
+            "parent": 4,
+
+            "step_time": 0.015,
+            "st_variation": 0.0025,
+
+            "inbound_bw": 100,
+            "outbound_bw": 100
+        },
+        {
+            "node_type": "worker",
+            "id": 12,
+            "parent": 4,
+
+            "step_time": 0.015,
+            "st_variation": 0.0025,
+
+            "inbound_bw": 100,
+            "outbound_bw": 100
+        }
+        
+        
+    ]
+}
