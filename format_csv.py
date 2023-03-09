@@ -51,10 +51,13 @@ def examine_2d(csv_data, ver_key, hor_key, ex_key, isolates=None, ver_key_vals=N
 
     out_rows = list(filter(check_isolates, [i for i in range(len(csv_data[ver_key]))]))
 
+    # remove duplicates
     if ver_key_vals is None:
-        ver_key_vals = [*set([csv_data[ver_key][row_idx] for row_idx in out_rows])]
+        ver_key_vals = []
+        [ver_key_vals.append(csv_data[ver_key][row_idx]) for row_idx in out_rows if csv_data[ver_key][row_idx] not in ver_key_vals]
     if hor_key_vals is None:
-        hor_key_vals = [*set([csv_data[hor_key][row_idx] for row_idx in out_rows])]
+        hor_key_vals = []
+        [hor_key_vals.append(csv_data[hor_key][row_idx]) for row_idx in out_rows if csv_data[hor_key][row_idx] not in hor_key_vals]
 
     def check_key_vals(row_idx):
         if csv_data[ver_key][row_idx] not in ver_key_vals:
@@ -80,9 +83,11 @@ def examine_2d(csv_data, ver_key, hor_key, ex_key, isolates=None, ver_key_vals=N
                     found = True
                     ex_vals.append(csv_data[ex_key][row_idx])
 
+            # Leave blank if not found
             if not found:
-                raise ValueError(f'No row found with proper vkey-hkey vals. Check isolates.\nvkey: {ver_key}, vval: {ver_key_val}, hkey: {hor_key}, hval: {hor_key_val}')
-            
+            #     raise ValueError(f'No row found with proper vkey-hkey vals. Check isolates.\nvkey: {ver_key}, vval: {ver_key_val}, hkey: {hor_key}, hval: {hor_key_val}')
+                ex_vals.append('')
+
         out_str = add_row(out_str, make_row([ver_key_val] + ex_vals))
 
     return out_str
