@@ -265,7 +265,7 @@ class NetworkSequenceGenerator:
 
         return False
             
-    def generate_gantt(self, time_stamp):
+    def generate_gantt(self, stamp):
 
         # Make node gantt channels
         gantts = {}
@@ -359,7 +359,7 @@ class NetworkSequenceGenerator:
         }}
         """.format(timing_str, row_array_str)
 
-        outfile = open('gantt/gantt_datas/gantt_data_%s.json' % time_stamp, 'w')
+        outfile = open('gantt/gantt_datas/gantt_data_%s.json' % stamp, 'w')
         outfile.write(output)
         outfile.close()
 

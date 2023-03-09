@@ -1,26 +1,6 @@
 import csv, json
 
-infilename = 'configs.csv'
 delimiter = '\t'
-
-
-# TODO look into max epochs
-# TODO move this into run sim
-global_config_json = """
-{
-    "bypass_NI": false,
-    "learning_rate": 0.001,
-    "batch_size": 32,
-    "num_train_samples": 60000,
-    "num_test_samples": 10000,
-	"network_style": "hd",
-    "data_chunk_size": 64,
-    "eval_interval": 100,
-    "max_epochs": 12,
-    "generate_gantt": true,
-    "nodes": []
-}
-"""
 
 
 def load_configs_csv(infilename, delimiter=delimiter):
@@ -45,12 +25,13 @@ def load_configs_csv(infilename, delimiter=delimiter):
     return raw_configs
 
 
-def make_config(raw_config):
+def make_config(global_config_json, raw_config):
     config = json.loads(global_config_json)
 
     config['raw_config'] = raw_config
     config['target_acc'] = float(raw_config['target-acc'])
     config['epochs'] = int(raw_config['epochs'])
+    config['generate_gantt'] = bool(int(raw_config['generate-gantt']))
 
     # Top level PS
     # TODO currently no support for different inbound/outbound bw

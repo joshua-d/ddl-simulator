@@ -234,7 +234,7 @@ class TwoPassCluster:
             params = ps.incoming_parent_params.pop(0)
             ps.apply_params(params)
 
-    def get_results(self, e_to_target, t_to_target):
+    def get_results(self, e_to_target, t_to_target, stamp):
         row = self.config['raw_config']
         
         row['n-workers'] = self.num_workers
@@ -247,11 +247,11 @@ class TwoPassCluster:
             if e.end_time > end_time:
                 end_time = e.end_time
 
-        row['tpe'] = end_time / self.config['epochs']
+        row['tpe'] = round(end_time / self.config['epochs'], 4)
 
-        row['e-to-target'] = e_to_target
-        row['t-to-target'] = t_to_target
-        row['total-time'] = end_time
+        row['e-to-target'] = round(e_to_target, 4)
+        row['t-to-target'] = round(t_to_target, 4)
+        row['total-time'] = round(end_time, 4)
 
         # avg-tsync
         receive_events = list(filter(lambda e: type(e) == ReceiveParamsEvent, self.nsg.events))
@@ -263,11 +263,13 @@ class TwoPassCluster:
 
         tsync = total_time / n_events
         
-        row['avg-tsync'] = tsync
+        row['avg-tsync'] = round(tsync, 4)
+
+        row['stamp'] = stamp
 
         return row
 
-    def start(self, time_stamp, run_i):
+    def start(self, stamp):
 
         # Prepare vars
         log_interval = 50
@@ -275,7 +277,7 @@ class TwoPassCluster:
         batches_per_epoch = int(self.num_train_samples / self.batch_size)
         max_eval_intervals = int((batches_per_epoch / self.eval_interval) * self.epochs)
 
-        logging_filename = 'eval_logs/sim_%s_%d.txt' % (time_stamp, run_i)
+        logging_filename = 'eval_logs/sim_%s.txt' % (stamp)
 
         # Eval vars
         x_test, y_test = keras_model.test_dataset(self.num_test_samples)
@@ -393,7 +395,7 @@ class TwoPassCluster:
             outfile.close()
 
         if self.generate_gantt:
-            self.nsg.generate_gantt(time_stamp + '_' + str(run_i))
+            self.nsg.generate_gantt(stamp)
 
         # Return row for results csv
-        return self.get_results(e_to_target, t_to_target)
+        return self.get_results(e_to_target, t_to_target, stamp)
