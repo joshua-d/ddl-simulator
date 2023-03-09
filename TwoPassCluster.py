@@ -170,9 +170,9 @@ class TwoPassCluster:
 
         self.data_chunk_size = self._get_config_item(config, 'data_chunk_size')
 
-        self.acc_thresholds = self._get_config_item(config, 'acc_thresholds')
+        self.target_acc = self._get_config_item(config, 'target_acc')
         self.eval_interval = self._get_config_item(config, 'eval_interval')
-        self.max_epochs = self._get_config_item(config, 'max_epochs')
+        self.epochs = self._get_config_item(config, 'epochs')
 
         self.generate_gantt = self._get_config_item(config, 'generate_gantt')
 
@@ -240,7 +240,7 @@ class TwoPassCluster:
         log_interval = 50
 
         batches_per_epoch = int(self.num_train_samples / self.batch_size)
-        max_eval_intervals = int((batches_per_epoch / self.eval_interval) * self.max_epochs)
+        max_eval_intervals = int((batches_per_epoch / self.eval_interval) * self.epochs)
 
         now = datetime.datetime.now()
         time_str = str(now.time())
@@ -248,13 +248,15 @@ class TwoPassCluster:
 
         logging_filename = 'eval_logs/sim_%s.txt' % (time_stamp)
 
-        if self.generate_gantt:
-            saved_events = []
-
         # Eval vars
         x_test, y_test = keras_model.test_dataset(self.num_test_samples)
         accuracies = []
         threshold_results = []
+
+        # First pass
+        while not self.nsg.generate(None, self.epochs * batches_per_epoch):
+            pass
+        event_idx = 0
 
         # Begin training
         print('Beginning training')
@@ -266,14 +268,11 @@ class TwoPassCluster:
 
             # Process events until next steps milestone
             while self.steps_complete < next_steps_milestone:
-                if len(self.nsg.events) == 0:
-                    for _ in range(self.gen_buf):
-                        self.nsg.generate()
-                    self.n_generated += self.gen_buf
-                current_event = self.nsg.events.pop(0)
-                if self.generate_gantt:
-                    saved_events.append(current_event)
+                if event_idx == len(self.nsg.events):
+                    raise ValueError('Ran out of nsg events')
+                current_event = self.nsg.events[event_idx]
                 self.process_event(current_event)
+                event_idx += 1
 
             next_steps_milestone += self.eval_interval
 
@@ -306,14 +305,10 @@ class TwoPassCluster:
                     outfile.close()
                 accuracies = []
 
-            # Check if next acc threshold has been reached
-            if test_accuracy >= self.acc_thresholds[0]:
-                epochs = self.steps_complete / batches_per_epoch
-                # Mark end time of last step event of this interval
-                threshold_results.append((self.acc_thresholds.pop(0), epochs, self.steps_complete, current_event.end_time))
-
             # STOPPING CONDITIONS
-            if len(self.acc_thresholds) == 0 or eval_num >= max_eval_intervals:
+            if test_accuracy >= self.target_acc or eval_num >= max_eval_intervals:
+                epochs = self.steps_complete / batches_per_epoch
+                threshold_results.append((self.target_acc, epochs, self.steps_complete, current_event.end_time))
                 break
 
 
@@ -341,7 +336,7 @@ class TwoPassCluster:
             if self.generate_gantt: # TODO generate gantt must be on for tsync to be logged
                 total_time = 0
                 n_events = 0
-                for event in saved_events:
+                for event in self.nsg.events:
                     if type(event) == ReceiveParamsEvent:
                         total_time += event.end_time - event.start_time
                         n_events += 1
@@ -355,7 +350,7 @@ class TwoPassCluster:
 
             outfile.write('\n')
             for k in self.config:
-                if k == 'nodes' or k == 'acc_thresholds':
+                if k == 'nodes':
                     continue
                 outfile.write('%s: %s\n' % (k, self.config[k]))
 
@@ -368,5 +363,4 @@ class TwoPassCluster:
             outfile.close()
 
         if self.generate_gantt:
-            self.nsg.events = saved_events
             self.nsg.generate_gantt(time_stamp)

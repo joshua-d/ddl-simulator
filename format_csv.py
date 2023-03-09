@@ -1,7 +1,5 @@
 import csv
 
-infilename = "out.csv"
-outfilename = "formatted.csv"
 delimiter = '\t'
 
 
@@ -132,16 +130,3 @@ def examine_1d(csv_data, hor_keys=None, isolates=None, first_key=None, first_key
         out_str = add_row(out_str, make_row([csv_data[key][row_idx] for key in hor_keys]))
 
     return out_str
-    
-
-
-
-def main():
-    csv_data = load_csv(infilename)
-    # out_str = examine_1d(csv_data, ['topology', 'sync-config', 'bw', 'n-workers'], {'topology': '2-2-2-2'}, 'sync-config', ['S-S', 'S-A'])
-    out_str = examine_2d(csv_data, 'topology', 'sync-config', 'target-acc', ['2-2-2-2', '4-4'], ['S-S', 'A-S', 'S-A'])
-    print(out_str)
-
-
-if __name__ == '__main__':
-    main()

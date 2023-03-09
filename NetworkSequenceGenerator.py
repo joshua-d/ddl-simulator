@@ -92,6 +92,8 @@ class NetworkSequenceGenerator:
         inbound_max = {}
         outbound_max = {}
 
+        self.n_batches = 0
+
         # Build node objs from config
         for node_desc in node_descs:
             if node_desc['node_type'] == 'ps':
@@ -132,6 +134,7 @@ class NetworkSequenceGenerator:
         for worker in self.workers:
             step_time = worker.step_time - worker.st_variation + random.uniform(0, worker.st_variation*2)
             self.events.append(WorkerStepEvent(0, step_time, worker.id))
+            self.n_batches += 1
             self.events.append(SendParamsEvent(step_time, step_time, worker.id, worker.parent.id))
             self.ne.send_msg(worker.id, worker.parent.id, self.msg_size, step_time)
 
@@ -237,21 +240,30 @@ class NetworkSequenceGenerator:
 
             step_time = worker.step_time - worker.st_variation + random.uniform(0, worker.st_variation*2)
             self.events.append(WorkerStepEvent(self.ne.current_time, self.ne.current_time + step_time, worker.id))
+            self.n_batches += 1
 
             # Send params to parent
             self.events.append(SendParamsEvent(self.ne.current_time + step_time, self.ne.current_time + step_time, worker.id, worker.parent.id))
             self.ne.send_msg(worker.id, worker.parent.id, self.msg_size, self.ne.current_time + step_time)
 
 
-    def generate(self, eff_start=None, eff_end=None):
+    def generate(self, end_time, end_batch=None, eff_start=None, eff_end=None):
         # Move NE until a msg has sent
         sent_msgs = self.ne.move(eff_start, eff_end)
-        while len(sent_msgs) == 0:
-            sent_msgs = self.ne.move(eff_start, eff_end)
 
+        while len(sent_msgs) == 0:
+            if (end_time is not None and self.ne.current_time >= end_time) or (end_batch is not None and self.n_batches >= end_batch):
+                return True
+            sent_msgs = self.ne.move(eff_start, eff_end)
+            
         # Process sent msgs
         for msg in sent_msgs:
             self._process_msg(msg)
+
+        if (end_time is not None and self.ne.current_time >= end_time) or (end_batch is not None and self.n_batches >= end_batch):
+            return True
+
+        return False
             
     def generate_gantt(self, time_stamp):
 

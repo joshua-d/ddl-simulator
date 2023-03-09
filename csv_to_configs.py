@@ -5,6 +5,7 @@ delimiter = '\t'
 
 
 # TODO look into max epochs
+# TODO move this into run sim
 global_config_json = """
 {
     "bypass_NI": false,
@@ -22,7 +23,7 @@ global_config_json = """
 """
 
 
-def load(infilename, delimiter=delimiter):
+def load_configs_csv(infilename, delimiter=delimiter):
     infile = open(infilename)
 
     raw_configs = []
@@ -46,6 +47,10 @@ def load(infilename, delimiter=delimiter):
 
 def make_config(raw_config):
     config = json.loads(global_config_json)
+
+    config['raw_config'] = raw_config
+    config['target_acc'] = float(raw_config['target-acc'])
+    config['epochs'] = int(raw_config['epochs'])
 
     # Top level PS
     # TODO currently no support for different inbound/outbound bw
@@ -108,14 +113,3 @@ def make_config(raw_config):
         parent_ps += 1
 
     return config
-
-
-
-def main():
-    raw_configs = load(infilename)
-    config = make_config(raw_configs[0])
-    print(json.dumps(config))
-
-
-if __name__ == '__main__':
-    main()
