@@ -39,21 +39,31 @@ def add_row(out_str, row_str):
 """
 ver_key_vals and hor_key_vals must be exact with no duplicates
 """
-def examine_2d(csv_data, ver_key, hor_key, ex_key, ver_key_vals, hor_key_vals, isolates=None):
+def examine_2d(csv_data, ver_key, hor_key, ex_key, isolates=None, ver_key_vals=None, hor_key_vals=None):
     if isolates is None:
         isolates = {}
 
-    def include_row(row_idx):
-        if csv_data[ver_key][row_idx] not in ver_key_vals:
-            return False
-        if csv_data[hor_key][row_idx] not in hor_key_vals:
-            return False
+    def check_isolates(row_idx):
         for iso_key in isolates:
             if csv_data[iso_key][row_idx] != isolates[iso_key]:
                 return False
         return True
+
+    out_rows = list(filter(check_isolates, [i for i in range(len(csv_data[ver_key]))]))
+
+    if ver_key_vals is None:
+        ver_key_vals = [*set([csv_data[ver_key][row_idx] for row_idx in out_rows])]
+    if hor_key_vals is None:
+        hor_key_vals = [*set([csv_data[hor_key][row_idx] for row_idx in out_rows])]
+
+    def check_key_vals(row_idx):
+        if csv_data[ver_key][row_idx] not in ver_key_vals:
+            return False
+        if csv_data[hor_key][row_idx] not in hor_key_vals:
+            return False
+        return True
     
-    out_rows = list(filter(include_row, [i for i in range(len(csv_data[ver_key]))]))
+    out_rows = list(filter(check_key_vals, out_rows))
 
     out_str = add_row('', make_row([ex_key, hor_key]))
     out_str = add_row(out_str, make_row([ver_key] + hor_key_vals))
@@ -66,12 +76,12 @@ def examine_2d(csv_data, ver_key, hor_key, ex_key, ver_key_vals, hor_key_vals, i
             for row_idx in out_rows:
                 if csv_data[ver_key][row_idx] == ver_key_val and csv_data[hor_key][row_idx] == hor_key_val:
                     if found:
-                        raise ValueError(f'Found row with duplicate vkey-hkey vals. Check isolates.\nvkey: {ver_key}, vval: {ver_key_val}, hkey: {hor_key}, hval{hor_key_val}')
+                        raise ValueError(f'Found row with duplicate vkey-hkey vals. Check isolates.\nvkey: {ver_key}, vval: {ver_key_val}, hkey: {hor_key}, hval: {hor_key_val}')
                     found = True
                     ex_vals.append(csv_data[ex_key][row_idx])
 
             if not found:
-                raise ValueError(f'No row found with proper vkey-hkey vals. Check isolates.\nvkey: {ver_key}, vval: {ver_key_val}, hkey: {hor_key}, hval{hor_key_val}')
+                raise ValueError(f'No row found with proper vkey-hkey vals. Check isolates.\nvkey: {ver_key}, vval: {ver_key_val}, hkey: {hor_key}, hval: {hor_key_val}')
             
         out_str = add_row(out_str, make_row([ver_key_val] + ex_vals))
 
@@ -86,7 +96,7 @@ exact: bool
     if True, isolates must be properly configured such that there will be
     no 2 included rows with the same first key val, and first_key_vals must contain no duplicates
 """
-def examine_1d(csv_data, hor_keys=None, isolates=None, first_key=None, first_key_vals=None, exact=True):
+def examine_1d(csv_data, hor_keys=None, isolates=None, first_key=None, first_key_vals=None, exact=False, sort_key=None):
     if hor_keys is None:
         hor_keys = csv_data.keys()
     if isolates is None:
@@ -125,6 +135,9 @@ def examine_1d(csv_data, hor_keys=None, isolates=None, first_key=None, first_key
         out_rows = sorted_out_rows
 
     out_str = add_row('', make_row(hor_keys))
+
+    if sort_key is not None:
+        out_rows.sort(key=lambda row_idx: csv_data[sort_key][row_idx])
 
     for row_idx in out_rows:
         out_str = add_row(out_str, make_row([csv_data[key][row_idx] for key in hor_keys]))
