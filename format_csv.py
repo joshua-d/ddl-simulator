@@ -5,7 +5,7 @@ outfilename = "formatted.csv"
 delimiter = '\t'
 
 
-def load_csv(infilename):
+def load_csv(infilename, delimiter=delimiter):
     infile = open(infilename)
 
     csv_data = {}
