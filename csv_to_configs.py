@@ -32,6 +32,7 @@ def make_config(global_config_json, raw_config):
     config['target_acc'] = float(raw_config['target-acc'])
     config['epochs'] = int(raw_config['epochs'])
     config['generate_gantt'] = bool(int(raw_config['generate-gantt']))
+    config['trainless'] = bool(int(raw_config['trainless']))
 
     # Top level PS
     # TODO currently no support for different inbound/outbound bw
@@ -51,7 +52,7 @@ def make_config(global_config_json, raw_config):
 
     # Mid level PSs
     node_id = 1
-    n_mid = raw_config['topology'].count('-') + 1
+    n_mid = raw_config['topology'].count('-') + 1 if raw_config['topology'].count('-') != 0 else 0
     for _ in range(n_mid):
         config['nodes'].append({
             "node_type": "ps",
@@ -71,12 +72,16 @@ def make_config(global_config_json, raw_config):
     # Workers
     cluster_nums = []
     top = raw_config['topology']
-    while top.count('-') > 0:
+
+    parent_ps = 0 # 1lvl
+
+    while top.count('-') > 0: # 2lvl
         cluster_nums.append(int(top[0:top.find('-')]))
         top = top[top.find('-')+1:]
-    cluster_nums.append(int(top))
+        parent_ps = 1
 
-    parent_ps = 1
+    cluster_nums.append(int(top))
+    
     for n_cluster_workers in cluster_nums:
         for _ in range(n_cluster_workers):
             config['nodes'].append({

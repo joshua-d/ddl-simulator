@@ -31,7 +31,8 @@ keys = [
     'ps-async-time',
     'epochs',
     'target-acc', 
-    'generate-gantt', # raw config ends here
+    'generate-gantt',
+    'trainless', # raw config ends here
 
     'n-workers',
     'n-mid-ps',
@@ -69,8 +70,9 @@ if __name__ == '__main__':
     # TODO may have to do some multiprocessing stuff here for memory's sake
     for config in configs:
         cluster = TwoPassCluster(model_builder, dataset_fn, config)
-        result_row = cluster.start(time_stamp + '_' + str(run_i))
-
+        stamp = time_stamp + '_' + str(run_i)
+        # TODO model and stuff gets built event on trainless - inefficient
+        result_row = cluster.train(stamp) if not config['trainless'] else cluster.trainless(stamp)
         result_row_list = [result_row[key] for key in keys]
 
         with open(result_filename, 'a') as resfile:

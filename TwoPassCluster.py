@@ -234,7 +234,8 @@ class TwoPassCluster:
             params = ps.incoming_parent_params.pop(0)
             ps.apply_params(params)
 
-    def get_results(self, e_to_target, t_to_target, stamp):
+    # considers nsg.events
+    def get_results(self, stamp, trainless, e_to_target=None, t_to_target=None):
         row = self.config['raw_config']
         
         row['n-workers'] = self.num_workers
@@ -249,8 +250,13 @@ class TwoPassCluster:
 
         row['tpe'] = round(end_time / self.config['epochs'], 4)
 
-        row['e-to-target'] = round(e_to_target, 4)
-        row['t-to-target'] = round(t_to_target, 4)
+        if not trainless:
+            row['e-to-target'] = round(e_to_target, 4)
+            row['t-to-target'] = round(t_to_target, 4)
+        else:
+            row['e-to-target'] = ''
+            row['t-to-target'] = ''
+
         row['total-time'] = round(end_time, 4)
 
         # avg-tsync
@@ -269,12 +275,12 @@ class TwoPassCluster:
 
         return row
 
-    def start(self, stamp):
+    def train(self, stamp):
 
         # Prepare vars
         log_interval = 50
 
-        batches_per_epoch = int(self.num_train_samples / self.batch_size)
+        batches_per_epoch = int(self.num_train_samples / self.batch_size) # TODO num train samples should be divisible by batch size
         max_eval_intervals = int((batches_per_epoch / self.eval_interval) * self.epochs)
 
         logging_filename = 'eval_logs/sim_%s.txt' % (stamp)
@@ -398,4 +404,16 @@ class TwoPassCluster:
             self.nsg.generate_gantt(stamp)
 
         # Return row for results csv
-        return self.get_results(e_to_target, t_to_target, stamp)
+        return self.get_results(stamp, False, e_to_target, t_to_target)
+
+    def trainless(self, stamp):
+        batches_per_epoch = int(self.num_train_samples / self.batch_size) # TODO num train samples should be divisible by batch size
+
+        while not self.nsg.generate(None, self.epochs * batches_per_epoch):
+            pass
+
+        if self.generate_gantt:
+            self.nsg.generate_gantt(stamp)
+
+        return self.get_results(stamp, trainless=True)
+
