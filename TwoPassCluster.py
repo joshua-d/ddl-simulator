@@ -234,7 +234,40 @@ class TwoPassCluster:
             params = ps.incoming_parent_params.pop(0)
             ps.apply_params(params)
 
-    def start(self):
+    def get_results(self, e_to_target, t_to_target):
+        row = self.config['raw_config']
+        
+        row['n-workers'] = self.num_workers
+        row['n-mid-ps'] = len(list(filter(lambda node: node['node_type'] == 'ps', self.config['nodes']))) - 1
+
+        # tpe
+        step_events = list(filter(lambda e: type(e) == WorkerStepEvent, self.nsg.events))
+        end_time = 0
+        for e in step_events:
+            if e.end_time > end_time:
+                end_time = e.end_time
+
+        row['tpe'] = end_time / self.config['epochs']
+
+        row['e-to-target'] = e_to_target
+        row['t-to-target'] = t_to_target
+        row['total-time'] = end_time
+
+        # avg-tsync
+        receive_events = list(filter(lambda e: type(e) == ReceiveParamsEvent, self.nsg.events))
+        total_time = 0
+        n_events = 0
+        for event in receive_events:
+            total_time += event.end_time - event.start_time
+            n_events += 1
+
+        tsync = total_time / n_events
+        
+        row['avg-tsync'] = tsync
+
+        return row
+
+    def start(self, time_stamp, run_i):
 
         # Prepare vars
         log_interval = 50
@@ -242,11 +275,7 @@ class TwoPassCluster:
         batches_per_epoch = int(self.num_train_samples / self.batch_size)
         max_eval_intervals = int((batches_per_epoch / self.eval_interval) * self.epochs)
 
-        now = datetime.datetime.now()
-        time_str = str(now.time())
-        time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
-
-        logging_filename = 'eval_logs/sim_%s.txt' % (time_stamp)
+        logging_filename = 'eval_logs/sim_%s_%d.txt' % (time_stamp, run_i)
 
         # Eval vars
         x_test, y_test = keras_model.test_dataset(self.num_test_samples)
@@ -307,8 +336,9 @@ class TwoPassCluster:
 
             # STOPPING CONDITIONS
             if test_accuracy >= self.target_acc or eval_num >= max_eval_intervals:
-                epochs = self.steps_complete / batches_per_epoch
-                threshold_results.append((self.target_acc, epochs, self.steps_complete, current_event.end_time))
+                e_to_target = self.steps_complete / batches_per_epoch
+                t_to_target = current_event.end_time
+                threshold_results.append((self.target_acc, e_to_target, self.steps_complete, t_to_target))
                 break
 
 
@@ -363,4 +393,7 @@ class TwoPassCluster:
             outfile.close()
 
         if self.generate_gantt:
-            self.nsg.generate_gantt(time_stamp)
+            self.nsg.generate_gantt(time_stamp + '_' + str(run_i))
+
+        # Return row for results csv
+        return self.get_results(e_to_target, t_to_target)

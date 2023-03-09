@@ -28,7 +28,7 @@ def load_csv(infilename, delimiter=delimiter):
 def make_row(vals, delimiter=delimiter):
     row_str = ''
     for val in vals:
-        row_str += val + delimiter
+        row_str += str(val) + delimiter
     return row_str
 
 
