@@ -38,28 +38,66 @@ def add_row(out_str, row_str):
     return out_str + row_str + '\n'
 
 
+"""
+ver_key_vals and hor_key_vals must be exact with no duplicates
+"""
+def examine_2d(csv_data, ver_key, hor_key, ex_key, ver_key_vals, hor_key_vals, isolates=None):
+    if isolates is None:
+        isolates = {}
 
-def examine_2d(csv_data, ver_key, hor_key, ex_key, isolates=None, ver_key_vals=None, hor_key_vals=None):
-    pass
+    def include_row(row_idx):
+        if csv_data[ver_key][row_idx] not in ver_key_vals:
+            return False
+        if csv_data[hor_key][row_idx] not in hor_key_vals:
+            return False
+        for iso_key in isolates:
+            if csv_data[iso_key][row_idx] != isolates[iso_key]:
+                return False
+        return True
+    
+    out_rows = list(filter(include_row, [i for i in range(len(csv_data[ver_key]))]))
 
+    out_str = add_row('', make_row([ex_key, hor_key]))
+    out_str = add_row(out_str, make_row([ver_key] + hor_key_vals))
+
+    for ver_key_val in ver_key_vals:
+        ex_vals = []
+
+        for hor_key_val in hor_key_vals:
+            found = False
+            for row_idx in out_rows:
+                if csv_data[ver_key][row_idx] == ver_key_val and csv_data[hor_key][row_idx] == hor_key_val:
+                    if found:
+                        raise ValueError(f'Found row with duplicate vkey-hkey vals. Check isolates.\nvkey: {ver_key}, vval: {ver_key_val}, hkey: {hor_key}, hval{hor_key_val}')
+                    found = True
+                    ex_vals.append(csv_data[ex_key][row_idx])
+
+            if not found:
+                raise ValueError(f'No row found with proper vkey-hkey vals. Check isolates.\nvkey: {ver_key}, vval: {ver_key_val}, hkey: {hor_key}, hval{hor_key_val}')
+            
+        out_str = add_row(out_str, make_row([ver_key_val] + ex_vals))
+
+    return out_str
+                
 
 """
 isolates: { key_to_isolate: value_to_isolate_on }
-first_ley_vals: [ val ]
+first_key_vals: [ val ]
     row's first key val must be in this list to be included
 exact: bool
     if True, isolates must be properly configured such that there will be
-    no 2 included rows with the same first key val
+    no 2 included rows with the same first key val, and first_key_vals must contain no duplicates
 """
 def examine_1d(csv_data, hor_keys=None, isolates=None, first_key=None, first_key_vals=None, exact=True):
     if hor_keys is None:
         hor_keys = csv_data.keys()
+    if isolates is None:
+        isolates = {}
     if first_key is None:
         first_key = hor_keys[0]
     if first_key_vals is None:
         first_key_vals = csv_data[first_key]
-    if isolates is None:
-        isolates = {}
+    
 
     hor_keys.remove(first_key)
     hor_keys = [first_key] + hor_keys
@@ -80,13 +118,12 @@ def examine_1d(csv_data, hor_keys=None, isolates=None, first_key=None, first_key
             found = False
             for row_idx in out_rows:
                 if csv_data[first_key][row_idx] == first_key_val:
-                    if not found:
-                        sorted_out_rows.append(row_idx)
-                        found = True
-                    else:
-                        raise ValueError(f'Found row with duplicate first key, but exact set to True\nfirst key: {first_key}, row index: {row_idx}, value: {first_key_val}')
+                    if found:
+                        raise ValueError(f'Found row with duplicate first key, but exact set to True. Check isolates.\nfirst key: {first_key}, row index: {row_idx}, value: {first_key_val}')
+                    sorted_out_rows.append(row_idx)
+                    found = True
             if not found:
-                raise ValueError('No row found with first key val "{first_key_val}", but exact set to True')
+                raise ValueError('No row found with first key val "{first_key_val}", but exact set to True. Check isolates.')
         out_rows = sorted_out_rows
 
     out_str = add_row('', make_row(hor_keys))
@@ -101,7 +138,8 @@ def examine_1d(csv_data, hor_keys=None, isolates=None, first_key=None, first_key
 
 def main():
     csv_data = load_csv(infilename)
-    out_str = examine_1d(csv_data, ['topology', 'sync-config', 'bw', 'n-workers'], {'topology': '2-2-2-2'}, 'sync-config', ['S-S', 'S-A'])
+    # out_str = examine_1d(csv_data, ['topology', 'sync-config', 'bw', 'n-workers'], {'topology': '2-2-2-2'}, 'sync-config', ['S-S', 'S-A'])
+    out_str = examine_2d(csv_data, 'topology', 'sync-config', 'target-acc', ['2-2-2-2', '4-4'], ['S-S', 'A-S', 'S-A'])
     print(out_str)
 
 
