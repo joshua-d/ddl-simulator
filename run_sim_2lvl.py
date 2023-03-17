@@ -65,13 +65,13 @@ if __name__ == '__main__':
         resfile.write(make_row(keys) + '\n')
         resfile.close()
 
+    # TODO may have to do some multiprocessing stuff here for memory's sake
     # Begin sims
     run_i = 0
-    # TODO may have to do some multiprocessing stuff here for memory's sake
     for config in configs:
         cluster = TwoPassCluster(model_builder, dataset_fn, config)
         stamp = time_stamp + '_' + str(run_i)
-        # TODO model and stuff gets built event on trainless - inefficient
+        # TODO model and stuff gets built event on trainless - inefficient, but doesn't take that much time
         result_row = cluster.train(stamp) if not config['trainless'] else cluster.trainless(stamp)
         result_row_list = [result_row[key] for key in keys]
 
