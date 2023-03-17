@@ -148,3 +148,65 @@ def examine_1d(csv_data, hor_keys=None, isolates=None, first_key=None, first_key
         out_str = add_row(out_str, make_row([csv_data[key][row_idx] for key in hor_keys]))
 
     return out_str
+
+
+"""
+Consolidates rows with same "consolidate keys" into one row by averaging other keys based on n-runs
+"""
+def consolidate(csv_data, consolidate_keys):
+    new_data = {}
+    for key in csv_data:
+        new_data[key] = []
+
+    consolidated_row_idxs = []
+
+    for row_idx in range(len(csv_data[key])):
+        if row_idx in consolidated_row_idxs:
+            continue
+
+        rows_to_consolidate = [row_idx]
+
+        for aux_row_idx in range(len(csv_data[key])):
+            if row_idx == aux_row_idx or aux_row_idx in consolidated_row_idxs:
+                continue
+            do_consolidate = True
+            for cons_key in consolidate_keys:
+                if csv_data[cons_key][row_idx] != csv_data[cons_key][aux_row_idx]:
+                    do_consolidate = False
+                    break
+            
+            if do_consolidate:
+                rows_to_consolidate.append(aux_row_idx)
+
+        cons_vals = {}
+        for cons_row_idx in rows_to_consolidate:
+            for avg_key in csv_data:
+                if avg_key in consolidate_keys:
+                    continue
+                if avg_key == 'n-runs':
+                    if 'n-runs' not in cons_vals:
+                        cons_vals['n-runs'] = 0
+                    cons_vals['n-runs'] += int(csv_data['n-runs'][cons_row_idx])
+                    continue
+                if avg_key not in cons_vals:
+                    cons_vals[avg_key] = 0
+                cons_vals[avg_key] += float(csv_data[avg_key][cons_row_idx]) * int(csv_data['n-runs'][cons_row_idx])
+            
+            consolidated_row_idxs.append(cons_row_idx)
+
+        for avg_key in cons_vals:
+            if avg_key != 'n-runs':
+                cons_vals[avg_key] /= cons_vals['n-runs']
+
+        for key in csv_data:
+            if key in consolidate_keys:
+                new_data[key].append(csv_data[key][row_idx])
+            else:
+                new_data[key].append(cons_vals[key])
+
+    out_str = add_row('', make_row(new_data.keys()))
+
+    for row_idx in range(len(new_data[key])):
+        out_str = add_row(out_str, make_row([new_data[key][row_idx] for key in new_data]))
+
+    return out_str

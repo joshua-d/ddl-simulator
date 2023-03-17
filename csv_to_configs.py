@@ -33,6 +33,7 @@ def make_config(global_config_json, raw_config):
     config['epochs'] = int(raw_config['epochs'])
     config['generate_gantt'] = bool(int(raw_config['generate-gantt']))
     config['trainless'] = bool(int(raw_config['trainless']))
+    config['n_runs'] = int(raw_config['n-runs'])
 
     # Top level PS
     # TODO currently no support for different inbound/outbound bw

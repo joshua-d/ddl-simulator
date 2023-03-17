@@ -21,7 +21,7 @@ global_config_json = """
 }
 """
 
-keys = [
+raw_config_keys = [
     'topology',
     'sync-config',
     'bw',
@@ -32,8 +32,11 @@ keys = [
     'epochs',
     'target-acc', 
     'generate-gantt',
-    'trainless', # raw config ends here
+    'trainless',
+    'n-runs'
+]
 
+non_raw_config_keys = [
     'n-workers',
     'n-mid-ps',
 
@@ -44,6 +47,8 @@ keys = [
     'avg-tsync',
     'stamp'
 ]
+
+keys = raw_config_keys + non_raw_config_keys
 
 # ps_tsync_keys = [(f"ps-{node['id']}-tsync") for node in list(filter(lambda n: n['node_type'] == 'ps', config['nodes']))]
 # w_tsync_keys = [(f"w-{node['id']}-tsync") for node in list(filter(lambda n: n['node_type'] == 'worker', config['nodes']))]
@@ -69,14 +74,15 @@ if __name__ == '__main__':
     # Begin sims
     run_i = 0
     for config in configs:
-        cluster = TwoPassCluster(model_builder, dataset_fn, config)
-        stamp = time_stamp + '_' + str(run_i)
-        # TODO model and stuff gets built event on trainless - inefficient, but doesn't take that much time
-        result_row = cluster.train(stamp) if not config['trainless'] else cluster.trainless(stamp)
-        result_row_list = [result_row[key] for key in keys]
+        for _ in range(config['n_runs']):
+            cluster = TwoPassCluster(model_builder, dataset_fn, config)
+            stamp = time_stamp + '_' + str(run_i)
+            # TODO model and stuff gets built event on trainless - inefficient, but doesn't take that much time
+            result_row = cluster.train(stamp) if not config['trainless'] else cluster.trainless(stamp)
+            result_row_list = [result_row[key] for key in keys]
 
-        with open(result_filename, 'a') as resfile:
-            resfile.write(make_row(result_row_list) + '\n')
-            resfile.close()
+            with open(result_filename, 'a') as resfile:
+                resfile.write(make_row(result_row_list) + '\n')
+                resfile.close()
 
-        run_i += 1
+            run_i += 1
