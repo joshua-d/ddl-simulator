@@ -151,9 +151,10 @@ def examine_1d(csv_data, hor_keys=None, isolates=None, first_key=None, first_key
 
 
 """
-Consolidates rows with same "consolidate keys" into one row by averaging other keys based on n-runs
+Consolidates rows with same "consolidate keys" into one row by averaging avg_keys based on n-runs
+Behavior of keys not in consolidate_keys or avg_keys and not the same val is undefined
 """
-def consolidate(csv_data, consolidate_keys):
+def consolidate(csv_data, consolidate_keys, avg_keys):
     new_data = {}
     for key in csv_data:
         new_data[key] = []
@@ -179,15 +180,10 @@ def consolidate(csv_data, consolidate_keys):
                 rows_to_consolidate.append(aux_row_idx)
 
         cons_vals = {}
+        total_n_runs = 0
         for cons_row_idx in rows_to_consolidate:
-            for avg_key in csv_data:
-                if avg_key in consolidate_keys:
-                    continue
-                if avg_key == 'n-runs':
-                    if 'n-runs' not in cons_vals:
-                        cons_vals['n-runs'] = 0
-                    cons_vals['n-runs'] += int(csv_data['n-runs'][cons_row_idx])
-                    continue
+            total_n_runs += int(csv_data['n-runs'][cons_row_idx])
+            for avg_key in avg_keys:
                 if avg_key not in cons_vals:
                     cons_vals[avg_key] = 0
                 cons_vals[avg_key] += float(csv_data[avg_key][cons_row_idx]) * int(csv_data['n-runs'][cons_row_idx])
@@ -195,14 +191,17 @@ def consolidate(csv_data, consolidate_keys):
             consolidated_row_idxs.append(cons_row_idx)
 
         for avg_key in cons_vals:
-            if avg_key != 'n-runs':
-                cons_vals[avg_key] /= cons_vals['n-runs']
+            cons_vals[avg_key] = round(cons_vals[avg_key] / total_n_runs, 4)
 
         for key in csv_data:
             if key in consolidate_keys:
                 new_data[key].append(csv_data[key][row_idx])
-            else:
+            elif key in avg_keys:
                 new_data[key].append(cons_vals[key])
+            elif key == 'n-runs':
+                new_data[key].append(total_n_runs)
+            else:
+                new_data[key].append(csv_data[key][row_idx])
 
     out_str = add_row('', make_row(new_data.keys()))
 

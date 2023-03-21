@@ -237,6 +237,8 @@ class TwoPassCluster:
     # considers nsg.events
     def get_results(self, stamp, trainless, e_to_target=None, t_to_target=None):
         row = self.config['raw_config']
+
+        row['n-runs'] = 1
         
         row['n-workers'] = self.num_workers
         row['n-mid-ps'] = len(list(filter(lambda node: node['node_type'] == 'ps', self.config['nodes']))) - 1
