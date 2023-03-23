@@ -27,7 +27,7 @@ def model_builder():
         with tf.GradientTape() as tape:
             predictions = model(batch_inputs, training=True)
             loss = tf.keras.losses.SparseCategoricalCrossentropy(
-                from_logits=False,
+                from_logits=True,
                 reduction=tf.keras.losses.Reduction.NONE
             )(batch_targets, predictions)
 
@@ -36,6 +36,6 @@ def model_builder():
         return grads_list
 
     def build_optimizer(learning_rate):
-        return tf.keras.optimizers.Adam(learning_rate=learning_rate)
+        return tf.keras.optimizers.RMSprop(learning_rate=learning_rate)
 
     return model, params, forward_pass, build_optimizer
