@@ -5,10 +5,12 @@ import keras_model
 model_seed = 1  # model seed and shuffle seed (in dataset_fn) for consistent tests
 
 
+cifar10_dataset = keras_model.cifar10_dataset()
+
+
 # In dataset-rework, this just gives the master dataset which is automatically "sharded" by thread-safe DatasetIterator
 def dataset_fn(num_train_samples):
-    mnist_dataset = keras_model.mnist_dataset()
-    dataset = mnist_dataset.shuffle(len(mnist_dataset), seed=model_seed, reshuffle_each_iteration=False).take(num_train_samples)
+    dataset = cifar10_dataset.shuffle(len(cifar10_dataset), seed=model_seed, reshuffle_each_iteration=False).take(num_train_samples)
     return dataset
 
 
@@ -36,6 +38,6 @@ def model_builder():
         return grads_list
 
     def build_optimizer(learning_rate):
-        return tf.keras.optimizers.Adam(learning_rate=learning_rate)
+        return tf.keras.optimizers.RMSprop(learning_rate=learning_rate)
 
     return model, params, forward_pass, build_optimizer
