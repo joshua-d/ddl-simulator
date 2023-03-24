@@ -30,6 +30,7 @@ def make_config(global_config_json, raw_config):
 
     config['raw_config'] = raw_config
     config['target_acc'] = float(raw_config['target-acc'])
+    config['stop_at_target'] = bool(int(raw_config['stop-at-target']))
     config['epochs'] = int(raw_config['epochs'])
     config['generate_gantt'] = bool(int(raw_config['generate-gantt']))
     config['trainless'] = bool(int(raw_config['trainless']))

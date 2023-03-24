@@ -3,6 +3,7 @@ import numpy as np
 from DatasetIterator import DatasetIterator
 from NetworkSequenceGenerator import NetworkSequenceGenerator, WorkerStepEvent, SendParamsEvent, ReceiveParamsEvent, PSAggrEvent, PSApplyEvent, PSParentApplyEvent
 import keras_model
+from math import ceil
 
 
 class Worker:
@@ -171,6 +172,7 @@ class TwoPassCluster:
         self.data_chunk_size = self._get_config_item(config, 'data_chunk_size')
 
         self.target_acc = self._get_config_item(config, 'target_acc')
+        self.stop_at_target = self._get_config_item(config, 'stop_at_target')
         self.eval_interval = self._get_config_item(config, 'eval_interval')
         self.epochs = self._get_config_item(config, 'epochs')
 
@@ -235,7 +237,7 @@ class TwoPassCluster:
             ps.apply_params(params)
 
     # considers nsg.events
-    def get_results(self, stamp, trainless, e_to_target=None, t_to_target=None):
+    def get_results(self, stamp, trainless, ape=None, e_to_target=None, t_to_target=None):
         row = self.config['raw_config']
 
         row['n-runs'] = 1
@@ -253,6 +255,11 @@ class TwoPassCluster:
         row['tpe'] = round(end_time / self.config['epochs'], 4)
 
         if not trainless:
+            row['ape'] = round(ape, 4)
+        else:
+            row['ape'] = ''
+
+        if not trainless and e_to_target is not None and t_to_target is not None:
             row['e-to-target'] = round(e_to_target, 4)
             row['t-to-target'] = round(t_to_target, 4)
         else:
@@ -283,7 +290,7 @@ class TwoPassCluster:
         log_interval = 50
 
         batches_per_epoch = int(self.num_train_samples / self.batch_size) # TODO num train samples should be divisible by batch size
-        max_eval_intervals = int((batches_per_epoch / self.eval_interval) * self.epochs)
+        max_eval_intervals = ceil((batches_per_epoch / self.eval_interval) * self.epochs)
 
         logging_filename = 'eval_logs/sim_%s.txt' % (stamp)
 
@@ -291,6 +298,9 @@ class TwoPassCluster:
         x_test, y_test = keras_model.test_dataset(self.num_test_samples)
         accuracies = []
         threshold_results = []
+        target_reached = False
+        e_to_target = None
+        t_to_target = None
 
         # First pass
         while not self.nsg.generate(None, self.epochs * batches_per_epoch):
@@ -306,12 +316,18 @@ class TwoPassCluster:
             eval_num += 1
 
             # Process events until next steps milestone
+            reached_max_epochs = False
             while self.steps_complete < next_steps_milestone:
                 if event_idx == len(self.nsg.events):
-                    raise ValueError('Ran out of nsg events')
+                    reached_max_epochs = True
+                    break
                 current_event = self.nsg.events[event_idx]
                 self.process_event(current_event)
                 event_idx += 1
+
+            if reached_max_epochs:
+                ape = test_accuracy / ((eval_num-1) * self.eval_interval / batches_per_epoch)
+                break
 
             next_steps_milestone += self.eval_interval
 
@@ -345,10 +361,14 @@ class TwoPassCluster:
                 accuracies = []
 
             # STOPPING CONDITIONS
-            if test_accuracy >= self.target_acc or eval_num >= max_eval_intervals:
+            if not target_reached and test_accuracy >= self.target_acc:
+                target_reached = True
                 e_to_target = self.steps_complete / batches_per_epoch
                 t_to_target = current_event.end_time
                 threshold_results.append((self.target_acc, e_to_target, self.steps_complete, t_to_target))
+
+            if (self.stop_at_target and test_accuracy >= self.target_acc) or eval_num >= max_eval_intervals:
+                ape = test_accuracy / (eval_num * self.eval_interval / batches_per_epoch)
                 break
 
 
@@ -406,7 +426,7 @@ class TwoPassCluster:
             self.nsg.generate_gantt(stamp)
 
         # Return row for results csv
-        return self.get_results(stamp, False, e_to_target, t_to_target)
+        return self.get_results(stamp, False, ape, e_to_target, t_to_target)
 
     def trainless(self, stamp):
         batches_per_epoch = int(self.num_train_samples / self.batch_size) # TODO num train samples should be divisible by batch size

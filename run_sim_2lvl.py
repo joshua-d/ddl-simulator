@@ -30,7 +30,8 @@ raw_config_keys = [
     'ps-sync-time',
     'ps-async-time',
     'epochs',
-    'target-acc', 
+    'target-acc',
+    'stop-at-target',
     'generate-gantt',
     'trainless',
     'n-runs'
@@ -41,6 +42,7 @@ non_raw_config_keys = [
     'n-mid-ps',
 
     'tpe',
+    'ape',
     'e-to-target',
     't-to-target',
     'total-time',
