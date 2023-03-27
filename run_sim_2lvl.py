@@ -1,6 +1,6 @@
 from model_and_data_builder import model_builder, dataset_fn
 from TwoPassCluster import TwoPassCluster
-from csv_to_configs import load_configs_csv, make_config
+from csv_to_configs import load_configs_csv, make_config, keys
 import datetime
 from format_csv import make_row
 
@@ -20,37 +20,6 @@ global_config_json = """
     "nodes": []
 }
 """
-
-raw_config_keys = [
-    'topology',
-    'sync-config',
-    'bw',
-    'w-step-time',
-    'w-step-var',
-    'ps-sync-time',
-    'ps-async-time',
-    'epochs',
-    'target-acc',
-    'stop-at-target',
-    'generate-gantt',
-    'trainless',
-    'n-runs'
-]
-
-non_raw_config_keys = [
-    'n-workers',
-    'n-mid-ps',
-
-    'tpe',
-    'ape',
-    'e-to-target',
-    't-to-target',
-    'total-time',
-    'avg-tsync',
-    'stamp'
-]
-
-keys = raw_config_keys + non_raw_config_keys
 
 # ps_tsync_keys = [(f"ps-{node['id']}-tsync") for node in list(filter(lambda n: n['node_type'] == 'ps', config['nodes']))]
 # w_tsync_keys = [(f"w-{node['id']}-tsync") for node in list(filter(lambda n: n['node_type'] == 'worker', config['nodes']))]

@@ -2,6 +2,37 @@ import csv, json
 
 delimiter = '\t'
 
+raw_config_keys = [
+    'topology',
+    'sync-config',
+    'bw',
+    'w-step-time',
+    'w-step-var',
+    'ps-sync-time',
+    'ps-async-time',
+    'epochs',
+    'target-acc',
+    'stop-at-target',
+    'generate-gantt',
+    'trainless',
+    'n-runs'
+]
+
+non_raw_config_keys = [
+    'n-workers',
+    'n-mid-ps',
+
+    'tpe',
+    'ape',
+    'e-to-target',
+    't-to-target',
+    'total-time',
+    'avg-tsync',
+    'stamp'
+]
+
+keys = raw_config_keys + non_raw_config_keys
+
 
 def load_configs_csv(infilename, delimiter=delimiter):
     infile = open(infilename)

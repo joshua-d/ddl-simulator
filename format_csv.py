@@ -1,6 +1,8 @@
-import csv
+import csv, json
+from csv_to_configs import raw_config_keys, non_raw_config_keys
 
 delimiter = '\t'
+config_filename = "format_csv_config.json"
 
 
 def load_csv(infilename, delimiter=delimiter):
@@ -39,7 +41,7 @@ def add_row(out_str, row_str):
 """
 ver_key_vals and hor_key_vals must be exact with no duplicates
 """
-def examine_2d(csv_data, ver_key, hor_key, ex_key, isolates=None, ver_key_vals=None, hor_key_vals=None):
+def examine_2d(csv_data, ver_key, hor_key, ex_key, isolates=None, ver_key_vals=None, hor_key_vals=None, **kwargs):
     if isolates is None:
         isolates = {}
 
@@ -101,7 +103,7 @@ exact: bool
     if True, isolates must be properly configured such that there will be
     no 2 included rows with the same first key val, and first_key_vals must contain no duplicates
 """
-def examine_1d(csv_data, hor_keys=None, isolates=None, first_key=None, first_key_vals=None, exact=False, sort_key=None):
+def examine_1d(csv_data, hor_keys=None, isolates=None, first_key=None, first_key_vals=None, exact=False, sort_key=None, **kwargs):
     if hor_keys is None:
         hor_keys = csv_data.keys()
     if isolates is None:
@@ -154,7 +156,7 @@ def examine_1d(csv_data, hor_keys=None, isolates=None, first_key=None, first_key
 Consolidates rows with same "consolidate keys" into one row by averaging avg_keys based on n-runs
 Behavior of keys not in consolidate_keys or avg_keys and not the same val is undefined
 """
-def consolidate(csv_data, consolidate_keys, avg_keys):
+def consolidate(csv_data, consolidate_keys, avg_keys, **kwargs):
     new_data = {}
     for key in csv_data:
         new_data[key] = []
@@ -209,3 +211,74 @@ def consolidate(csv_data, consolidate_keys, avg_keys):
         out_str = add_row(out_str, make_row([new_data[key][row_idx] for key in new_data]))
 
     return out_str
+
+
+if __name__ == '__main__':
+    fns = {
+        'examine_2d': examine_2d,
+        'examine_1d': examine_1d,
+        'consolidate': consolidate
+    }
+    config = json.load(open(config_filename))
+
+    csv_data = load_csv(config['infile'])
+
+    if config['args']['consolidate_keys'] is None:
+        raw_config_keys.remove('n-runs')
+        consolidate_keys = raw_config_keys
+    else:
+        consolidate_keys = config['args']['consolidate_keys']
+
+    if config['args']['avg_keys'] is None:
+        non_raw_config_keys.remove('stamp')
+        avg_keys = non_raw_config_keys
+    else:
+        avg_keys = config['args']['avg_keys']
+
+    with open(config['outfile'], 'w') as outfile:
+        outfile.write(fns[config['function']](
+            csv_data,
+            ver_key=config['args']['ver_key'],
+            hor_key=config['args']['hor_key'],
+            ex_key=config['args']['ex_key'],
+            ver_key_vals=config['args']['ver_key_vals'],
+            hor_key_vals=config['args']['hor_key_vals'],
+            hor_keys=config['args']['hor_keys'],
+            first_key=config['args']['first_key'],
+            first_key_vals=config['args']['first_key_vals'],
+            exact=config['args']['exact'],
+            sort_key=config['args']['sort_key'],
+            consolidate_keys=consolidate_keys,
+            avg_keys=avg_keys,
+            isolates=config['args']['isolates']
+        ))
+
+
+"""
+Example config:
+{
+    "function": "examine_1d",
+    "args": {
+        "ver_key": "",
+        "hor_key": "",
+        "ex_key": "",
+        "ver_key_vals": null,
+        "hor_key_vals": null,
+
+        "hor_keys": [],
+        "first_key": null,
+        "first_key_vals": null,
+        "exact": null,
+        "sort_key": null,
+
+        "consolidate_keys": null,
+        "avg_keys": [],
+
+        "isolates": {
+
+        }
+    },
+    "infile": "eval_logs/results_2023-03-27_15-59-15.csv",
+    "outfile": "out.csv"
+}
+"""
