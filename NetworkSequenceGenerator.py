@@ -247,17 +247,25 @@ class NetworkSequenceGenerator:
             self.ne.send_msg(worker.id, worker.parent.id, self.msg_size, self.ne.current_time + step_time)
 
 
-    def generate(self, eff_start=None, eff_end=None):
+    def generate(self, end_time, end_batch=None, eff_start=None, eff_end=None):
         # Move NE until a msg has sent
         sent_msgs = self.ne.move(eff_start, eff_end)
-        while len(sent_msgs) == 0:
-            sent_msgs = self.ne.move(eff_start, eff_end)
 
+        while len(sent_msgs) == 0:
+            if (end_time is not None and self.ne.current_time >= end_time) or (end_batch is not None and self.n_batches >= end_batch):
+                return True
+            sent_msgs = self.ne.move(eff_start, eff_end)
+            
         # Process sent msgs
         for msg in sent_msgs:
             self._process_msg(msg)
+
+        if (end_time is not None and self.ne.current_time >= end_time) or (end_batch is not None and self.n_batches >= end_batch):
+            return True
+
+        return False
             
-    def generate_gantt(self, time_stamp):
+    def generate_gantt(self, stamp):
 
         # Make node gantt channels
         gantts = {}
@@ -351,7 +359,7 @@ class NetworkSequenceGenerator:
         }}
         """.format(timing_str, row_array_str)
 
-        outfile = open('gantt/gantt_datas/gantt_data_%s.json' % time_stamp, 'w')
+        outfile = open('gantt/gantt_datas/gantt_data_%s.json' % stamp, 'w')
         outfile.write(output)
         outfile.close()
 

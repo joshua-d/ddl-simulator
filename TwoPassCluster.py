@@ -3,6 +3,7 @@ import numpy as np
 from DatasetIterator import DatasetIterator
 from NetworkSequenceGenerator import NetworkSequenceGenerator, WorkerStepEvent, SendParamsEvent, ReceiveParamsEvent, PSAggrEvent, PSApplyEvent, PSParentApplyEvent
 import keras_model
+from math import ceil
 
 
 class Worker:
@@ -170,9 +171,10 @@ class TwoPassCluster:
 
         self.data_chunk_size = self._get_config_item(config, 'data_chunk_size')
 
-        self.acc_thresholds = self._get_config_item(config, 'acc_thresholds')
+        self.target_acc = self._get_config_item(config, 'target_acc')
+        self.stop_at_target = self._get_config_item(config, 'stop_at_target')
         self.eval_interval = self._get_config_item(config, 'eval_interval')
-        self.max_epochs = self._get_config_item(config, 'max_epochs')
+        self.epochs = self._get_config_item(config, 'epochs')
 
         self.generate_gantt = self._get_config_item(config, 'generate_gantt')
 
@@ -234,30 +236,79 @@ class TwoPassCluster:
             params = ps.incoming_parent_params.pop(0)
             ps.apply_params(params)
 
-    def start(self):
+    # considers nsg.events
+    def get_results(self, stamp, trainless, ape=None, e_to_target=None, t_to_target=None):
+        row = self.config['raw_config']
+
+        row['n-runs'] = 1
+        
+        row['n-workers'] = self.num_workers
+        row['n-mid-ps'] = len(list(filter(lambda node: node['node_type'] == 'ps', self.config['nodes']))) - 1
+
+        # tpe
+        step_events = list(filter(lambda e: type(e) == WorkerStepEvent, self.nsg.events))
+        end_time = 0
+        for e in step_events:
+            if e.end_time > end_time:
+                end_time = e.end_time
+
+        row['tpe'] = round(end_time / self.config['epochs'], 4)
+
+        if not trainless:
+            row['ape'] = round(ape, 4)
+        else:
+            row['ape'] = ''
+
+        if not trainless and e_to_target is not None and t_to_target is not None:
+            row['e-to-target'] = round(e_to_target, 4)
+            row['t-to-target'] = round(t_to_target, 4)
+        else:
+            row['e-to-target'] = ''
+            row['t-to-target'] = ''
+
+        row['total-time'] = round(end_time, 4)
+
+        # avg-tsync
+        receive_events = list(filter(lambda e: type(e) == ReceiveParamsEvent, self.nsg.events))
+        total_time = 0
+        n_events = 0
+        for event in receive_events:
+            total_time += event.end_time - event.start_time
+            n_events += 1
+
+        tsync = total_time / n_events
+        
+        row['avg-tsync'] = round(tsync, 4)
+
+        row['stamp'] = stamp
+
+        return row
+
+    def train(self, stamp):
 
         # Prepare vars
         log_interval = 50
 
-        batches_per_epoch = int(self.num_train_samples / self.batch_size)
-        max_eval_intervals = int((batches_per_epoch / self.eval_interval) * self.max_epochs)
+        batches_per_epoch = int(self.num_train_samples / self.batch_size) # TODO num train samples should be divisible by batch size
+        max_eval_intervals = ceil((batches_per_epoch / self.eval_interval) * self.epochs)
 
-        now = datetime.datetime.now()
-        time_str = str(now.time())
-        time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
-
-        logging_filename = 'eval_logs/sim_%s.txt' % (time_stamp)
-
-        if self.generate_gantt:
-            saved_events = []
+        logging_filename = 'eval_logs/sim_%s.txt' % (stamp)
 
         # Eval vars
         x_test, y_test = keras_model.test_dataset(self.num_test_samples)
         accuracies = []
         threshold_results = []
+        target_reached = False
+        e_to_target = None
+        t_to_target = None
+
+        # First pass
+        while not self.nsg.generate(None, self.epochs * batches_per_epoch):
+            pass
+        event_idx = 0
 
         # Begin training
-        print('Beginning training')
+        print(stamp + '\tBeginning training')
         next_steps_milestone = self.eval_interval
         eval_num = 0
 
@@ -265,19 +316,22 @@ class TwoPassCluster:
             eval_num += 1
 
             # Process events until next steps milestone
+            reached_max_epochs = False
             while self.steps_complete < next_steps_milestone:
-                if len(self.nsg.events) == 0:
-                    for _ in range(self.gen_buf):
-                        self.nsg.generate()
-                    self.n_generated += self.gen_buf
-                current_event = self.nsg.events.pop(0)
-                if self.generate_gantt:
-                    saved_events.append(current_event)
+                if event_idx == len(self.nsg.events):
+                    reached_max_epochs = True
+                    break
+                current_event = self.nsg.events[event_idx]
                 self.process_event(current_event)
+                event_idx += 1
+
+            if reached_max_epochs:
+                ape = test_accuracy / ((eval_num-1) * self.eval_interval / batches_per_epoch)
+                break
 
             next_steps_milestone += self.eval_interval
 
-            print('Finished %d steps' % self.steps_complete)
+            print(stamp + '\tFinished %d steps' % self.steps_complete)
 
             # Evaluate model
             predictions = self.get_test_model().predict(x_test)            
@@ -294,7 +348,7 @@ class TwoPassCluster:
                     num_correct += 1
 
             test_accuracy = float(num_correct) / self.num_test_samples
-            print('Test accuracy: %f' % test_accuracy)
+            print(stamp + '\tTest accuracy: %f' % test_accuracy)
 
             accuracies.append(test_accuracy)
 
@@ -306,14 +360,15 @@ class TwoPassCluster:
                     outfile.close()
                 accuracies = []
 
-            # Check if next acc threshold has been reached
-            if test_accuracy >= self.acc_thresholds[0]:
-                epochs = self.steps_complete / batches_per_epoch
-                # Mark end time of last step event of this interval
-                threshold_results.append((self.acc_thresholds.pop(0), epochs, self.steps_complete, current_event.end_time))
-
             # STOPPING CONDITIONS
-            if len(self.acc_thresholds) == 0 or eval_num >= max_eval_intervals:
+            if not target_reached and test_accuracy >= self.target_acc:
+                target_reached = True
+                e_to_target = self.steps_complete / batches_per_epoch
+                t_to_target = current_event.end_time
+                threshold_results.append((self.target_acc, e_to_target, self.steps_complete, t_to_target))
+
+            if (self.stop_at_target and test_accuracy >= self.target_acc) or eval_num >= max_eval_intervals:
+                ape = test_accuracy / (eval_num * self.eval_interval / batches_per_epoch)
                 break
 
 
@@ -341,7 +396,7 @@ class TwoPassCluster:
             if self.generate_gantt: # TODO generate gantt must be on for tsync to be logged
                 total_time = 0
                 n_events = 0
-                for event in saved_events:
+                for event in self.nsg.events:
                     if type(event) == ReceiveParamsEvent:
                         total_time += event.end_time - event.start_time
                         n_events += 1
@@ -355,7 +410,7 @@ class TwoPassCluster:
 
             outfile.write('\n')
             for k in self.config:
-                if k == 'nodes' or k == 'acc_thresholds':
+                if k == 'nodes':
                     continue
                 outfile.write('%s: %s\n' % (k, self.config[k]))
 
@@ -368,5 +423,19 @@ class TwoPassCluster:
             outfile.close()
 
         if self.generate_gantt:
-            self.nsg.events = saved_events
-            self.nsg.generate_gantt(time_stamp)
+            self.nsg.generate_gantt(stamp)
+
+        # Return row for results csv
+        return self.get_results(stamp, False, ape, e_to_target, t_to_target)
+
+    def trainless(self, stamp):
+        batches_per_epoch = int(self.num_train_samples / self.batch_size) # TODO num train samples should be divisible by batch size
+
+        while not self.nsg.generate(None, self.epochs * batches_per_epoch):
+            pass
+
+        if self.generate_gantt:
+            self.nsg.generate_gantt(stamp)
+
+        return self.get_results(stamp, trainless=True)
+

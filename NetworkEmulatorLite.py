@@ -7,7 +7,7 @@ base_lgc = 1
 starting_sr = 1
 
 # How often to increment sr, s
-sr_update_period = 0.010
+sr_update_period = 0.002
 
 class Message:
     def __init__(self, from_id, to_id, size, in_time):
