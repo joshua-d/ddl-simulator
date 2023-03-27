@@ -3,7 +3,11 @@ from TwoPassCluster import TwoPassCluster
 from csv_to_configs import load_configs_csv, make_config, keys
 import datetime
 from format_csv import make_row
+from multiprocessing import Process
+from math import ceil
+import sys
 
+n_proc = 1
 
 configs_csv_filename = 'configs.csv'
 
@@ -26,30 +30,28 @@ global_config_json = """
 # keys = keys + ps_tsync_keys + w_tsync_keys
 
 
-if __name__ == '__main__':
-    configs = [make_config(global_config_json, raw_config) for raw_config in load_configs_csv(configs_csv_filename)]
+def chunks(lst, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
 
-    # Make time stamp
-    now = datetime.datetime.now()
-    time_str = str(now.time())
-    time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
 
+def run(configs, stamp):
     # Write key row to result file
-    result_filename = f"eval_logs/results_{time_stamp}.csv"
+    result_filename = f"eval_logs/results_{stamp}.csv"
 
     with open(result_filename, 'w') as resfile:
         resfile.write(make_row(keys) + '\n')
         resfile.close()
 
-    # TODO may have to do some multiprocessing stuff here for memory's sake
     # Begin sims
     run_i = 0
     for config in configs:
         for _ in range(config['n_runs']):
             cluster = TwoPassCluster(model_builder, dataset_fn, config)
-            stamp = time_stamp + '_' + str(run_i)
+            new_stamp = stamp + '_' + str(run_i)
             # TODO model and stuff gets built event on trainless - inefficient, but doesn't take that much time
-            result_row = cluster.train(stamp) if not config['trainless'] else cluster.trainless(stamp)
+            result_row = cluster.train(new_stamp) if not config['trainless'] else cluster.trainless(new_stamp)
             result_row_list = [result_row[key] for key in keys]
 
             with open(result_filename, 'a') as resfile:
@@ -57,3 +59,30 @@ if __name__ == '__main__':
                 resfile.close()
 
             run_i += 1
+
+
+if __name__ == '__main__':
+    if len(sys.argv) > 1:
+        n_proc = sys.argv[1]
+
+    configs = [make_config(global_config_json, raw_config) for raw_config in load_configs_csv(configs_csv_filename)]
+
+    # Make time stamp
+    now = datetime.datetime.now()
+    time_str = str(now.time())
+    time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
+
+    # TODO - automatic chunking does not consider n_runs
+    chunked_configs = list(chunks(configs, ceil(len(configs)/n_proc)))
+
+    if len(chunked_configs) != n_proc:
+        raise ValueError('More chunks than procs')
+
+    procs = []
+    for i in range(n_proc):
+        p = Process(target=run, args=(chunked_configs[i], time_stamp + '_' + str(i)))
+        procs.append(p)
+        p.start()
+
+    for p in procs:
+        p.join()

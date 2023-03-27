@@ -308,7 +308,7 @@ class TwoPassCluster:
         event_idx = 0
 
         # Begin training
-        print('Beginning training')
+        print(stamp + '\tBeginning training')
         next_steps_milestone = self.eval_interval
         eval_num = 0
 
@@ -331,7 +331,7 @@ class TwoPassCluster:
 
             next_steps_milestone += self.eval_interval
 
-            print('Finished %d steps' % self.steps_complete)
+            print(stamp + '\tFinished %d steps' % self.steps_complete)
 
             # Evaluate model
             predictions = self.get_test_model().predict(x_test)            
@@ -348,7 +348,7 @@ class TwoPassCluster:
                     num_correct += 1
 
             test_accuracy = float(num_correct) / self.num_test_samples
-            print('Test accuracy: %f' % test_accuracy)
+            print(stamp + '\tTest accuracy: %f' % test_accuracy)
 
             accuracies.append(test_accuracy)
 
