@@ -61,10 +61,10 @@ def make_config(global_config_json, raw_config):
             "id": node_id,
             "parent": 0,
             "update_policy": "average",
-            "sync_style": "sync" if raw_config['sync-config'][1] == 'S' else 'async',
+            "sync_style": "sync" if raw_config['sync-config'][2] == 'S' else 'async',
 
             "aggr_time": 0,
-            "apply_time": float(raw_config['ps-sync-time']) if raw_config['sync-config'][1] == 'S' else float(raw_config['ps-async-time']),
+            "apply_time": float(raw_config['ps-sync-time']) if raw_config['sync-config'][2] == 'S' else float(raw_config['ps-async-time']),
 
             "inbound_bw": float(raw_config['bw']),
             "outbound_bw": float(raw_config['bw'])
