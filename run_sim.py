@@ -63,7 +63,7 @@ def run(configs, stamp):
 
 if __name__ == '__main__':
     if len(sys.argv) > 1:
-        n_proc = sys.argv[1]
+        n_proc = int(sys.argv[1])
 
     configs = [make_config(global_config_json, raw_config) for raw_config in load_configs_csv(configs_csv_filename)]
 
