@@ -16,7 +16,7 @@ global_config_json = """
     "bypass_NI": false,
     "learning_rate": 0.001,
     "batch_size": 32,
-    "num_train_samples": 50000,
+    "num_train_samples": 60000,
     "num_test_samples": 10000,
 	"network_style": "hd",
     "data_chunk_size": 64,
