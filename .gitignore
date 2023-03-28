@@ -144,3 +144,4 @@ gantt/gantt_data.js
 comp/
 *.csv
 format_csv_config.json
+.vscode
