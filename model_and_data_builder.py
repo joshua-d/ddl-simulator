@@ -36,6 +36,6 @@ def model_builder():
         return grads_list
 
     def build_optimizer(learning_rate):
-        return tf.keras.optimizers.RMSprop(learning_rate=learning_rate)
+        return tf.keras.optimizers.Adam(learning_rate=learning_rate)
 
     return model, params, forward_pass, build_optimizer

@@ -15,7 +15,7 @@ target_acc = 0.95
 
 if __name__ == '__main__':
     model, params, forward_pass, build_optimizer = model_builder()
-    dataset = dataset_fn(num_train_samples).shuffle(1024).batch(batch_size)
+    dataset = dataset_fn(num_train_samples).shuffle(1024).batch(batch_size).repeat(10)
     di = iter(dataset)
 
     optimizer = build_optimizer(learning_rate)
