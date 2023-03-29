@@ -1,21 +1,32 @@
 from model_and_data_builder import model_builder, dataset_fn
-from DatasetIterator import DatasetIterator
 import keras_model
+import tensorflow as tf
 
 
-num_train_samples = 60000
+num_train_samples = 50000
 num_test_samples = 10000
 
 batch_size = 32
 learning_rate = 0.001
 
-eval_interval = 100
+eval_interval = 200
 target_acc = 0.95
+
+epochs = 20
 
 
 if __name__ == '__main__':
     model, params, forward_pass, build_optimizer = model_builder()
-    dataset = dataset_fn(num_train_samples).shuffle(1024).batch(batch_size)
+
+    if False:
+        (x_train, y_train), _ = tf.keras.datasets.cifar10.load_data()
+        x_train = x_train / 255.0
+        x_test, y_test = keras_model.test_dataset(num_test_samples)
+        model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+        model.fit(x_train, y_train, epochs=epochs, validation_data=(x_test, y_test))
+        exit()
+
+    dataset = dataset_fn(num_train_samples).shuffle(1024).repeat(epochs).batch(batch_size)
     di = iter(dataset)
 
     optimizer = build_optimizer(learning_rate)
@@ -29,6 +40,8 @@ if __name__ == '__main__':
         optimizer.apply_gradients(zip(grads_list, params.values()))
 
         if batch % eval_interval == 0:
+            print(f'Trained {batch} batches')
+
             # Evaluate model
             predictions = model.predict(x_test)            
 
@@ -44,7 +57,6 @@ if __name__ == '__main__':
                     num_correct += 1
 
             test_accuracy = float(num_correct) / num_test_samples
-            print(f'Trained {batch} batches')
             print('Test accuracy: %f' % test_accuracy)
 
             if test_accuracy >= target_acc:
