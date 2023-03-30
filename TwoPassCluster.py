@@ -126,7 +126,7 @@ class TwoPassCluster:
 
         msg_size = self._get_model_size()
         self.nsg = NetworkSequenceGenerator(self.node_descs, msg_size, self.network_style == 'hd')
-        self.gen_buf = 100
+        self.gen_buf = 1000
         self.n_generated = 0
 
     def _create_nodes(self):
@@ -294,6 +294,9 @@ class TwoPassCluster:
 
         logging_filename = 'eval_logs/sim_%s.txt' % (stamp)
 
+        if self.generate_gantt:
+            saved_events = []
+
         # Eval vars
         x_test, y_test = keras_model.test_dataset(self.num_test_samples)
         accuracies = []
@@ -301,11 +304,6 @@ class TwoPassCluster:
         target_reached = False
         e_to_target = None
         t_to_target = None
-
-        # First pass
-        while not self.nsg.generate(None, self.epochs * batches_per_epoch):
-            pass
-        event_idx = 0
 
         # Begin training
         print(stamp + '\tBeginning training')
@@ -318,12 +316,14 @@ class TwoPassCluster:
             # Process events until next steps milestone
             reached_max_epochs = False
             while self.steps_complete < next_steps_milestone:
-                if event_idx == len(self.nsg.events):
-                    reached_max_epochs = True
-                    break
-                current_event = self.nsg.events[event_idx]
+                if len(self.nsg.events) == 0:
+                    for _ in range(self.gen_buf):
+                        self.nsg.generate(None, self.epochs * batches_per_epoch)
+                    self.n_generated += self.gen_buf
+                current_event = self.nsg.events.pop(0)
+                if self.generate_gantt:
+                    saved_events.append(current_event)
                 self.process_event(current_event)
-                event_idx += 1
 
             if reached_max_epochs:
                 final_acc = test_accuracy
@@ -367,6 +367,7 @@ class TwoPassCluster:
                 t_to_target = current_event.end_time
                 threshold_results.append((self.target_acc, e_to_target, self.steps_complete, t_to_target))
 
+            # TODO if not trainless and stop at target is on, TPE will be "unfair"
             if (self.stop_at_target and test_accuracy >= self.target_acc) or eval_num >= max_eval_intervals:
                 final_acc = test_accuracy
                 break
@@ -423,6 +424,7 @@ class TwoPassCluster:
             outfile.close()
 
         if self.generate_gantt:
+            self.nsg.events = saved_events
             self.nsg.generate_gantt(stamp)
 
         # Return row for results csv
