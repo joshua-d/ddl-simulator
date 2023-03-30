@@ -23,7 +23,7 @@ non_raw_config_keys = [
     'n-mid-ps',
 
     'tpe',
-    'ape',
+    'final-acc',
     'e-to-target',
     't-to-target',
     'total-time',

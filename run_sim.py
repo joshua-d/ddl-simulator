@@ -44,6 +44,11 @@ def run(configs, stamp):
         resfile.write(make_row(keys) + '\n')
         resfile.close()
 
+    # Count total runs (for logging)
+    total_runs = 0
+    for config in configs:
+        total_runs += config['n_runs']
+
     # Begin sims
     run_i = 0
     for config in configs:
@@ -59,6 +64,8 @@ def run(configs, stamp):
                 resfile.close()
 
             run_i += 1
+
+            print(stamp + f'\tCompleted run {run_i} out of {total_runs}')
 
 
 if __name__ == '__main__':

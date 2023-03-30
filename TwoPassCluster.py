@@ -237,7 +237,7 @@ class TwoPassCluster:
             ps.apply_params(params)
 
     # considers nsg.events
-    def get_results(self, stamp, trainless, ape=None, e_to_target=None, t_to_target=None):
+    def get_results(self, stamp, trainless, final_acc=None, e_to_target=None, t_to_target=None):
         row = self.config['raw_config']
 
         row['n-runs'] = 1
@@ -255,9 +255,9 @@ class TwoPassCluster:
         row['tpe'] = round(end_time / self.config['epochs'], 4)
 
         if not trainless:
-            row['ape'] = round(ape, 4)
+            row['final-acc'] = round(final_acc, 4)
         else:
-            row['ape'] = ''
+            row['final-acc'] = ''
 
         if not trainless and e_to_target is not None and t_to_target is not None:
             row['e-to-target'] = round(e_to_target, 4)
@@ -326,7 +326,7 @@ class TwoPassCluster:
                 event_idx += 1
 
             if reached_max_epochs:
-                ape = test_accuracy / ((eval_num-1) * self.eval_interval / batches_per_epoch)
+                final_acc = test_accuracy
                 break
 
             next_steps_milestone += self.eval_interval
@@ -368,7 +368,7 @@ class TwoPassCluster:
                 threshold_results.append((self.target_acc, e_to_target, self.steps_complete, t_to_target))
 
             if (self.stop_at_target and test_accuracy >= self.target_acc) or eval_num >= max_eval_intervals:
-                ape = test_accuracy / (eval_num * self.eval_interval / batches_per_epoch)
+                final_acc = test_accuracy
                 break
 
 
@@ -426,7 +426,7 @@ class TwoPassCluster:
             self.nsg.generate_gantt(stamp)
 
         # Return row for results csv
-        return self.get_results(stamp, False, ape, e_to_target, t_to_target)
+        return self.get_results(stamp, False, final_acc, e_to_target, t_to_target)
 
     def trainless(self, stamp):
         batches_per_epoch = int(self.num_train_samples / self.batch_size) # TODO num train samples should be divisible by batch size
