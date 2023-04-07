@@ -127,7 +127,6 @@ class TwoPassCluster:
         msg_size = self._get_model_size()
         self.nsg = NetworkSequenceGenerator(self.node_descs, msg_size, self.network_style == 'hd')
         self.gen_buf = 1000
-        self.n_generated = 0
 
     def _create_nodes(self):
 
@@ -237,22 +236,13 @@ class TwoPassCluster:
             ps.apply_params(params)
 
     # considers nsg.events
-    def get_results(self, stamp, trainless, final_acc=None, e_to_target=None, t_to_target=None):
+    def get_results(self, stamp, trainless, end_time=None, avg_tsync=None, final_acc=None, e_to_target=None, t_to_target=None):
         row = self.config['raw_config']
 
         row['n-runs'] = 1
         
         row['n-workers'] = self.num_workers
         row['n-mid-ps'] = len(list(filter(lambda node: node['node_type'] == 'ps', self.config['nodes']))) - 1
-
-        # tpe
-        step_events = list(filter(lambda e: type(e) == WorkerStepEvent, self.nsg.events))
-        end_time = 0
-        for e in step_events:
-            if e.end_time > end_time:
-                end_time = e.end_time
-
-        row['tpe'] = round(end_time / self.config['epochs'], 4)
 
         if not trainless:
             row['final-acc'] = round(final_acc, 4)
@@ -266,19 +256,38 @@ class TwoPassCluster:
             row['e-to-target'] = ''
             row['t-to-target'] = ''
 
+        # tpe
+        if trainless:
+            step_events = list(filter(lambda e: type(e) == WorkerStepEvent, self.nsg.events))
+            end_time = 0
+            for e in step_events:
+                if e.end_time > end_time:
+                    end_time = e.end_time
+
+            row['tpe'] = round(end_time / self.epochs, 4)
+
+        elif e_to_target is not None and t_to_target is not None:
+            row['tpe'] = round(t_to_target / e_to_target, 4)
+
+        else:
+            row['tpe'] = round(end_time / self.epochs, 4)
+        
+        
         row['total-time'] = round(end_time, 4)
 
-        # avg-tsync
-        receive_events = list(filter(lambda e: type(e) == ReceiveParamsEvent, self.nsg.events))
-        total_time = 0
-        n_events = 0
-        for event in receive_events:
-            total_time += event.end_time - event.start_time
-            n_events += 1
 
-        tsync = total_time / n_events
+        # avg-tsync
+        if trainless:
+            receive_events = list(filter(lambda e: type(e) == ReceiveParamsEvent, self.nsg.events))
+            total_time = 0
+            n_events = 0
+            for event in receive_events:
+                total_time += event.end_time - event.start_time
+                n_events += 1
+
+            avg_tsync = total_time / n_events
         
-        row['avg-tsync'] = round(tsync, 4)
+        row['avg-tsync'] = round(avg_tsync, 4)
 
         row['stamp'] = stamp
 
@@ -289,7 +298,7 @@ class TwoPassCluster:
         # Prepare vars
         log_interval = 50
 
-        batches_per_epoch = int(self.num_train_samples / self.batch_size) # TODO num train samples should be divisible by batch size
+        batches_per_epoch = self.num_train_samples / self.batch_size # TODO num train samples should be divisible by batch size
         max_eval_intervals = ceil((batches_per_epoch / self.eval_interval) * self.epochs)
 
         logging_filename = 'eval_logs/sim_%s.txt' % (stamp)
@@ -304,6 +313,8 @@ class TwoPassCluster:
         target_reached = False
         e_to_target = None
         t_to_target = None
+        total_tsync_time = 0
+        n_receive_events = 0
 
         # Begin training
         print(stamp + '\tBeginning training')
@@ -314,20 +325,18 @@ class TwoPassCluster:
             eval_num += 1
 
             # Process events until next steps milestone
-            reached_max_epochs = False
             while self.steps_complete < next_steps_milestone:
                 if len(self.nsg.events) == 0:
                     for _ in range(self.gen_buf):
-                        self.nsg.generate(None, self.epochs * batches_per_epoch)
-                    self.n_generated += self.gen_buf
+                        self.nsg.generate()
                 current_event = self.nsg.events.pop(0)
+                end_time = current_event.end_time
+                if type(current_event) == ReceiveParamsEvent:
+                    total_tsync_time += current_event.end_time - current_event.start_time
+                    n_receive_events += 1
                 if self.generate_gantt:
                     saved_events.append(current_event)
                 self.process_event(current_event)
-
-            if reached_max_epochs:
-                final_acc = test_accuracy
-                break
 
             next_steps_milestone += self.eval_interval
 
@@ -397,7 +406,7 @@ class TwoPassCluster:
             if self.generate_gantt: # TODO generate gantt must be on for tsync to be logged
                 total_time = 0
                 n_events = 0
-                for event in self.nsg.events:
+                for event in saved_events:
                     if type(event) == ReceiveParamsEvent:
                         total_time += event.end_time - event.start_time
                         n_events += 1
@@ -428,12 +437,12 @@ class TwoPassCluster:
             self.nsg.generate_gantt(stamp)
 
         # Return row for results csv
-        return self.get_results(stamp, False, final_acc, e_to_target, t_to_target)
+        return self.get_results(stamp, False, end_time, total_tsync_time/n_receive_events, final_acc, e_to_target, t_to_target)
 
     def trainless(self, stamp):
-        batches_per_epoch = int(self.num_train_samples / self.batch_size) # TODO num train samples should be divisible by batch size
+        batches_per_epoch = self.num_train_samples / self.batch_size # TODO num train samples should be divisible by batch size
 
-        while not self.nsg.generate(None, self.epochs * batches_per_epoch):
+        while not self.nsg.generate(None, ceil(self.epochs * batches_per_epoch)):
             pass
 
         if self.generate_gantt:
