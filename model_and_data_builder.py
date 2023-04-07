@@ -27,7 +27,7 @@ def model_builder():
         with tf.GradientTape() as tape:
             predictions = model(batch_inputs, training=True)
             loss = tf.keras.losses.SparseCategoricalCrossentropy(
-                from_logits=False,
+                from_logits=True,
                 reduction=tf.keras.losses.Reduction.NONE
             )(batch_targets, predictions)
 
