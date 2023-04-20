@@ -1,20 +1,31 @@
 from model_and_data_builder import model_builder, dataset_fn
 from DatasetIterator import DatasetIterator
 import keras_model
+import tensorflow as tf
 
 
-num_train_samples = 60000
-num_test_samples = 10000
+num_train_samples = 25000
+num_test_samples = 25000
 
-batch_size = 32
-learning_rate = 0.001
+batch_size = 64
+# learning_rate = 1e-4
 
 eval_interval = 100
 target_acc = 0.95
 
+epochs = 10
+
 
 if __name__ == '__main__':
     model, params, forward_pass, build_optimizer = model_builder()
+
+    if True:
+        train_dataset = keras_model.imdb_dataset().batch(batch_size)
+        test_dataset = keras_model.test_dataset(num_test_samples)
+        model.compile(optimizer=tf.keras.optimizers.Adam(1e-4), loss=tf.keras.losses.BinaryCrossentropy(from_logits=True), metrics=['accuracy'])
+        model.fit(train_dataset, epochs=epochs, validation_data=test_dataset, batch_size=batch_size, validation_steps=30)
+        exit()
+
     dataset = dataset_fn(num_train_samples).shuffle(1024).batch(batch_size)
     di = iter(dataset)
 

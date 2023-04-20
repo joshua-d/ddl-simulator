@@ -26,10 +26,7 @@ def model_builder():
         batch_inputs, batch_targets = batch
         with tf.GradientTape() as tape:
             predictions = model(batch_inputs, training=True)
-            loss = tf.keras.losses.SparseCategoricalCrossentropy(
-                from_logits=False,
-                reduction=tf.keras.losses.Reduction.NONE
-            )(batch_targets, predictions)
+            loss = tf.keras.losses.BinaryCrossentropy(from_logits=True)(batch_targets, predictions)
 
         grads_list = tape.gradient(loss, model.trainable_variables)
         

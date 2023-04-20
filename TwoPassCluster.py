@@ -4,6 +4,7 @@ from DatasetIterator import DatasetIterator
 from NetworkSequenceGenerator import NetworkSequenceGenerator, WorkerStepEvent, SendParamsEvent, ReceiveParamsEvent, PSAggrEvent, PSApplyEvent, PSParentApplyEvent
 import keras_model
 from math import ceil
+from tensorflow.keras.losses import BinaryCrossentropy
 
 
 class Worker:
@@ -118,7 +119,9 @@ class TwoPassCluster:
 
         self._parse_config(config)
 
-        self.test_model, self.test_model_params, _, _ = model_builder()
+        self.test_model, self.test_model_params, _, build_optimizer = model_builder()
+
+        self.test_model.compile(build_optimizer(learning_rate=self.learning_rate), BinaryCrossentropy(from_logits=True), metrics=['accuracy'])
 
         self._create_nodes()
 
@@ -307,7 +310,7 @@ class TwoPassCluster:
             saved_events = []
 
         # Eval vars
-        x_test, y_test = keras_model.test_dataset(self.num_test_samples)
+        test_dataset = keras_model.test_dataset(self.num_test_samples).batch(self.batch_size)
         accuracies = []
         threshold_results = []
         target_reached = False
@@ -343,20 +346,7 @@ class TwoPassCluster:
             print(stamp + '\tFinished %d steps' % self.steps_complete)
 
             # Evaluate model
-            predictions = self.get_test_model().predict(x_test)            
-
-            num_correct = 0
-            for prediction, target in zip(predictions, y_test):
-                answer = 0
-                answer_val = prediction[0]
-                for poss_ans_ind in range(len(prediction)):
-                    if prediction[poss_ans_ind] > answer_val:
-                        answer = poss_ans_ind
-                        answer_val = prediction[poss_ans_ind]
-                if answer == target:
-                    num_correct += 1
-
-            test_accuracy = float(num_correct) / self.num_test_samples
+            test_loss, test_accuracy = self.get_test_model().evaluate(test_dataset)
             print(stamp + '\tTest accuracy: %f' % test_accuracy)
 
             accuracies.append(test_accuracy)
