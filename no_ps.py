@@ -13,15 +13,16 @@ batch_size = 64
 eval_interval = 100
 target_acc = 0.95
 
-epochs = 10
+epochs = 20
 
 
 if __name__ == '__main__':
     model, params, forward_pass, build_optimizer = model_builder()
 
+    # TODO Note: test dataset needs to be batched as well
     if True:
         train_dataset = keras_model.imdb_dataset().batch(batch_size)
-        test_dataset = keras_model.test_dataset(num_test_samples)
+        test_dataset = keras_model.test_dataset(num_test_samples).batch(batch_size)
         model.compile(optimizer=tf.keras.optimizers.Adam(1e-4), loss=tf.keras.losses.BinaryCrossentropy(from_logits=True), metrics=['accuracy'])
         model.fit(train_dataset, epochs=epochs, validation_data=test_dataset, batch_size=batch_size, validation_steps=30)
         exit()

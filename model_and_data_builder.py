@@ -7,8 +7,8 @@ model_seed = 1  # model seed and shuffle seed (in dataset_fn) for consistent tes
 
 # In dataset-rework, this just gives the master dataset which is automatically "sharded" by thread-safe DatasetIterator
 def dataset_fn(num_train_samples):
-    mnist_dataset = keras_model.mnist_dataset()
-    dataset = mnist_dataset.shuffle(len(mnist_dataset), seed=model_seed, reshuffle_each_iteration=False).take(num_train_samples)
+    imdb_dataset = keras_model.imdb_dataset()
+    dataset = imdb_dataset.shuffle(len(imdb_dataset), seed=model_seed, reshuffle_each_iteration=False).take(num_train_samples)
     return dataset
 
 

@@ -14,10 +14,10 @@ configs_csv_filename = 'configs.csv'
 global_config_json = """
 {
     "bypass_NI": false,
-    "learning_rate": 0.001,
-    "batch_size": 32,
-    "num_train_samples": 60000,
-    "num_test_samples": 10000,
+    "learning_rate": 0.0001,
+    "batch_size": 64,
+    "num_train_samples": 25000,
+    "num_test_samples": 25000,
 	"network_style": "hd",
     "data_chunk_size": 64,
     "eval_interval": 100,
