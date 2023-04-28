@@ -3,7 +3,7 @@ import numpy as np
 from DatasetIterator import DatasetIterator
 from NetworkSequenceGenerator import NetworkSequenceGenerator, WorkerStepEvent, SendParamsEvent, ReceiveParamsEvent, PSAggrEvent, PSApplyEvent, PSParentApplyEvent
 import keras_model
-from math import ceil
+from math import ceil, sqrt
 
 
 class Worker:
@@ -177,6 +177,8 @@ class TwoPassCluster:
 
         self.generate_gantt = self._get_config_item(config, 'generate_gantt')
 
+        self.window_size = self._get_config_item(config, 'window_size')
+
     def _get_config_item(self, config, item):
         if item not in config:
             raise Exception('%s not in config' % item)
@@ -236,7 +238,7 @@ class TwoPassCluster:
             ps.apply_params(params)
 
     # considers nsg.events
-    def get_results(self, stamp, trainless, end_time=None, avg_tsync=None, final_acc=None, e_to_target=None, t_to_target=None):
+    def get_results(self, stamp, trainless, eff_bw_in, eff_bw_out, end_time=None, avg_tsync=None, final_acc=None, e_to_target=None, t_to_target=None):
         row = self.config['raw_config']
 
         row['n-runs'] = 1
@@ -289,6 +291,50 @@ class TwoPassCluster:
         
         row['avg-tsync'] = round(avg_tsync, 4)
 
+
+        # eff
+        total_avg_eff_in = 0
+        total_avg_eff_out = 0
+        total_stdev_eff_in = 0
+        total_stdev_eff_out = 0
+
+        for node_id in self.nodes:
+            if type(self.nodes[node_id]) == Worker:
+                avg_in = 0
+                for eff in eff_bw_in[node_id]:
+                    avg_in += eff
+                avg_in /= len(eff_bw_in[node_id])
+
+                avg_out = 0
+                for eff in eff_bw_out[node_id]:
+                    avg_out += eff
+                avg_out /= len(eff_bw_out[node_id])
+
+                stdev_in = 0
+                for eff in eff_bw_in[node_id]:
+                    stdev_in += (eff - avg_in)**2
+                stdev_in = sqrt(stdev_in / len(eff_bw_in[node_id]))
+
+                stdev_out = 0
+                for eff in eff_bw_out[node_id]:
+                    stdev_out += (eff - avg_out)**2
+                stdev_out = sqrt(stdev_out / len(eff_bw_out[node_id]))
+
+                total_avg_eff_in += avg_in
+                total_avg_eff_out += avg_out
+                total_stdev_eff_in += stdev_in
+                total_stdev_eff_out += stdev_out
+
+        total_avg_eff_in /= self.num_workers
+        total_avg_eff_out /= self.num_workers
+        total_stdev_eff_in /= self.num_workers
+        total_stdev_eff_out /= self.num_workers
+
+        row['worker-avg-eff-bw-in'] = round(total_avg_eff_in / 1_000_000, 4)
+        row['worker-avg-eff-bw-out'] = round(total_avg_eff_out / 1_000_000, 4)
+        row['worker-stdev-eff-bw-in'] = round(total_stdev_eff_in / 1_000_000, 4)
+        row['worker-stdev-eff-bw-out'] = round(total_stdev_eff_out / 1_000_000, 4)
+
         row['stamp'] = stamp
 
         return row
@@ -321,6 +367,15 @@ class TwoPassCluster:
         next_steps_milestone = self.eval_interval
         eval_num = 0
 
+        self.window_size = 10
+        window_start = 0
+
+        eff_bw_in = {}
+        eff_bw_out = {}
+        for node_id in self.nodes:
+            eff_bw_in[node_id] = []
+            eff_bw_out[node_id] = []
+
         while True:
             eval_num += 1
 
@@ -328,14 +383,26 @@ class TwoPassCluster:
             while self.steps_complete < next_steps_milestone:
                 if len(self.nsg.events) == 0:
                     for _ in range(self.gen_buf):
-                        self.nsg.generate()
+                        self.nsg.generate(None, None, window_start, window_start + self.window_size)
+                        if self.nsg.ne.current_time >= window_start + self.window_size:
+                            # Log the eff bw for this window
+                            for node_id in self.nodes:
+                                eff_bw_in[node_id].append(self.nsg.ne.parse_eff(self.nsg.ne.eff_in[node_id]))
+                                eff_bw_out[node_id].append(self.nsg.ne.parse_eff(self.nsg.ne.eff_out[node_id]))
+                                
+                            self.nsg.ne.clear_eff()
+                            window_start = window_start + self.window_size
+
                 current_event = self.nsg.events.pop(0)
                 end_time = current_event.end_time
+
                 if type(current_event) == ReceiveParamsEvent:
                     total_tsync_time += current_event.end_time - current_event.start_time
                     n_receive_events += 1
+
                 if self.generate_gantt:
                     saved_events.append(current_event)
+
                 self.process_event(current_event)
 
             next_steps_milestone += self.eval_interval
@@ -437,16 +504,33 @@ class TwoPassCluster:
             self.nsg.generate_gantt(stamp)
 
         # Return row for results csv
-        return self.get_results(stamp, False, end_time, total_tsync_time/n_receive_events, final_acc, e_to_target, t_to_target)
+        return self.get_results(stamp, False, eff_bw_in, eff_bw_out, end_time, total_tsync_time/n_receive_events, final_acc, e_to_target, t_to_target)
 
     def trainless(self, stamp):
         batches_per_epoch = self.num_train_samples / self.batch_size # TODO num train samples should be divisible by batch size
 
-        while not self.nsg.generate(None, ceil(self.epochs * batches_per_epoch)):
-            pass
+        self.window_size = 10
+        window_start = 0
+
+        eff_bw_in = {}
+        eff_bw_out = {}
+        for node_id in self.nodes:
+            eff_bw_in[node_id] = []
+            eff_bw_out[node_id] = []
+
+        end_batch = ceil(self.epochs * batches_per_epoch)
+        while not self.nsg.generate(None, end_batch, window_start, window_start + self.window_size):
+            if self.nsg.ne.current_time >= window_start + self.window_size:
+                # Log the eff bw for this window
+                for node_id in self.nodes:
+                    eff_bw_in[node_id].append(self.nsg.ne.parse_eff(self.nsg.ne.eff_in[node_id]))
+                    eff_bw_out[node_id].append(self.nsg.ne.parse_eff(self.nsg.ne.eff_out[node_id]))
+                    
+                self.nsg.ne.clear_eff()
+                window_start = window_start + self.window_size
 
         if self.generate_gantt:
             self.nsg.generate_gantt(stamp)
 
-        return self.get_results(stamp, trainless=True)
+        return self.get_results(stamp, True, eff_bw_in, eff_bw_out)
 

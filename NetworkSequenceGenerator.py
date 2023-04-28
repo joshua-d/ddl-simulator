@@ -248,13 +248,8 @@ class NetworkSequenceGenerator:
 
 
     def generate(self, end_time=None, end_batch=None, eff_start=None, eff_end=None):
-        # Move NE until a msg has sent
+        # Only moving once so we can stop at the eff_end
         sent_msgs = self.ne.move(eff_start, eff_end)
-
-        while len(sent_msgs) == 0:
-            if (end_time is not None and self.ne.current_time >= end_time) or (end_batch is not None and self.n_batches >= end_batch):
-                return True
-            sent_msgs = self.ne.move(eff_start, eff_end)
             
         # Process sent msgs
         for msg in sent_msgs:

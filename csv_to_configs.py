@@ -15,7 +15,8 @@ raw_config_keys = [
     'stop-at-target',
     'generate-gantt',
     'trainless',
-    'n-runs'
+    'n-runs',
+    'window-size'
 ]
 
 non_raw_config_keys = [
@@ -28,6 +29,12 @@ non_raw_config_keys = [
     't-to-target',
     'total-time',
     'avg-tsync',
+    
+    'worker-avg-eff-bw-in',
+    'worker-avg-eff-bw-out',
+    'worker-stdev-eff-bw-in',
+    'worker-stdev-eff-bw-out',
+
     'stamp'
 ]
 
@@ -66,6 +73,7 @@ def make_config(global_config_json, raw_config):
     config['generate_gantt'] = bool(int(raw_config['generate-gantt']))
     config['trainless'] = bool(int(raw_config['trainless']))
     config['n_runs'] = int(raw_config['n-runs'])
+    config['window_size'] = float(raw_config['window-size'])
 
     # Top level PS
     # TODO currently no support for different inbound/outbound bw

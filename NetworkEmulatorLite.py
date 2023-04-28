@@ -292,6 +292,23 @@ class NetworkEmulatorLite:
         return sent_msgs
 
 
+    def clear_eff(self):
+        for node_id in self.nodes:
+            self.eff_in[node_id] = []
+            self.eff_out[node_id] = []
+
+
+    # Get effective bw from a node's individual eff
+    @staticmethod
+    def parse_eff(eff):
+        time_window = eff[-1][0] - eff[0][0]
+        eff_bw = 0
+        for i in range(len(eff) - 1):
+            eff_bw += eff[i][1] * ((eff[i+1][0] - eff[i][0]) / time_window) # dsr * the fraction the time slice is of the entire window
+        
+        return eff_bw
+
+
 if __name__ == '__main__':
     node_bws = ({
         0: 10,
