@@ -293,6 +293,31 @@ class TwoPassCluster:
 
 
         # eff
+
+        # log all into files
+        with open(f'eval_logs/inbound_{stamp}.txt', 'w') as outfile:
+            # log avg for this window
+            # len of all lists in eff_bw_x should be the same
+            for win_idx in range(len(eff_bw_in[0])):
+                avg = 0
+                for node_id in self.nodes:
+                    if type(self.nodes[node_id]) == Worker:
+                        avg += eff_bw_in[node_id][win_idx]
+                avg /= self.num_workers
+                outfile.write(f'{round(avg / 1_000_000, 4)}\n')
+
+        with open(f'eval_logs/outbound_{stamp}.txt', 'w') as outfile:
+            # log avg for this window
+            # len of all lists in eff_bw_x should be the same
+            for win_idx in range(len(eff_bw_out[0])):
+                avg = 0
+                for node_id in self.nodes:
+                    if type(self.nodes[node_id]) == Worker:
+                        avg += eff_bw_out[node_id][win_idx]
+                avg /= self.num_workers
+                outfile.write(f'{round(avg / 1_000_000, 4)}\n')
+
+
         total_avg_eff_in = 0
         total_avg_eff_out = 0
         total_stdev_eff_in = 0
