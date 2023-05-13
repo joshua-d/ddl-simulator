@@ -4,16 +4,18 @@ from DatasetIterator import DatasetIterator
 from NetworkSequenceGenerator import NetworkSequenceGenerator, WorkerStepEvent, SendParamsEvent, ReceiveParamsEvent, PSAggrEvent, PSApplyEvent, PSParentApplyEvent
 import keras_model
 from math import ceil
+from TimeMeasurer import TimeMeasurer
 
 
 class Worker:
-    def __init__(self, id, params, forward_pass, dataset_iterator, optimizer):
+    def __init__(self, id, params, forward_pass, dataset_iterator, optimizer, timing):
         self.id = id
 
         self.params = params
         self.forward_pass = forward_pass
         self.dataset_iterator = dataset_iterator
         self.optimizer = optimizer
+        self.timing = timing
 
         # List of param sets
         self.incoming_parent_params = []
@@ -39,8 +41,15 @@ class Worker:
         return batch
 
     def train_step(self):
-        gradients = self.forward_pass(self.get_next_batch())
+        self.timing.start('batch_fetch')
+        b = self.get_next_batch()
+        self.timing.end()
+        self.timing.start('fp')
+        gradients = self.forward_pass(b)
+        self.timing.end()
+        self.timing.start('opt')
         self.optimizer.apply_gradients(zip(gradients, self.params.values()))
+        self.timing.end()
         self.steps_complete += 1
 
     def replace_params(self, param_set):
@@ -55,11 +64,12 @@ class Worker:
 
 
 class ParameterServer:
-    def __init__(self, id, parent, sync_style, params):
+    def __init__(self, id, parent, sync_style, params, timing):
         self.id = id
         self.parent = parent
         self.sync_style = sync_style
         self.params = params
+        self.timing = timing
 
         # Lists of param sets
         self.incoming_child_params = []
@@ -88,17 +98,26 @@ class ParameterServer:
     # Async
     def apply_params(self, param_set):
         if self.parent is not None or not self.received_first_update:
+            self.timing.end()
+            self.timing.start('param_assign')
             # Assign params for relay (up or down!)
             for param_id in self.params:
                 self.params[param_id].assign(param_set[param_id])
+
+            self.timing.end()
 
             self.received_first_update = True
         else:
             # Average params into current (async only works on one set of params at a time)
             # Only top level ps does this
+            self.timing.end()
+            self.timing.start('param_aggr')
+
             for param_id in self.params:
                 param_value = (self.params[param_id].value() + param_set[param_id]) / 2
                 self.params[param_id].assign(param_value)
+
+            self.timing.end()
 
     def get_params(self):
         params = {}
@@ -119,6 +138,18 @@ class TwoPassCluster:
         self._parse_config(config)
 
         self.test_model, self.test_model_params, _, _ = model_builder()
+
+        self.timing = TimeMeasurer([
+            'other',
+            'nsg_gen',
+            'eval',
+            'logging',
+            'param_assign',
+            'batch_fetch',
+            'fp',
+            'opt',
+            'param_aggr'
+        ])
 
         self._create_nodes()
 
@@ -141,13 +172,13 @@ class TwoPassCluster:
             _, params, forward_pass, build_optimizer = self.model_builder()
 
             if node_desc['node_type'] == 'ps':
-                ps = ParameterServer(node_desc['id'], node_desc['parent'], node_desc['sync_style'], params)
+                ps = ParameterServer(node_desc['id'], node_desc['parent'], node_desc['sync_style'], params, self.timing)
                 self.nodes[ps.id] = ps
                 if node_desc['sync_style'] == 'async' and node_desc['parent'] is not None:
                     self.nodes[node_desc['parent']].has_async_child = True
 
             elif node_desc['node_type'] == 'worker':
-                worker = Worker(node_desc['id'], params, forward_pass, dataset_iterator, build_optimizer(self.learning_rate))
+                worker = Worker(node_desc['id'], params, forward_pass, dataset_iterator, build_optimizer(self.learning_rate), self.timing)
                 self.nodes[worker.id] = worker
                 self.num_workers += 1
 
@@ -200,6 +231,8 @@ class TwoPassCluster:
 
     def process_event(self, event):
 
+        self.timing.start('other')
+
         if type(event) == SendParamsEvent:
             params = self.nodes[event.sender_id].get_params()
             node = self.nodes[event.receiver_id]
@@ -208,15 +241,22 @@ class TwoPassCluster:
             else:
                 node.incoming_child_params.append(params)
 
+            self.timing.end()
+
         elif type(event) == ReceiveParamsEvent:
             receiver = self.nodes[event.receiver_id]
             if type(receiver) == Worker:
                 # Worker should only have 1 param set in incoming params
                 params = receiver.incoming_parent_params[0]
                 receiver.incoming_parent_params = []
+                self.timing.end()
+                self.timing.start('param_assign')
                 receiver.replace_params(params)
 
+            self.timing.end()
+
         elif type(event) == WorkerStepEvent:
+            self.timing.end()
             self.nodes[event.worker_id].train_step()
             self.steps_complete += 1
 
@@ -228,12 +268,19 @@ class TwoPassCluster:
             elif ps.sync_style == 'sync':
                 param_sets = ps.incoming_child_params
                 ps.incoming_child_params = []
+                self.timing.end()
+                self.timing.start('param_aggr')
                 ps.aggr_and_apply_params(param_sets)
+                self.timing.end()
 
         elif type(event) == PSParentApplyEvent:
             ps = self.nodes[event.ps_id]
             params = ps.incoming_parent_params.pop(0)
             ps.apply_params(params)
+
+        else:
+            self.timing.end()
+
 
     # considers nsg.events
     def get_results(self, stamp, trainless, end_time=None, avg_tsync=None, final_acc=None, e_to_target=None, t_to_target=None):
@@ -322,13 +369,20 @@ class TwoPassCluster:
         eval_num = 0
 
         while True:
+            self.timing.start('other')
+
             eval_num += 1
 
             # Process events until next steps milestone
             while self.steps_complete < next_steps_milestone:
                 if len(self.nsg.events) == 0:
+                    self.timing.end()
+                    self.timing.start('nsg_gen')
                     for _ in range(self.gen_buf):
                         self.nsg.generate()
+                    self.timing.end()
+                    self.timing.start('other')
+
                 current_event = self.nsg.events.pop(0)
                 end_time = current_event.end_time
                 if type(current_event) == ReceiveParamsEvent:
@@ -336,11 +390,18 @@ class TwoPassCluster:
                     n_receive_events += 1
                 if self.generate_gantt:
                     saved_events.append(current_event)
+
+                self.timing.end()
+
                 self.process_event(current_event)
+                self.timing.start('other')
+
 
             next_steps_milestone += self.eval_interval
-
             print(stamp + '\tFinished %d steps' % self.steps_complete)
+
+            self.timing.end()
+            self.timing.start('eval')
 
             # Evaluate model
             predictions = self.get_test_model().predict(x_test)            
@@ -357,7 +418,12 @@ class TwoPassCluster:
                     num_correct += 1
 
             test_accuracy = float(num_correct) / self.num_test_samples
+
+            self.timing.end()
+
             print(stamp + '\tTest accuracy: %f' % test_accuracy)
+
+            self.timing.start('logging')
 
             accuracies.append(test_accuracy)
 
@@ -379,11 +445,16 @@ class TwoPassCluster:
             # TODO if not trainless and stop at target is on, TPE will be "unfair"
             if (self.stop_at_target and test_accuracy >= self.target_acc) or eval_num >= max_eval_intervals:
                 final_acc = test_accuracy
+                self.timing.end()
                 break
+
+            self.timing.end()
 
 
         # Training done, complete logging
         
+        self.timing.start('logging')
+
         with open(logging_filename, 'a') as outfile:
             for accuracy in accuracies:
                 outfile.write('%f\n' % accuracy)
@@ -435,6 +506,10 @@ class TwoPassCluster:
         if self.generate_gantt:
             self.nsg.events = saved_events
             self.nsg.generate_gantt(stamp)
+
+        self.timing.end()
+
+        self.timing.print()
 
         # Return row for results csv
         return self.get_results(stamp, False, end_time, total_tsync_time/n_receive_events, final_acc, e_to_target, t_to_target)
