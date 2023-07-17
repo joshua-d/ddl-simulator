@@ -7,8 +7,8 @@ model_seed = 1  # model seed and shuffle seed (in dataset_fn) for consistent tes
 
 # In dataset-rework, this just gives the master dataset which is automatically "sharded" by thread-safe DatasetIterator
 def dataset_fn(num_train_samples):
-    mnist_dataset = keras_model.mnist_dataset()
-    dataset = mnist_dataset.shuffle(len(mnist_dataset), seed=model_seed, reshuffle_each_iteration=False).take(num_train_samples)
+    cifar10_dataset = keras_model.train_dataset()
+    dataset = cifar10_dataset.shuffle(len(cifar10_dataset), seed=model_seed, reshuffle_each_iteration=False).take(num_train_samples)
     return dataset
 
 

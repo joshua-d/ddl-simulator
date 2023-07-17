@@ -28,6 +28,8 @@ non_raw_config_keys = [
     't-to-target',
     'total-time',
     'avg-tsync',
+    'wc-time',
+    # TODO 'wc-time-pe',
     'stamp'
 ]
 

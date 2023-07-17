@@ -4,6 +4,7 @@ from DatasetIterator import DatasetIterator
 from NetworkSequenceGenerator import NetworkSequenceGenerator, WorkerStepEvent, SendParamsEvent, ReceiveParamsEvent, PSAggrEvent, PSApplyEvent, PSParentApplyEvent
 import keras_model
 from math import ceil
+from time import perf_counter
 
 
 class Worker:
@@ -236,7 +237,7 @@ class TwoPassCluster:
             ps.apply_params(params)
 
     # considers nsg.events
-    def get_results(self, stamp, trainless, end_time=None, avg_tsync=None, final_acc=None, e_to_target=None, t_to_target=None):
+    def get_results(self, stamp, trainless, wc_time, end_time=None, avg_tsync=None, final_acc=None, e_to_target=None, t_to_target=None):
         row = self.config['raw_config']
 
         row['n-runs'] = 1
@@ -289,6 +290,8 @@ class TwoPassCluster:
         
         row['avg-tsync'] = round(avg_tsync, 4)
 
+        row['wc-time'] = round(wc_time, 4)
+
         row['stamp'] = stamp
 
         return row
@@ -320,6 +323,8 @@ class TwoPassCluster:
         print(stamp + '\tBeginning training')
         next_steps_milestone = self.eval_interval
         eval_num = 0
+
+        start_wc_time = perf_counter()
 
         while True:
             eval_num += 1
@@ -383,6 +388,8 @@ class TwoPassCluster:
 
 
         # Training done, complete logging
+
+        wc_time = perf_counter() - start_wc_time
         
         with open(logging_filename, 'a') as outfile:
             for accuracy in accuracies:
@@ -437,7 +444,7 @@ class TwoPassCluster:
             self.nsg.generate_gantt(stamp)
 
         # Return row for results csv
-        return self.get_results(stamp, False, end_time, total_tsync_time/n_receive_events, final_acc, e_to_target, t_to_target)
+        return self.get_results(stamp, False, wc_time, end_time, total_tsync_time/n_receive_events, final_acc, e_to_target, t_to_target)
 
     def trainless(self, stamp):
         batches_per_epoch = self.num_train_samples / self.batch_size # TODO num train samples should be divisible by batch size
