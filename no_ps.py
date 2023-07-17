@@ -18,11 +18,14 @@ epochs = 20
 if __name__ == '__main__':
     model, params, forward_pass, build_optimizer = model_builder()
 
-    if False:
+    if True:
         (x_train, y_train), _ = tf.keras.datasets.cifar10.load_data()
         x_train = x_train / 255.0
         x_test, y_test = keras_model.test_dataset(num_test_samples)
-        model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+        model.compile(optimizer='adam', loss=tf.keras.losses.SparseCategoricalCrossentropy(
+                from_logits=True,
+                reduction=tf.keras.losses.Reduction.NONE
+            ), metrics=['accuracy'])
         model.fit(x_train, y_train, epochs=epochs, validation_data=(x_test, y_test))
         exit()
 
