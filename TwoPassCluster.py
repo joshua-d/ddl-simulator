@@ -409,6 +409,9 @@ class TwoPassCluster:
             
             outfile.write('\n')
 
+            outfile.write(f'WC Time: {wc_time}')
+            outfile.write('\n\n')
+
 
             if self.generate_gantt: # TODO generate gantt must be on for tsync to be logged
                 total_time = 0
