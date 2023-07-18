@@ -7,7 +7,9 @@ model_seed = 1  # model seed and shuffle seed (in dataset_fn) for consistent tes
 
 # In dataset-rework, this just gives the master dataset which is automatically "sharded" by thread-safe DatasetIterator
 def dataset_fn(num_train_samples):
-    cifar10_dataset = keras_model.train_dataset()
+    x_train, y_train = keras_model.train_dataset()
+    cifar10_dataset = tf.data.Dataset.from_tensor_slices(
+      (x_train, y_train))
     dataset = cifar10_dataset.shuffle(len(cifar10_dataset), seed=model_seed, reshuffle_each_iteration=False).take(num_train_samples)
     return dataset
 
@@ -26,10 +28,7 @@ def model_builder():
         batch_inputs, batch_targets = batch
         with tf.GradientTape() as tape:
             predictions = model(batch_inputs, training=True)
-            loss = tf.keras.losses.SparseCategoricalCrossentropy(
-                from_logits=False,
-                reduction=tf.keras.losses.Reduction.NONE
-            )(batch_targets, predictions)
+            loss = tf.keras.losses.CategoricalCrossentropy()(batch_targets, predictions)
 
         grads_list = tape.gradient(loss, model.trainable_variables)
         

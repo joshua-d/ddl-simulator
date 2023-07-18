@@ -7,7 +7,7 @@ import tensorflow as tf
 num_train_samples = 50000
 num_test_samples = 50000
 
-batch_size = 32
+batch_size = 64
 learning_rate = 0.001
 
 eval_interval = 100
@@ -21,17 +21,26 @@ if __name__ == '__main__':
 
     optimizer = build_optimizer(learning_rate)
 
+    x_train, y_train = keras_model.train_dataset()
+    datagen_train = tf.keras.preprocessing.image.ImageDataGenerator(
+        width_shift_range=0.1,
+        height_shift_range=0.1,
+        horizontal_flip=True,
+        vertical_flip=False,
+        rotation_range=10,
+        zoom_range=0.1
+    )
+
+    datagen_train.fit(x_train)
+
     x_test, y_test = keras_model.test_dataset(num_test_samples)
     test_dataset = tf.data.Dataset.from_tensor_slices((x_test, y_test))
 
     fit = True
 
     if fit:
-        model.compile(optimizer=optimizer, loss=tf.keras.losses.SparseCategoricalCrossentropy(
-                from_logits=False,
-                reduction=tf.keras.losses.Reduction.NONE
-            ), metrics=['accuracy'])
-        model.fit(dataset, validation_data=(x_test, y_test), epochs=50)
+        model.compile(optimizer=optimizer, loss=tf.keras.losses.CategoricalCrossentropy(), metrics=['accuracy'])
+        model.fit(datagen_train.flow(x_train, y_train, batch_size=batch_size), validation_data=(x_test, y_test), epochs=50)
 
     else:
         print('Beginning training')
