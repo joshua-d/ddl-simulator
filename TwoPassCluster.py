@@ -40,9 +40,10 @@ class Worker:
         return batch
 
     def train_step(self):
-        gradients = self.forward_pass(self.get_next_batch())
+        gradients, loss = self.forward_pass(self.get_next_batch())
         self.optimizer.apply_gradients(zip(gradients, self.params.values()))
         self.steps_complete += 1
+        return loss
 
     def replace_params(self, param_set):
         for param_id in param_set:
@@ -218,8 +219,9 @@ class TwoPassCluster:
                 receiver.replace_params(params)
 
         elif type(event) == WorkerStepEvent:
-            self.nodes[event.worker_id].train_step()
+            loss = self.nodes[event.worker_id].train_step()
             self.steps_complete += 1
+            return loss
 
         elif type(event) == PSApplyEvent:
             ps = self.nodes[event.ps_id]
@@ -330,6 +332,9 @@ class TwoPassCluster:
             eval_num += 1
             start_eval_time = perf_counter()
 
+            avg_loss = 0
+            losses_gathered = 0
+
             # Process events until next steps milestone
             while self.steps_complete < next_steps_milestone:
                 if len(self.nsg.events) == 0:
@@ -342,13 +347,19 @@ class TwoPassCluster:
                     n_receive_events += 1
                 if self.generate_gantt:
                     saved_events.append(current_event)
-                self.process_event(current_event)
+                loss = self.process_event(current_event)
+
+                if loss is not None:
+                    avg_loss += loss
+                    losses_gathered += 1
 
             next_steps_milestone += self.eval_interval
+            avg_loss /= losses_gathered
 
             print(stamp + '\tFinished %d steps (%f epochs)' % (self.steps_complete, self.steps_complete / batches_per_epoch))
             eval_time = perf_counter() - start_eval_time
             print(stamp + f'\t{round(eval_time, 1)}s, {round(eval_time * (batches_per_epoch/self.eval_interval), 1)}s per epoch')
+            print(stamp + f'\tAverage loss: {avg_loss}')
 
             # Evaluate model
             predictions = self.get_test_model().predict(x_test)            

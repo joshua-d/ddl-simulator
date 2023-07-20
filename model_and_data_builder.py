@@ -32,7 +32,7 @@ def model_builder():
 
         grads_list = tape.gradient(loss, model.trainable_variables)
         
-        return grads_list
+        return grads_list, loss
 
     def build_optimizer(learning_rate):
         return tf.keras.optimizers.Adam(learning_rate=learning_rate)
