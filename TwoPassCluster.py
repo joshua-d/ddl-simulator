@@ -328,6 +328,7 @@ class TwoPassCluster:
 
         while True:
             eval_num += 1
+            start_eval_time = perf_counter()
 
             # Process events until next steps milestone
             while self.steps_complete < next_steps_milestone:
@@ -345,7 +346,9 @@ class TwoPassCluster:
 
             next_steps_milestone += self.eval_interval
 
-            print(stamp + '\tFinished %d steps' % self.steps_complete)
+            print(stamp + '\tFinished %d steps (%f epochs)' % (self.steps_complete, self.steps_complete / batches_per_epoch))
+            eval_time = perf_counter() - start_eval_time
+            print(stamp + f'\t{round(eval_time, 1)}s, {round(eval_time * (batches_per_epoch/self.eval_interval), 1)}s per epoch')
 
             # Evaluate model
             predictions = self.get_test_model().predict(x_test)            
