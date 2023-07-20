@@ -40,7 +40,7 @@ if __name__ == '__main__':
 
     if fit:
         model.compile(optimizer=optimizer, loss=tf.keras.losses.CategoricalCrossentropy(), metrics=['accuracy'])
-        model.fit(datagen_train.flow(x_train, y_train, batch_size=batch_size), validation_data=(x_test, y_test), epochs=50)
+        model.fit(tf.data.Dataset.from_tensor_slices((x_train, y_train)).batch(batch_size), validation_data=(x_test, y_test), epochs=50) # datagen_train.flow(x_train, y_train, batch_size=batch_size)
 
     else:
         print('Beginning training')
