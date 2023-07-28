@@ -2,6 +2,7 @@ from model_and_data_builder import model_builder, dataset_fn
 from DatasetIterator import DatasetIterator
 import keras_model
 import tensorflow as tf
+import math
 from time import perf_counter
 
 
@@ -9,13 +10,26 @@ num_train_samples = 50000
 num_test_samples = 50000
 
 batch_size = 64
-learning_rate = 0.001
+learning_rate = 0.1
+
+
+def get_next_batch(data_chunk_iterator, batch_idx, data_chunk_size, dataset_iterator):
+    batch = next(data_chunk_iterator)
+    batch_idx += 1
+
+    if batch_idx == data_chunk_size:
+        chunk = next(dataset_iterator)
+        data_chunk_size = len(chunk)
+        data_chunk_iterator = iter(chunk)
+        batch_idx = 0
+
+    return batch, data_chunk_iterator, batch_idx, data_chunk_size
 
 
 if __name__ == '__main__':
     model, params, forward_pass, build_optimizer = model_builder()
-    dataset = dataset_fn(num_train_samples).shuffle(1024).batch(batch_size)
-    di = iter(dataset)
+    dataset = dataset_fn(num_train_samples).shuffle(1024)#.batch(batch_size)#.repeat(5)
+    di = DatasetIterator(dataset, batch_size, 64)
 
     optimizer = build_optimizer(learning_rate)
 
@@ -34,42 +48,55 @@ if __name__ == '__main__':
     x_test, y_test = keras_model.test_dataset(num_test_samples)
     test_dataset = tf.data.Dataset.from_tensor_slices((x_test, y_test))
 
-    fit = True
+    fit = False
 
     if fit:
-        model.compile(optimizer=optimizer, loss=tf.keras.losses.CategoricalCrossentropy(), metrics=['accuracy'])
-        model.fit(tf.data.Dataset.from_tensor_slices((x_train, y_train)).batch(batch_size), validation_data=(x_test, y_test), epochs=50) # datagen_train.flow(x_train, y_train, batch_size=batch_size)
+        model.compile(optimizer=tf.keras.optimizers.SGD(learning_rate=learning_rate, decay=1e-6, momentum=0.9, nesterov=True), loss=tf.keras.losses.CategoricalCrossentropy(), metrics=['accuracy'])
+        model.fit(tf.data.Dataset.from_tensor_slices((x_train, y_train)).batch(batch_size), validation_data=(x_test, y_test), epochs=150) # datagen_train.flow(x_train, y_train, batch_size=batch_size)
 
     else:
         print('Beginning training')
-        batch = 1
+        n_batch = 1
+        batch_idx = 0
+        batches_per_epoch = math.ceil(num_train_samples / batch_size)
+        start_time = perf_counter()
+        chunk = next(di)
+        data_chunk_iterator = iter(chunk)
+        data_chunk_size = len(chunk)
+
         while True:
-            grads_list = forward_pass(next(di))
+            batch, data_chunk_iterator, batch_idx, data_chunk_size = get_next_batch(data_chunk_iterator, batch_idx, data_chunk_size, di)
+            grads_list, loss = forward_pass(batch)
             optimizer.apply_gradients(zip(grads_list, params.values()))
 
-            if batch % eval_interval == 0:
-                # Evaluate model
-                predictions = model.predict(x_test)            
+            if n_batch % batches_per_epoch == 0:
+                print(f'Trained {n_batch} batches')
+                print(f'{perf_counter() - start_time}s per epoch')
+                start_time = perf_counter()
 
-                num_correct = 0
-                for prediction, target in zip(predictions, y_test):
-                    answer = 0
-                    answer_val = prediction[0]
-                    for poss_ans_ind in range(len(prediction)):
-                        if prediction[poss_ans_ind] > answer_val:
-                            answer = poss_ans_ind
-                            answer_val = prediction[poss_ans_ind]
-                    if answer == target:
-                        num_correct += 1
+            # if batch % eval_interval == 0:
+            #     # Evaluate model
+            #     predictions = model.predict(x_test)            
 
-                test_accuracy = float(num_correct) / num_test_samples
-                print(f'Trained {batch} batches')
-                print('Test accuracy: %f' % test_accuracy)
+            #     num_correct = 0
+            #     for prediction, target in zip(predictions, y_test):
+            #         answer = 0
+            #         answer_val = prediction[0]
+            #         for poss_ans_ind in range(len(prediction)):
+            #             if prediction[poss_ans_ind] > answer_val:
+            #                 answer = poss_ans_ind
+            #                 answer_val = prediction[poss_ans_ind]
+            #         if answer == target:
+            #             num_correct += 1
 
-                if test_accuracy >= target_acc:
-                    break
+            #     test_accuracy = float(num_correct) / num_test_samples
+            #     print(f'Trained {batch} batches')
+            #     print('Test accuracy: %f' % test_accuracy)
 
-            batch += 1
+            #     if test_accuracy >= target_acc:
+            #         break
+
+            n_batch += 1
 
 
     # FROM meas-train

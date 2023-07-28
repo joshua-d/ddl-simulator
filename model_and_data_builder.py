@@ -35,6 +35,6 @@ def model_builder():
         return grads_list, loss
 
     def build_optimizer(learning_rate):
-        return tf.keras.optimizers.Adam(learning_rate=learning_rate)
+        return tf.keras.optimizers.SGD(learning_rate=learning_rate, decay=1e-6, momentum=0.9, nesterov=True)
 
     return model, params, forward_pass, build_optimizer
