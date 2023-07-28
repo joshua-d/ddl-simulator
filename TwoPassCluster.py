@@ -27,15 +27,7 @@ class Worker:
         self.steps_complete = 0
 
     def get_next_batch(self):
-        batch = next(self.data_chunk_iterator)
-        self.batch_idx += 1
-
-        if self.batch_idx == self.data_chunk_size:
-            chunk = next(self.dataset_iterator)
-            self.data_chunk_size = len(chunk)
-            self.data_chunk_iterator = iter(chunk)
-            self.batch_idx = 0
-
+        batch = next(self.dataset_iterator)
         return batch
 
     def train_step(self):
