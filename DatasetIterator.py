@@ -22,27 +22,21 @@ class DatasetIterator:
         self.shuffle_seed = initial_shuffle_seed
 
         self.batched_dataset = dataset.batch(batch_size)
-        self.chunk_idx = 0
+        self.batch_idx = 0
 
-        self.lock = Lock()
+        self.iterator = iter(self.batched_dataset)
         
 
     def __next__(self):
 
-        with self.lock:
+        if self.batch_idx == len(self.batched_dataset):
+            # Reached end of dataset
+            if self.reshuffle_each_iteration:
+                next_dataset = self.dataset.shuffle(1024, seed=self.shuffle_seed)
+                self.shuffle_seed += 1
+                self.batched_dataset = next_dataset.batch(self.batch_size)
+            self.batch_idx = 0
+            self.iterator = iter(self.batched_dataset)
 
-            data_chunk = self.batched_dataset.skip(self.chunk_idx * self.data_chunk_size).take(self.data_chunk_size)
-            self.chunk_idx += 1
-
-            if self.chunk_idx * self.data_chunk_size >= len(self.batched_dataset):
-                if self.reshuffle_each_iteration:
-                    next_dataset = self.dataset.take(len(self.dataset))
-                    next_dataset = next_dataset.shuffle(len(next_dataset), seed=self.shuffle_seed)
-                    self.shuffle_seed += 1
-                    self.batched_dataset = next_dataset.batch(self.batch_size)
-                else:
-                    self.batched_dataset = self.dataset.batch(self.batch_size)
-
-                self.chunk_idx = 0
-
-        return data_chunk
+        self.batch_idx += 1
+        return next(self.iterator)
