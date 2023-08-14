@@ -142,7 +142,12 @@ class TwoPassCluster:
             'batch_fetch',
             'fp',
             'opt',
-            'param_aggr'
+            'param_aggr',
+            'find_earliest',
+            'process_sending',
+            'process_sent',
+            'move_future',
+            'nsg_process_msg'
         ])
 
         self._create_nodes()
@@ -380,10 +385,10 @@ class TwoPassCluster:
             while self.steps_complete < next_steps_milestone:
                 if len(self.nsg.events) == 0:
                     self.timing.end()
-                    self.timing.start('nsg_gen')
+                    # self.timing.start('nsg_gen')
                     for _ in range(self.gen_buf):
-                        self.nsg.generate()
-                    self.timing.end()
+                        self.nsg.generate(self.timing)
+                    # self.timing.end()
                     self.timing.start('other')
 
                 current_event = self.nsg.events.pop(0)

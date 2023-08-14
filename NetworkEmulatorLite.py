@@ -159,8 +159,9 @@ class NetworkEmulatorLite:
 
 
     # TODO: eff_start cannot be 0
-    def move(self, eff_start=None, eff_end=None):
+    def move(self, timing, eff_start=None, eff_end=None):
 
+        timing.start('find_earliest')
         # Find next earliest completion time
         earliest_completion_time = inf
 
@@ -185,6 +186,8 @@ class NetworkEmulatorLite:
             if msg.in_time < earliest_in_time:
                 earliest_in_time = msg.in_time
 
+        timing.end()
+
         # Move to next earliest completion time or in time (or eff checkpoint!)
         if eff_start is not None:
             if self.current_time < eff_start:
@@ -196,6 +199,7 @@ class NetworkEmulatorLite:
         else:
             self.current_time = min(earliest_completion_time, earliest_in_time, earliest_sr_update_time)
 
+        timing.start('process_sending')
         # Process sending msgs
         sent_msgs = []
 
@@ -225,7 +229,10 @@ class NetworkEmulatorLite:
                 msg.last_sr_update = self.current_time
 
             msg_idx += 1
+        
+        timing.end()
 
+        timing.start('process_sent')
         # Process sent msgs
         for msg in sent_msgs:
 
@@ -237,6 +244,9 @@ class NetworkEmulatorLite:
             
             self._update_dsg_send_rates()
 
+        timing.end()
+
+        timing.start('move_future')
         # Move future msgs in
         msg_idx = 0
         while msg_idx < len(self.future_msgs):
@@ -259,6 +269,7 @@ class NetworkEmulatorLite:
 
             msg_idx += 1
 
+        timing.end()
 
         # DSGSRs are accurate, calculate effective bandwidth
         if eff_start is not None:
