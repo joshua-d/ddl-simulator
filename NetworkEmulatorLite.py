@@ -4,7 +4,7 @@ from math import inf, isclose, sqrt
 base_lgc = 1
 
 # Starting send rate, b/s
-starting_sr = 1
+starting_sr = 0 # TODO
 
 # How often to increment sr, s
 sr_update_period = 0.002
@@ -161,16 +161,13 @@ class NetworkEmulatorLite:
                             for aux_msg in distribute_msgs:
                                 incoming_offering[aux_msg] += distribute_amt
 
-        # Called whenever DSRs are updated
-        self._compute_sr_info()
-
 
     def _compute_sr_info(self):
         for msg in self.sending_msgs:
             msg.time_to_reach_dsr = (msg.dsg_send_rate - msg.send_rate) / msg.lgr
 
             t = msg.time_to_reach_dsr
-            msg.amt_sent_at_dsr_reach = msg.amt_sent + msg.send_rate * t + msg.lgr * t * t
+            msg.amt_sent_at_dsr_reach = msg.amt_sent + (msg.send_rate * t + msg.lgr * t * t) / 2  # amount sent function = amt_sent + 1/2(sr_fn)t
 
 
     def send_msg(self, from_id, to_id, msg_size, in_time):
@@ -185,7 +182,7 @@ class NetworkEmulatorLite:
 
         # Requested time is during rampup
         if t < msg.time_to_reach_dsr:
-            return msg.amt_sent + msg.send_rate * t + msg.lgr * t * t
+            return msg.amt_sent + (msg.send_rate * t + msg.lgr * t * t) / 2
         
         # Msg has already reached dsr
         elif msg.time_to_reach_dsr == 0:
@@ -239,7 +236,7 @@ class NetworkEmulatorLite:
         next_completed_msg = None
 
         for msg in self.sending_msgs:
-            msg.prospective_amt_sent = self._predict_amt_sent(msg, earliest_in_time)
+            msg.prospective_amt_sent = self._predict_amt_sent(msg, earliest_in_time)  # TODO inf may be passed here
 
             if msg.prospective_amt_sent > msg.size:
                 comp_time = self._get_completion_time(msg)
@@ -251,9 +248,12 @@ class NetworkEmulatorLite:
         # Write prospective amt sents, update SRs, and move to in time
         if next_completed_msg is None:
 
+            if next_in_msg is None:
+                return []
+
             for msg in self.sending_msgs:
                 msg.amt_sent = msg.prospective_amt_sent
-                msg.send_rate = max(msg.send_rate + msg.lgr * (earliest_in_time - self.current_time), msg.dsg_send_rate)
+                msg.send_rate = min(msg.send_rate + msg.lgr * (earliest_in_time - self.current_time), msg.dsg_send_rate)
 
             self.current_time = earliest_in_time
 
@@ -267,8 +267,9 @@ class NetworkEmulatorLite:
             self.sending_msgs.append(next_in_msg)
             self.total_msgs += 1
 
-            next_in_msg.send_rate = min(starting_sr, next_in_msg.dsg_send_rate)
             self._update_dsg_send_rates()
+            next_in_msg.send_rate = min(starting_sr, next_in_msg.dsg_send_rate)
+            self._compute_sr_info()
             
 
         # Update amt sents and SRs and move to completion time
@@ -285,7 +286,7 @@ class NetworkEmulatorLite:
 
                 else:
                     msg.amt_sent = self._predict_amt_sent(msg, earliest_completion_time)
-                    msg.send_rate = max(msg.send_rate + msg.lgr * (earliest_in_time - self.current_time), msg.dsg_send_rate)
+                    msg.send_rate = min(msg.send_rate + msg.lgr * (earliest_in_time - self.current_time), msg.dsg_send_rate)
 
                 msg_idx += 1
 
@@ -297,13 +298,14 @@ class NetworkEmulatorLite:
             self.total_msgs -= 1
             
             self._update_dsg_send_rates()
+            self._compute_sr_info()
 
             # Advance current time
             self.current_time = earliest_completion_time
 
 
         # Return sent msgs
-        return [next_completed_msg]
+        return [next_completed_msg] if next_completed_msg is not None else []
 
 
 if __name__ == '__main__':
@@ -323,31 +325,24 @@ if __name__ == '__main__':
     ne = NetworkEmulatorLite(node_bws, True)
 
     ne.send_msg(0, 1, 100, 0)
-    ne.send_msg(0, 1, 100, 0)
-    ne.send_msg(2, 0, 100, 0)
-    # 2.5, 2.5, 5
+    # ne.send_msg(0, 1, 100, 0)
+    # ne.send_msg(2, 0, 100, 0)
+    # # 2.5, 2.5, 5
 
-    ne.send_msg(2, 0, 100, 10)
-    # 2.5, 2.5, 2.5, 2.5
+    # ne.send_msg(2, 0, 100, 10)
+    # # 2.5, 2.5, 2.5, 2.5
 
-    ne.send_msg(1, 0, 100, 15)
-    # 2.5, 2.5, 1.66, 1.66, 1.66
+    ne.send_msg(1, 0, 100, 0)
+    # # 2.5, 2.5, 1.66, 1.66, 1.66
 
-    ne.send_msg(1, 3, 100, 20)
-    # 2.5, 2.5, 1.66, 1.66, 1.66, 3.33
+    # ne.send_msg(1, 3, 100, 20)
+    # # 2.5, 2.5, 1.66, 1.66, 1.66, 3.33
 
-    ne.send_msg(3, 1, 100, 25)
-
-    msg = Message(0, 0, 20, 0)
-    msg.lgr = 10
-    msg.send_rate = 10
-
-    print(ne._get_completion_time(msg))
-    print(ne._predict_amt_sent(msg, 0.5))
+    # ne.send_msg(3, 1, 100, 25)
 
     sent_msgs = []
     while len(sent_msgs) == 0:
-        sent_msgs = ne.move()
+        sent_msgs = ne.move(None)
         for msg in sent_msgs:
             print('from {0} to {1}, start {2}, end {3}'.format(msg.from_id, msg.to_id, msg.start_time, msg.end_time))
         sent_msgs = []
