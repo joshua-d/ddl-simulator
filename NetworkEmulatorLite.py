@@ -32,6 +32,12 @@ class Message:
         self.start_time = 0
         self.end_time = 0
 
+        # used in NEL.move
+        self.prospective_amt_sent = 0
+
+        self.time_to_reach_dsr = 0
+        self.amt_sent_at_dsr_reach = 0 # only valid if dsr has not been reached
+
 
 class NetworkEmulatorLite:
 
@@ -118,6 +124,8 @@ class NetworkEmulatorLite:
                     if msg not in final_msgs:
 
                         msg.dsg_send_rate = least_offering
+                        if msg.send_rate > msg.dsg_send_rate:
+                            msg.send_rate = msg.dsg_send_rate # SR drops to DSR instantly
                         msg.lgr = base_lgc * msg.dsg_send_rate
                         final_msgs.append(msg)
                         
@@ -137,6 +145,8 @@ class NetworkEmulatorLite:
                     if msg not in final_msgs:
 
                         msg.dsg_send_rate = least_offering
+                        if msg.send_rate > msg.dsg_send_rate:
+                            msg.send_rate = msg.dsg_send_rate # SR drops to DSR instantly
                         msg.lgr = base_lgc * msg.dsg_send_rate
                         final_msgs.append(msg)
                         
@@ -151,6 +161,17 @@ class NetworkEmulatorLite:
                             for aux_msg in distribute_msgs:
                                 incoming_offering[aux_msg] += distribute_amt
 
+        # Called whenever DSRs are updated
+        self._compute_sr_info()
+
+
+    def _compute_sr_info(self):
+        for msg in self.sending_msgs:
+            msg.time_to_reach_dsr = (msg.dsg_send_rate - msg.send_rate) / msg.lgr
+
+            t = msg.time_to_reach_dsr
+            msg.amt_sent_at_dsr_reach = msg.amt_sent + msg.send_rate * t + msg.lgr * t * t
+
 
     def send_msg(self, from_id, to_id, msg_size, in_time):
         msg = Message(from_id, to_id, msg_size, in_time)
@@ -158,162 +179,131 @@ class NetworkEmulatorLite:
         self.future_msgs.append(msg)
 
 
-    # msg must be sending
+    # Time is absolute, a future 'current_time' value
     def _predict_amt_sent(self, msg, time):
         t = time - self.current_time
-        return msg.amt_sent + msg.send_rate * t + msg.lgr * t * t
+
+        # Requested time is during rampup
+        if t < msg.time_to_reach_dsr:
+            return msg.amt_sent + msg.send_rate * t + msg.lgr * t * t
+        
+        # Msg has already reached dsr
+        elif msg.time_to_reach_dsr == 0:
+            return msg.amt_sent + msg.send_rate * t
+        
+        # Requested time is after rampup
+        else:
+            return msg.amt_sent_at_dsr_reach + msg.dsg_send_rate * (t - msg.time_to_reach_dsr)
     
 
+    # Returns an absolute time
     def _get_completion_time(self, msg):
-        a = msg.lgr
-        b = msg.send_rate
-        c = -(msg.size - msg.amt_sent)
 
-        discriminant = b**2 - 4*a*c
-        x1 = (-b + sqrt(discriminant)) / (2*a)
-        x2 = (-b - sqrt(discriminant)) / (2*a)
-        return max(x1, x2) + self.current_time
+        # Msg has already reached dsr
+        if msg.time_to_reach_dsr == 0:
+            return (msg.size - msg.amt_sent) / msg.send_rate + self.current_time
+        
+        # Msg will complete during rampup
+        if msg.amt_sent_at_dsr_reach > msg.size:
+            a = msg.lgr
+            b = msg.send_rate
+            c = -(msg.size - msg.amt_sent)
+
+            discriminant = b**2 - 4*a*c
+            x1 = (-b + sqrt(discriminant)) / (2*a)
+            x2 = (-b - sqrt(discriminant)) / (2*a)
+            return max(x1, x2) + self.current_time
+        
+        # Msg will complete after rampup
+        else:
+            return msg.time_to_reach_dsr + (msg.size - msg.amt_sent_at_dsr_reach) / msg.dsg_send_rate + self.current_time
 
 
+    # TODO with this new impl, 1 or 0 msgs send per move - may or may not be more efficient than using isclose
+    # same with bringing future msgs in
     # TODO make sure using inf does not take a lot of time
     # TODO: eff_start cannot be 0
     def move(self, eff_start=None, eff_end=None):
 
         # Find next earliest in time
         earliest_in_time = inf
+        next_in_msg = None
 
         for msg in self.future_msgs:
             if msg.in_time < earliest_in_time:
                 earliest_in_time = msg.in_time
+                next_in_msg = msg
 
-        # Get amt sent at next earliest in time for each msg
-        for msg in self.sending_msgs:
-            pass
-
-        # Find next earliest completion time
+        # Get amt sent at next earliest in time for each msg, and check for completion
         earliest_completion_time = inf
+        next_completed_msg = None
 
         for msg in self.sending_msgs:
-            msg_completion_time = self.current_time + (msg.size - msg.amt_sent) / msg.send_rate
+            msg.prospective_amt_sent = self._predict_amt_sent(msg, earliest_in_time)
 
-            if msg_completion_time < earliest_completion_time:
-                earliest_completion_time = msg_completion_time
+            if msg.prospective_amt_sent > msg.size:
+                comp_time = self._get_completion_time(msg)
+                if comp_time < earliest_completion_time:
+                    earliest_completion_time = comp_time
+                    next_completed_msg = msg
 
-        # Find next earliest sr update time
-        earliest_sr_update_time = inf
 
-        for msg in self.sending_msgs:
-            msg_sr_update_time = msg.last_sr_update + sr_update_period
-            if msg_sr_update_time < earliest_sr_update_time:
-                earliest_sr_update_time = msg_sr_update_time
+        # Write prospective amt sents, update SRs, and move to in time
+        if next_completed_msg is None:
 
-        
+            for msg in self.sending_msgs:
+                msg.amt_sent = msg.prospective_amt_sent
+                msg.send_rate = max(msg.send_rate + msg.lgr * (earliest_in_time - self.current_time), msg.dsg_send_rate)
 
-        # Move to next earliest completion time or in time (or eff checkpoint!)
-        if eff_start is not None:
-            if self.current_time < eff_start:
-                self.current_time = min(earliest_completion_time, earliest_in_time, earliest_sr_update_time, eff_start)
-            elif self.current_time < eff_end:
-                self.current_time = min(earliest_completion_time, earliest_in_time, earliest_sr_update_time, eff_end)
-            else:
-                self.current_time = min(earliest_completion_time, earliest_in_time, earliest_sr_update_time)
+            self.current_time = earliest_in_time
+
+            # move msg in
+            self.future_msgs.remove(next_in_msg)
+
+            next_in_msg.start_time = next_in_msg.in_time    # Start time is always in time, because msgs start sending immediately
+
+            self.sending[next_in_msg.from_id].append(next_in_msg)
+            self.receiving[next_in_msg.to_id].append(next_in_msg)
+            self.sending_msgs.append(next_in_msg)
+            self.total_msgs += 1
+
+            next_in_msg.send_rate = min(starting_sr, next_in_msg.dsg_send_rate)
+            self._update_dsg_send_rates()
+            
+
+        # Update amt sents and SRs and move to completion time
         else:
-            self.current_time = min(earliest_completion_time, earliest_in_time, earliest_sr_update_time)
+            msg_idx = 0
+            while msg_idx < len(self.sending_msgs):
+                msg = self.sending_msgs[msg_idx]
 
-        # Process sending msgs
-        sent_msgs = []
+                if msg == next_completed_msg:
+                    # message has sent, remove from sending_msgs and add to sent_msgs
+                    self.sending_msgs.pop(msg_idx)
+                    msg_idx -= 1
+                    msg.end_time = earliest_completion_time
 
-        msg_idx = 0
-        while msg_idx < len(self.sending_msgs):
-            msg = self.sending_msgs[msg_idx]
+                else:
+                    msg.amt_sent = self._predict_amt_sent(msg, earliest_completion_time)
+                    msg.send_rate = max(msg.send_rate + msg.lgr * (earliest_in_time - self.current_time), msg.dsg_send_rate)
 
-            # Update msg amt_sent, last_checked, and [current] send_rate
-            msg.amt_sent += (self.current_time - msg.last_checked) * msg.send_rate
-            msg.last_checked = self.current_time
+                msg_idx += 1
 
-            if msg.amt_sent > msg.size or isclose(msg.amt_sent, msg.size):
-                # message has sent, remove from sending_msgs and add to sent_msgs
-                self.sending_msgs.pop(msg_idx)
-                msg_idx -= 1
-                sent_msgs.append(msg)
-                msg.end_time = self.current_time
-
-            elif isclose(self.current_time - msg.last_sr_update, sr_update_period):
-                if msg.send_rate < msg.dsg_send_rate:
-                    msg.send_rate += msg.lgr * (self.current_time - msg.last_sr_update)
-                if msg.send_rate > msg.dsg_send_rate:
-                    # msg.send_rate -= msg.lgr * (self.current_time - msg.last_sr_update)
-                    # Drop to dsr instantly
-                    msg.send_rate = msg.dsg_send_rate
-                    
-                msg.last_sr_update = self.current_time
-
-            msg_idx += 1
-
-        # Process sent msgs
-        for msg in sent_msgs:
-
+            # Process sent
             # remove from active, update send rates
-            self.sending[msg.from_id].remove(msg)
-            self.receiving[msg.to_id].remove(msg)
+            self.sending[next_completed_msg.from_id].remove(next_completed_msg)
+            self.receiving[next_completed_msg.to_id].remove(next_completed_msg)
 
             self.total_msgs -= 1
             
             self._update_dsg_send_rates()
 
-        # Move future msgs in
-        msg_idx = 0
-        while msg_idx < len(self.future_msgs):
-            msg = self.future_msgs[msg_idx]
-
-            if msg.in_time == self.current_time:
-                self.future_msgs.pop(msg_idx)
-                msg_idx -= 1
-
-                # Start time is always in time, because msgs start sending immediately
-                msg.start_time = msg.in_time
-
-                self.sending[msg.from_id].append(msg)
-                self.receiving[msg.to_id].append(msg)
-                self.sending_msgs.append(msg)
-                self.total_msgs += 1
-
-                self._update_dsg_send_rates()
-                msg.send_rate = min(starting_sr, msg.dsg_send_rate)
-
-            msg_idx += 1
-
-
-        # DSGSRs are accurate, calculate effective bandwidth
-        if eff_start is not None:
-            if self.current_time >= eff_start and self.current_time <= eff_end:
-
-                # Get how much bw each node is using, in each direction
-                for node_id in self.nodes:
-
-                    # inbound
-                    tsr = 0
-                    for msg in self.sending_msgs:
-                        if msg.to_id == node_id:
-                            tsr += msg.dsg_send_rate
-
-                    if len(self.eff_in[node_id]) == 0 or self.eff_in[node_id][-1][1] != tsr:
-                        self.eff_in[node_id].append((self.current_time, tsr))
-
-                    # outbound
-                    tsr = 0
-                    for msg in self.sending_msgs:
-                        if msg.from_id == node_id:
-                            tsr += msg.dsg_send_rate
-
-                    if len(self.eff_out[node_id]) == 0 or self.eff_out[node_id][-1][1] != tsr:
-                        self.eff_out[node_id].append((self.current_time, tsr))
-                    
-
+            # Advance current time
+            self.current_time = earliest_completion_time
 
 
         # Return sent msgs
-        return sent_msgs
+        return [next_completed_msg]
 
 
 if __name__ == '__main__':
