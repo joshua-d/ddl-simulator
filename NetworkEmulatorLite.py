@@ -158,8 +158,37 @@ class NetworkEmulatorLite:
         self.future_msgs.append(msg)
 
 
+    # msg must be sending
+    def _predict_amt_sent(self, msg, time):
+        t = time - self.current_time
+        return msg.amt_sent + msg.send_rate * t + msg.lgr * t * t
+    
+
+    def _get_completion_time(self, msg):
+        a = msg.lgr
+        b = msg.send_rate
+        c = -(msg.size - msg.amt_sent)
+
+        discriminant = b**2 - 4*a*c
+        x1 = (-b + sqrt(discriminant)) / (2*a)
+        x2 = (-b - sqrt(discriminant)) / (2*a)
+        return max(x1, x2) + self.current_time
+
+
+    # TODO make sure using inf does not take a lot of time
     # TODO: eff_start cannot be 0
     def move(self, eff_start=None, eff_end=None):
+
+        # Find next earliest in time
+        earliest_in_time = inf
+
+        for msg in self.future_msgs:
+            if msg.in_time < earliest_in_time:
+                earliest_in_time = msg.in_time
+
+        # Get amt sent at next earliest in time for each msg
+        for msg in self.sending_msgs:
+            pass
 
         # Find next earliest completion time
         earliest_completion_time = inf
@@ -178,12 +207,7 @@ class NetworkEmulatorLite:
             if msg_sr_update_time < earliest_sr_update_time:
                 earliest_sr_update_time = msg_sr_update_time
 
-        # Find next earliest in time
-        earliest_in_time = inf
-
-        for msg in self.future_msgs:
-            if msg.in_time < earliest_in_time:
-                earliest_in_time = msg.in_time
+        
 
         # Move to next earliest completion time or in time (or eff checkpoint!)
         if eff_start is not None:
@@ -323,6 +347,13 @@ if __name__ == '__main__':
     # 2.5, 2.5, 1.66, 1.66, 1.66, 3.33
 
     ne.send_msg(3, 1, 100, 25)
+
+    msg = Message(0, 0, 20, 0)
+    msg.lgr = 10
+    msg.send_rate = 10
+
+    print(ne._get_completion_time(msg))
+    print(ne._predict_amt_sent(msg, 0.5))
 
     sent_msgs = []
     while len(sent_msgs) == 0:
