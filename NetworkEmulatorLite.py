@@ -219,7 +219,7 @@ class NetworkEmulatorLite:
     # TODO with this new impl, 1 or 0 msgs send per move - may or may not be more efficient than using isclose
     # same with bringing future msgs in
     # TODO make sure using inf does not take a lot of time
-    # TODO: eff_start cannot be 0
+    # TODO: eff_start cannot be 0 - unsure about this
     def move(self, eff_start=None, eff_end=None):
 
         # Find next earliest in time
