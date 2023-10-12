@@ -1,6 +1,6 @@
 from math import inf, isclose, sqrt
 
-# Linear growth coefficient, factor multiplied with dsr
+# Linear growth coefficient, factor multiplied with (dsr - sr) to get lgr
 base_lgc = 1
 
 # Starting send rate, b/s
@@ -126,7 +126,7 @@ class NetworkEmulatorLite:
                         msg.dsg_send_rate = least_offering
                         if msg.send_rate > msg.dsg_send_rate:
                             msg.send_rate = msg.dsg_send_rate # SR drops to DSR instantly
-                        msg.lgr = base_lgc * msg.dsg_send_rate
+                        msg.lgr = base_lgc * (msg.dsg_send_rate - msg.send_rate)
                         final_msgs.append(msg)
                         
                         distribute_msgs = []
@@ -147,7 +147,7 @@ class NetworkEmulatorLite:
                         msg.dsg_send_rate = least_offering
                         if msg.send_rate > msg.dsg_send_rate:
                             msg.send_rate = msg.dsg_send_rate # SR drops to DSR instantly
-                        msg.lgr = base_lgc * msg.dsg_send_rate
+                        msg.lgr = base_lgc * (msg.dsg_send_rate - msg.send_rate)
                         final_msgs.append(msg)
                         
                         distribute_msgs = []
