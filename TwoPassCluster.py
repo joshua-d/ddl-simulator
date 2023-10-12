@@ -537,7 +537,7 @@ class TwoPassCluster:
     def trainless(self, stamp):
         batches_per_epoch = self.num_train_samples / self.batch_size # TODO num train samples should be divisible by batch size
 
-        while not self.nsg.generate(None, ceil(self.epochs * batches_per_epoch)):
+        while not self.nsg.generate(self.timing, ceil(self.epochs * batches_per_epoch)):
             pass
 
         if self.generate_gantt:
