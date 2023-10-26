@@ -49,12 +49,13 @@ class PSParentApplyEvent(Event):
 
 
 class Worker:
-    def __init__(self, id, step_time, st_variation):
+    def __init__(self, id, step_time, st_variation, dropout_chance):
         self.id = id
         self.parent = None
 
         self.step_time = step_time
         self.st_variation = st_variation
+        self.dropout_chance = dropout_chance
 
 
 class ParameterServer:
@@ -112,7 +113,8 @@ class NetworkSequenceGenerator:
                 w = Worker(
                         node_desc['id'],
                         node_desc['step_time'],
-                        node_desc['st_variation']
+                        node_desc['st_variation'],
+                        node_desc['dropout_chance']
                     )
                 self.nodes.append(w)
                 self.workers.append(w)
@@ -242,9 +244,37 @@ class NetworkSequenceGenerator:
             self.events.append(WorkerStepEvent(self.ne.current_time, self.ne.current_time + step_time, worker.id))
             self.n_batches += 1
 
-            # Send params to parent
-            self.events.append(SendParamsEvent(self.ne.current_time + step_time, self.ne.current_time + step_time, worker.id, worker.parent.id))
-            self.ne.send_msg(worker.id, worker.parent.id, self.msg_size, self.ne.current_time + step_time)
+            # Check for dropout
+            if random.uniform(0, 1) < worker.dropout_chance and len(worker.parent.children) > 1: # TODO second case is just for now - last worker in a cluster can't drop out
+                ps = worker.parent
+                ps.children.remove(worker)
+
+                # If PS is sync and only waiting on this worker, continue
+                if ps.sync_style == 'sync':
+                    if ps.n_param_sets_received == len(ps.children):
+
+                        # Add aggr and apply events
+                        self.events.append(PSAggrEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
+                        self.events.append(PSApplyEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id))
+
+                        # If this is a mid level ps, send up to parent
+                        if ps.parent is not None:
+                            self.events.append(SendParamsEvent(self.ne.current_time + ps.aggr_time + ps.apply_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id, ps.parent.id))
+                            self.ne.send_msg(ps.id, ps.parent.id, self.msg_size, self.ne.current_time + ps.aggr_time + ps.apply_time)
+                            ps.waiting_for_parent = True
+
+                        # Otherwise, send down to children
+                        else:
+                            for child in ps.children:
+                                self.events.append(SendParamsEvent(self.ne.current_time + ps.aggr_time + ps.apply_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id, child.id))
+                                self.ne.send_msg(ps.id, child.id, self.msg_size, self.ne.current_time + ps.aggr_time + ps.apply_time)
+
+                        ps.n_param_sets_received = 0
+
+            else:
+                # Send params to parent
+                self.events.append(SendParamsEvent(self.ne.current_time + step_time, self.ne.current_time + step_time, worker.id, worker.parent.id))
+                self.ne.send_msg(worker.id, worker.parent.id, self.msg_size, self.ne.current_time + step_time)
 
 
     def generate(self, end_time=None, end_batch=None, eff_start=None, eff_end=None):

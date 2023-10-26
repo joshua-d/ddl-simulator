@@ -10,6 +10,7 @@ raw_config_keys = [
     'w-step-var',
     'ps-sync-time',
     'ps-async-time',
+    'global-dropout-chance',
     'epochs',
     'target-acc',
     'stop-at-target',
@@ -126,6 +127,7 @@ def make_config(global_config_json, raw_config):
 
                 "step_time": float(raw_config['w-step-time']),
                 "st_variation": float(raw_config['w-step-var']),
+                "dropout_chance": float(raw_config['global-dropout-chance']),
 
                 "inbound_bw": float(raw_config['bw']),
                 "outbound_bw": float(raw_config['bw'])
