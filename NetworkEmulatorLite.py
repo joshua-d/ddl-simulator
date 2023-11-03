@@ -164,7 +164,10 @@ class NetworkEmulatorLite:
 
     def _compute_sr_info(self):
         for msg in self.sending_msgs:
-            msg.time_to_reach_dsr = (msg.dsg_send_rate - msg.send_rate) / msg.lgr
+            if msg.dsg_send_rate == msg.send_rate or msg.lgr == 0: # TODO probably only need one of these cases
+                msg.time_to_reach_dsr = 0
+            else:
+                msg.time_to_reach_dsr = (msg.dsg_send_rate - msg.send_rate) / msg.lgr
 
             t = msg.time_to_reach_dsr
             msg.amt_sent_at_dsr_reach = msg.amt_sent + (msg.send_rate * t + msg.lgr * t * t) / 2  # amount sent function = amt_sent + 1/2(sr_fn)t
@@ -236,7 +239,7 @@ class NetworkEmulatorLite:
         next_completed_msg = None
 
         for msg in self.sending_msgs:
-            msg.prospective_amt_sent = self._predict_amt_sent(msg, earliest_in_time)  # TODO inf may be passed here
+            msg.prospective_amt_sent = self._predict_amt_sent(msg, earliest_in_time)  # TODO inf may be passed here - shouldn't be a problem, completion times are read if inf
 
             if msg.prospective_amt_sent > msg.size:
                 comp_time = self._get_completion_time(msg)
@@ -286,7 +289,7 @@ class NetworkEmulatorLite:
 
                 else:
                     msg.amt_sent = self._predict_amt_sent(msg, earliest_completion_time)
-                    msg.send_rate = min(msg.send_rate + msg.lgr * (earliest_in_time - self.current_time), msg.dsg_send_rate)
+                    msg.send_rate = min(msg.send_rate + msg.lgr * (earliest_completion_time - self.current_time), msg.dsg_send_rate)
 
                 msg_idx += 1
 
