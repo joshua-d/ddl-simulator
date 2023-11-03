@@ -24,17 +24,19 @@ def model_builder():
         params[p_idx] = param
         p_idx += 1
 
+    loss_type = tf.keras.losses.CategoricalCrossentropy()
+
     def forward_pass(batch):
         batch_inputs, batch_targets = batch
         with tf.GradientTape() as tape:
             predictions = model(batch_inputs, training=True)
-            loss = tf.keras.losses.CategoricalCrossentropy()(batch_targets, predictions)
+            loss = loss_type(batch_targets, predictions)
 
         grads_list = tape.gradient(loss, model.trainable_variables)
         
         return grads_list, loss
 
     def build_optimizer(learning_rate):
-        return tf.keras.optimizers.Adam(learning_rate=learning_rate)
+        return tf.keras.optimizers.SGD(learning_rate=learning_rate, decay=1e-6)
 
-    return model, params, forward_pass, build_optimizer
+    return model, params, forward_pass, build_optimizer, loss_type

@@ -112,7 +112,9 @@ class TwoPassCluster:
 
         self._parse_config(config)
 
-        self.test_model, self.test_model_params, _, _ = model_builder()
+        self.test_model, self.test_model_params, _, build_optimizer, loss_type = model_builder()
+        self.test_model.compile(build_optimizer(self.learning_rate), loss_type, metrics=['accuracy'])
+
 
         self._create_nodes()
 
@@ -132,7 +134,7 @@ class TwoPassCluster:
 
         for node_desc in self.node_descs:
 
-            _, params, forward_pass, build_optimizer = self.model_builder()
+            _, params, forward_pass, build_optimizer, _ = self.model_builder()
 
             if node_desc['node_type'] == 'ps':
                 ps = ParameterServer(node_desc['id'], node_desc['parent'], node_desc['sync_style'], params)
@@ -354,20 +356,7 @@ class TwoPassCluster:
             print(stamp + f'\tAverage loss: {avg_loss}')
 
             # Evaluate model
-            predictions = self.get_test_model().predict(x_test)            
-
-            num_correct = 0
-            for prediction, target in zip(predictions, y_test):
-                answer = 0
-                answer_val = prediction[0]
-                for poss_ans_ind in range(len(prediction)):
-                    if prediction[poss_ans_ind] > answer_val:
-                        answer = poss_ans_ind
-                        answer_val = prediction[poss_ans_ind]
-                if answer == target:
-                    num_correct += 1
-
-            test_accuracy = float(num_correct) / self.num_test_samples
+            loss, test_accuracy = self.get_test_model().evaluate(x_test, y_test)
             print(stamp + '\tTest accuracy: %f' % test_accuracy)
 
             accuracies.append(test_accuracy)

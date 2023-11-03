@@ -10,14 +10,14 @@ num_test_samples = 50000
 batch_size = 64
 learning_rate = 0.001
 
-eval_interval = 100
+eval_interval = 784
 target_acc = 0.95
 
 
 if __name__ == '__main__':
-    model, params, forward_pass, build_optimizer = model_builder()
-    dataset = dataset_fn(num_train_samples).shuffle(1024).batch(batch_size)
-    di = iter(dataset)
+    model, params, forward_pass, build_optimizer, _ = model_builder()
+    dataset = dataset_fn(num_train_samples).shuffle(1024)
+    di = DatasetIterator(dataset, batch_size, None)
 
     optimizer = build_optimizer(learning_rate)
 
@@ -31,7 +31,7 @@ if __name__ == '__main__':
         zoom_range=0.1
     )
 
-    datagen_train.fit(x_train)
+    # datagen_train.fit(x_train)
 
     x_test, y_test = keras_model.test_dataset(num_test_samples)
     test_dataset = tf.data.Dataset.from_tensor_slices((x_test, y_test))
@@ -46,7 +46,7 @@ if __name__ == '__main__':
         print('Beginning training')
         batch = 1
         while True:
-            grads_list = forward_pass(next(di))
+            grads_list, loss = forward_pass(next(di))
             optimizer.apply_gradients(zip(grads_list, params.values()))
 
             if batch % eval_interval == 0:
