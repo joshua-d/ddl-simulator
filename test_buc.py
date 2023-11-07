@@ -1,5 +1,5 @@
 from trainless_stats import do_trainless
-from NetworkSequenceGenerator import NetworkSequenceGenerator, ReceiveParamsEvent
+from NetworkSequenceGenerator import NetworkSequenceGenerator, ReceiveUpdateEvent
 import datetime, json, sys
 
 

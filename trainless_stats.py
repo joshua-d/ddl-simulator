@@ -1,4 +1,4 @@
-from NetworkSequenceGenerator import NetworkSequenceGenerator, WorkerStepEvent, ReceiveParamsEvent
+from NetworkSequenceGenerator import NetworkSequenceGenerator, WorkerStepEvent, ReceiveUpdateEvent
 import datetime, json, sys
 
 
@@ -69,7 +69,7 @@ def do_trainless(config, model_size, end_time, end_batch=None, eff_start=None, e
     print(f'bps: {bps}')
 
     # Get tsync and BUC
-    receive_events = list(filter(lambda e: type(e) == ReceiveParamsEvent, nsg.events))
+    receive_events = list(filter(lambda e: type(e) == ReceiveUpdateEvent, nsg.events))
     total_time = 0
     n_events = 0
     for event in receive_events:

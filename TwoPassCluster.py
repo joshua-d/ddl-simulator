@@ -1,7 +1,7 @@
 import datetime
 import numpy as np
 from DatasetIterator import DatasetIterator
-from NetworkSequenceGenerator import NetworkSequenceGenerator, WorkerStepEvent, SendParamsEvent, ReceiveParamsEvent, PSAggrEvent, PSApplyEvent, PSParentApplyEvent
+from NetworkSequenceGenerator import NetworkSequenceGenerator, WorkerStepEvent, SendUpdateEvent, ReceiveUpdateEvent, PSAggrEvent, PSApplyEvent, PSParentApplyEvent
 import keras_model
 from math import ceil
 from time import perf_counter
@@ -49,7 +49,7 @@ class Worker:
 
 
 class ParameterServer:
-    def __init__(self, id, parent, sync_style, params):
+    def __init__(self, id, parent, sync_style, params, optimizer):
         self.id = id
         self.parent = parent
         self.sync_style = sync_style
@@ -196,7 +196,7 @@ class TwoPassCluster:
 
     def process_event(self, event):
 
-        if type(event) == SendParamsEvent:
+        if type(event) == SendUpdateEvent:
             params = self.nodes[event.sender_id].get_params()
             node = self.nodes[event.receiver_id]
             if type(node) == Worker or node.parent == event.sender_id:
@@ -204,7 +204,7 @@ class TwoPassCluster:
             else:
                 node.incoming_child_params.append(params)
 
-        elif type(event) == ReceiveParamsEvent:
+        elif type(event) == ReceiveUpdateEvent:
             receiver = self.nodes[event.receiver_id]
             if type(receiver) == Worker:
                 # Worker should only have 1 param set in incoming params
@@ -275,7 +275,7 @@ class TwoPassCluster:
 
         # avg-tsync
         if trainless:
-            receive_events = list(filter(lambda e: type(e) == ReceiveParamsEvent, self.nsg.events))
+            receive_events = list(filter(lambda e: type(e) == ReceiveUpdateEvent, self.nsg.events))
             total_time = 0
             n_events = 0
             for event in receive_events:
@@ -336,7 +336,7 @@ class TwoPassCluster:
                         self.nsg.generate()
                 current_event = self.nsg.events.pop(0)
                 end_time = current_event.end_time
-                if type(current_event) == ReceiveParamsEvent:
+                if type(current_event) == ReceiveUpdateEvent:
                     total_tsync_time += current_event.end_time - current_event.start_time
                     n_receive_events += 1
                 if self.generate_gantt:
@@ -412,7 +412,7 @@ class TwoPassCluster:
                 total_time = 0
                 n_events = 0
                 for event in saved_events:
-                    if type(event) == ReceiveParamsEvent:
+                    if type(event) == ReceiveUpdateEvent:
                         total_time += event.end_time - event.start_time
                         n_events += 1
 
