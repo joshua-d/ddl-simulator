@@ -1,5 +1,8 @@
 from math import inf, isclose, sqrt
 
+# If True, all messages are sent IMMEDIATELY
+SKIP_NETWORK = True
+
 # Linear growth coefficient, factor multiplied with (dsr - sr) to get lgr
 base_lgc = 1
 
@@ -10,7 +13,7 @@ starting_sr = 0 # TODO
 sr_update_period = 0.002
 
 class Message:
-    def __init__(self, from_id, to_id, size, in_time):
+    def __init__(self, from_id, to_id, size, in_time, metadata=None):
         self.from_id = from_id
         self.to_id = to_id
         self.size = size
@@ -19,6 +22,8 @@ class Message:
         self.in_time = in_time
         self.last_checked = in_time
         self.last_sr_update = in_time
+
+        self.metadata = metadata
 
         # Designated send rate
         self.dsg_send_rate = 0
@@ -224,6 +229,14 @@ class NetworkEmulatorLite:
     # TODO make sure using inf does not take a lot of time
     # TODO: eff_start cannot be 0 - unsure about this
     def move(self, eff_start=None, eff_end=None):
+
+        if SKIP_NETWORK:
+            future_msgs = self.future_msgs
+            self.future_msgs = []
+            for msg in future_msgs:
+                msg.start_time = msg.in_time
+                msg.end_time = msg.in_time
+            return future_msgs
 
         # Find next earliest in time
         earliest_in_time = inf

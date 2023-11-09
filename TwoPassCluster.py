@@ -1,11 +1,12 @@
 import datetime
 import numpy as np
 from DatasetIterator import DatasetIterator
-from NetworkSequenceGenerator import NetworkSequenceGenerator, WorkerStepEvent, SendUpdateEvent, ReceiveUpdateEvent, PSAggrEvent, PSApplyEvent, PSParentApplyEvent
+from NetworkSequenceGenerator import NetworkSequenceGenerator, WorkerStepEvent, SendUpdateEvent, ReceiveUpdateEvent, PSAggrParamsEvent, PSApplyParamsEvent, PSApplyParamsFromParentEvent, PSAggrGradsEvent, PSApplyGradsEvent
 import keras_model
 from math import ceil
 from time import perf_counter
 
+# TODO class Node with shared attrs of Worker and PS
 
 class Worker:
     def __init__(self, id, params, forward_pass, dataset_iterator, optimizer):
@@ -18,6 +19,8 @@ class Worker:
 
         # List of param sets
         self.incoming_parent_params = []
+
+        self.outgoing_grads = []
 
         # Dataset stuff
         chunk = next(dataset_iterator)
@@ -32,8 +35,9 @@ class Worker:
         return batch
 
     def train_step(self):
-        gradients, loss = self.forward_pass(self.get_next_batch())
-        self.optimizer.apply_gradients(zip(gradients, self.params.values()))
+        outgoing_grad, loss = self.forward_pass(self.get_next_batch())
+        self.outgoing_grads = [outgoing_grad]
+        # self.optimizer.apply_gradients(zip(gradients, self.params.values()))
         self.steps_complete += 1
         return loss
 
@@ -54,10 +58,14 @@ class ParameterServer:
         self.parent = parent
         self.sync_style = sync_style
         self.params = params
+        self.optimizer = optimizer
 
         # Lists of param sets
         self.incoming_child_params = []
         self.incoming_parent_params = []
+
+        self.incoming_child_grads = []
+        self.outgoing_grads = []
 
         self.received_first_update = False
         self.has_async_child = False
@@ -93,6 +101,13 @@ class ParameterServer:
             for param_id in self.params:
                 param_value = (self.params[param_id].value() + param_set[param_id]) / 2
                 self.params[param_id].assign(param_value)
+
+    # TODO implement
+    def aggr_grads(self, grads_sets):
+        pass
+
+    def apply_grads(self, grad):
+        self.optimizer.apply_gradients(zip(grad, self.params.values()))
 
     def get_params(self):
         params = {}
@@ -197,12 +212,15 @@ class TwoPassCluster:
     def process_event(self, event):
 
         if type(event) == SendUpdateEvent:
-            params = self.nodes[event.sender_id].get_params()
-            node = self.nodes[event.receiver_id]
-            if type(node) == Worker or node.parent == event.sender_id:
-                node.incoming_parent_params.append(params)
+            receiver = self.receivers[event.receiver_id]
+            sender = self.nodes[event.sender_id]
+
+            if type(receiver) == Worker or receiver.parent == event.sender_id:
+                params = sender.get_params()
+                receiver.incoming_parent_params.append(params)
             else:
-                node.incoming_child_params.append(params)
+                for grad in sender.outgoing_grads:
+                    receiver.incoming_child_grads.append(grad)
 
         elif type(event) == ReceiveUpdateEvent:
             receiver = self.nodes[event.receiver_id]
@@ -217,7 +235,7 @@ class TwoPassCluster:
             self.steps_complete += 1
             return loss
 
-        elif type(event) == PSApplyEvent:
+        elif type(event) == PSApplyParamsEvent:
             ps = self.nodes[event.ps_id]
             if ps.sync_style == 'async':
                 params = ps.incoming_child_params.pop(0)
@@ -227,10 +245,30 @@ class TwoPassCluster:
                 ps.incoming_child_params = []
                 ps.aggr_and_apply_params(param_sets)
 
-        elif type(event) == PSParentApplyEvent:
+        elif type(event) == PSApplyParamsFromParentEvent:
             ps = self.nodes[event.ps_id]
             params = ps.incoming_parent_params.pop(0)
             ps.apply_params(params)
+
+        elif type(event) == PSApplyGradsEvent:
+            ps = self.nodes[event.ps_id]
+
+            # TODO this part is hacky
+            # If this is a zero-time event, this is a mid level PS and should relay grads to parent
+            if event.start_time == event.end_time:
+                grads_sets = ps.incoming_child_grads
+                ps.incoming_child_grads = []
+                for grad in grads_sets:
+                    ps.parent.incoming_child_grads.append(grad)
+
+            if ps.sync_style == 'async':
+                grad = ps.incoming_child_grads.pop(0)
+                ps.apply_grads(grad)
+            elif ps.sync_style == 'sync':
+                grads_sets = ps.incoming_child_grads
+                ps.incoming_child_grads = []
+                for grad in grads_sets:
+                    ps.apply_grads(grad) # TODO currently no aggregation, just applied in order
 
     # considers nsg.events
     def get_results(self, stamp, trainless, wc_time, end_time=None, avg_tsync=None, final_acc=None, e_to_target=None, t_to_target=None):

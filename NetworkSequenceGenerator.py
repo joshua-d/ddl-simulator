@@ -1,6 +1,12 @@
 import datetime, random
 from NetworkEmulatorLite import NetworkEmulatorLite
 import json
+from enum import Enum
+
+
+class UpdateType(Enum):
+    PARAMS = 0
+    GRADS = 1
 
 
 class Event:
@@ -16,10 +22,11 @@ class WorkerStepEvent(Event):
 
 
 class SendUpdateEvent(Event):
-    def __init__(self, start_time, end_time, sender_id, receiver_id):
+    def __init__(self, start_time, end_time, sender_id, receiver_id, update_type):
         super().__init__(start_time, end_time)
         self.sender_id = sender_id
         self.receiver_id = receiver_id
+        self.update_type = update_type
 
 
 class ReceiveUpdateEvent(Event):
@@ -29,19 +36,31 @@ class ReceiveUpdateEvent(Event):
         self.receiver_id = receiver_id
 
         
-class PSAggrEvent(Event):
+class PSAggrParamsEvent(Event):
     def __init__(self, start_time, end_time, ps_id):
         super().__init__(start_time, end_time)
         self.ps_id = ps_id
 
 
-class PSApplyEvent(Event):
+class PSApplyParamsEvent(Event):
     def __init__(self, start_time, end_time, ps_id):
         super().__init__(start_time, end_time)
         self.ps_id = ps_id
 
 
-class PSParentApplyEvent(Event):
+class PSApplyParamsFromParentEvent(Event):
+    def __init__(self, start_time, end_time, ps_id):
+        super().__init__(start_time, end_time)
+        self.ps_id = ps_id
+
+
+class PSAggrGradsEvent(Event):
+    def __init__(self, start_time, end_time, ps_id):
+        super().__init__(start_time, end_time)
+        self.ps_id = ps_id
+
+
+class PSApplyGradsEvent(Event):
     def __init__(self, start_time, end_time, ps_id):
         super().__init__(start_time, end_time)
         self.ps_id = ps_id
@@ -138,7 +157,7 @@ class NetworkSequenceGenerator:
             self.events.append(WorkerStepEvent(0, step_time, worker.id))
             self.n_batches += 1
             self.events.append(SendUpdateEvent(step_time, step_time, worker.id, worker.parent.id))
-            self.ne.send_msg(worker.id, worker.parent.id, self.msg_size, step_time)
+            self.ne.send_msg(worker.id, worker.parent.id, self.msg_size, step_time, UpdateType.GRADS) # send update type as msg metadata
 
         
 
@@ -155,7 +174,7 @@ class NetworkSequenceGenerator:
                     self.events.append(ReceiveUpdateEvent(msg.start_time, msg.end_time, msg.from_id, msg.to_id))
 
                     # We're adding a zero time apply to make event sequence more useful, see below in async relay too TODO
-                    self.events.append(PSParentApplyEvent(msg.end_time, msg.end_time, ps.id))
+                    self.events.append(PSApplyParamsFromParentEvent(msg.end_time, msg.end_time, ps.id))
 
                     # Immediately send to child(ren)
                     if ps.sync_style == 'async':
@@ -193,16 +212,26 @@ class NetworkSequenceGenerator:
                     # We're adding a zero time apply to make event sequence more useful TODO
                     if ps.parent is not None:
                         ps.next_available_work_time = max(self.ne.current_time, ps.next_available_work_time)
-                        self.events.append(PSApplyEvent(ps.next_available_work_time, ps.next_available_work_time, ps.id))
+
+                        if msg.metadata == UpdateType.PARAMS:
+                            self.events.append(PSApplyParamsEvent(ps.next_available_work_time, ps.next_available_work_time, ps.id))
+                        else:
+                            self.events.append(PSApplyGradsEvent(ps.next_available_work_time, ps.next_available_work_time, ps.id))
+
                         self.events.append(SendUpdateEvent(ps.next_available_work_time, ps.next_available_work_time, ps.id, ps.parent.id))
-                        self.ne.send_msg(ps.id, ps.parent.id, self.msg_size, ps.next_available_work_time)
+                        self.ne.send_msg(ps.id, ps.parent.id, self.msg_size, ps.next_available_work_time, msg.metadata) # pass msg type up
                         ps.waiting_for_parent = True
                         ps.waiting_child_id = msg.from_id
 
                     # Otherwise, apply and then send down to child
                     else:
                         apply_start_time = max(self.ne.current_time, ps.next_available_work_time)
-                        self.events.append(PSApplyEvent(apply_start_time, apply_start_time + ps.apply_time, ps.id))
+
+                        if msg.metadata == UpdateType.PARAMS:
+                            self.events.append(PSApplyParamsEvent(apply_start_time, apply_start_time + ps.apply_time, ps.id))
+                        else:
+                            self.events.append(PSApplyGradsEvent(apply_start_time, apply_start_time + ps.apply_time, ps.id))
+
                         ps.next_available_work_time = apply_start_time + ps.apply_time
                         self.events.append(SendUpdateEvent(ps.next_available_work_time, ps.next_available_work_time, ps.id, msg.from_id))
                         self.ne.send_msg(ps.id, msg.from_id, self.msg_size, ps.next_available_work_time)
@@ -216,8 +245,12 @@ class NetworkSequenceGenerator:
                     if ps.n_param_sets_received == len(ps.children):
 
                         # Add aggr and apply events
-                        self.events.append(PSAggrEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
-                        self.events.append(PSApplyEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id))
+                        if msg.metadata == UpdateType.PARAMS:
+                            self.events.append(PSAggrParamsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
+                            self.events.append(PSApplyParamsEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id))
+                        else:
+                            self.events.append(PSAggrGradsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
+                            self.events.append(PSApplyGradsEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id))
 
                         # If this is a mid level ps, send up to parent
                         if ps.parent is not None:
@@ -254,8 +287,12 @@ class NetworkSequenceGenerator:
                     if ps.n_param_sets_received == len(ps.children):
 
                         # Add aggr and apply events
-                        self.events.append(PSAggrEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
-                        self.events.append(PSApplyEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id))
+                        if msg.metadata == UpdateType.PARAMS:
+                            self.events.append(PSAggrParamsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
+                            self.events.append(PSApplyParamsEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id))
+                        else:
+                            self.events.append(PSAggrGradsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
+                            self.events.append(PSApplyGradsEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id))
 
                         # If this is a mid level ps, send up to parent
                         if ps.parent is not None:
@@ -274,7 +311,7 @@ class NetworkSequenceGenerator:
             else:
                 # Send params to parent
                 self.events.append(SendUpdateEvent(self.ne.current_time + step_time, self.ne.current_time + step_time, worker.id, worker.parent.id))
-                self.ne.send_msg(worker.id, worker.parent.id, self.msg_size, self.ne.current_time + step_time)
+                self.ne.send_msg(worker.id, worker.parent.id, self.msg_size, self.ne.current_time + step_time, UpdateType.GRADS)
 
 
     def generate(self, end_time=None, end_batch=None, eff_start=None, eff_end=None):
@@ -306,7 +343,7 @@ class NetworkSequenceGenerator:
         for event in self.events:
             if type(event) == WorkerStepEvent:
                 gantts[event.worker_id].append(event)
-            elif type(event) == PSAggrEvent or type(event) == PSApplyEvent:
+            elif type(event) == PSAggrParamsEvent or type(event) == PSApplyParamsEvent:
                 gantts[event.ps_id].append(event)
             elif type(event) == ReceiveUpdateEvent:
                 if type(self.nodes[event.receiver_id]) == Worker or event.sender_id == 0: # TODO need to change this logic for > 2 levels
@@ -337,7 +374,7 @@ class NetworkSequenceGenerator:
                     block_label_str = ', "label": {0}'.format(step_num)
                     step_num += 1
                     color = '#5da5c9'
-                elif type(event) == PSAggrEvent or type(event) == PSApplyEvent:
+                elif type(event) == PSAggrParamsEvent or type(event) == PSApplyParamsEvent:
                     raw_str = "Updating params - S: {0}, E: {1}, D: {2}".format(event.start_time, event.end_time, event.end_time - event.start_time)
                     color = '#003366'
                 elif type(event) == ReceiveUpdateEvent and event.sender_id == node.id:
@@ -408,7 +445,7 @@ class NetworkSequenceGenerator:
         for event in self.events:
             if type(event) == WorkerStepEvent:
                 events_by_node_id[event.worker_id].append(event)
-            elif type(event) == PSAggrEvent or type(event) == PSApplyEvent:
+            elif type(event) == PSAggrParamsEvent or type(event) == PSApplyParamsEvent:
                 events_by_node_id[event.ps_id].append(event)
             elif type(event) == ReceiveUpdateEvent:
                 events_by_node_id[event.sender_id].append(event)
@@ -426,7 +463,7 @@ class NetworkSequenceGenerator:
                     timing[node_id]['idle'] += event.start_time - current_time
                     current_time = event.start_time
 
-                if type(event) in [WorkerStepEvent, PSAggrEvent, PSApplyEvent]:
+                if type(event) in [WorkerStepEvent, PSAggrParamsEvent, PSApplyParamsEvent]:
                     if event.start_time < current_time < event.end_time:
                         timing[node_id]['transmission'] -= current_time - event.start_time
                     elif event.start_time < current_time:
