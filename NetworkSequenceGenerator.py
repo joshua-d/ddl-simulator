@@ -22,18 +22,18 @@ class WorkerStepEvent(Event):
 
 
 class SendUpdateEvent(Event):
+    def __init__(self, start_time, end_time, sender_id, receiver_id):
+        super().__init__(start_time, end_time)
+        self.sender_id = sender_id
+        self.receiver_id = receiver_id
+
+
+class ReceiveUpdateEvent(Event):
     def __init__(self, start_time, end_time, sender_id, receiver_id, update_type):
         super().__init__(start_time, end_time)
         self.sender_id = sender_id
         self.receiver_id = receiver_id
         self.update_type = update_type
-
-
-class ReceiveUpdateEvent(Event):
-    def __init__(self, start_time, end_time, sender_id, receiver_id):
-        super().__init__(start_time, end_time)
-        self.sender_id = sender_id
-        self.receiver_id = receiver_id
 
         
 class PSAggrParamsEvent(Event):
@@ -171,7 +171,7 @@ class NetworkSequenceGenerator:
                 if msg.from_id == ps.parent.id:
                     # Handle update from parent
 
-                    self.events.append(ReceiveUpdateEvent(msg.start_time, msg.end_time, msg.from_id, msg.to_id))
+                    self.events.append(ReceiveUpdateEvent(msg.start_time, msg.end_time, msg.from_id, msg.to_id, msg.metadata))
 
                     # We're adding a zero time apply to make event sequence more useful, see below in async relay too TODO
                     self.events.append(PSApplyParamsFromParentEvent(msg.end_time, msg.end_time, ps.id))
@@ -206,13 +206,13 @@ class NetworkSequenceGenerator:
                     # Process params immediately
 
                     # Add receive event
-                    self.events.append(ReceiveUpdateEvent(msg.start_time, msg.end_time, msg.from_id, msg.to_id))
+                    self.events.append(ReceiveUpdateEvent(msg.start_time, msg.end_time, msg.from_id, msg.to_id, msg.metadata))
                     
                     # If this is a mid level ps, send up to parent
-                    # We're adding a zero time apply to make event sequence more useful TODO
                     if ps.parent is not None:
                         ps.next_available_work_time = max(self.ne.current_time, ps.next_available_work_time)
 
+                        # Zero-time apply event
                         if msg.metadata == UpdateType.PARAMS:
                             self.events.append(PSApplyParamsEvent(ps.next_available_work_time, ps.next_available_work_time, ps.id))
                         else:
@@ -240,26 +240,36 @@ class NetworkSequenceGenerator:
                     # Only process if all param sets are in
 
                     ps.n_param_sets_received += 1
-                    self.events.append(ReceiveUpdateEvent(msg.start_time, msg.end_time, msg.from_id, msg.to_id))
+                    self.events.append(ReceiveUpdateEvent(msg.start_time, msg.end_time, msg.from_id, msg.to_id, msg.metadata))
 
                     if ps.n_param_sets_received == len(ps.children):
 
-                        # Add aggr and apply events
-                        if msg.metadata == UpdateType.PARAMS:
-                            self.events.append(PSAggrParamsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
-                            self.events.append(PSApplyParamsEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id))
-                        else:
-                            self.events.append(PSAggrGradsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
-                            self.events.append(PSApplyGradsEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id))
-
                         # If this is a mid level ps, send up to parent
                         if ps.parent is not None:
-                            self.events.append(SendUpdateEvent(self.ne.current_time + ps.aggr_time + ps.apply_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id, ps.parent.id))
-                            self.ne.send_msg(ps.id, ps.parent.id, self.msg_size, self.ne.current_time + ps.aggr_time + ps.apply_time)
+
+                            # Aggregate but don't apply
+                            if msg.metadata == UpdateType.PARAMS:
+                                self.events.append(PSAggrParamsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
+                                # TODO Zero-time apply event for easier control
+                                self.events.append(PSApplyParamsEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time, ps.id))
+                            else:
+                                self.events.append(PSAggrGradsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
+
+                            self.events.append(SendUpdateEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time, ps.id, ps.parent.id))
+                            self.ne.send_msg(ps.id, ps.parent.id, self.msg_size, self.ne.current_time + ps.aggr_time)
                             ps.waiting_for_parent = True
 
                         # Otherwise, send down to children
                         else:
+
+                            # Aggregate and apply
+                            if msg.metadata == UpdateType.PARAMS:
+                                self.events.append(PSAggrParamsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
+                                self.events.append(PSApplyParamsEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id))
+                            else:
+                                self.events.append(PSAggrGradsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
+                                self.events.append(PSApplyGradsEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id))
+
                             for child in ps.children:
                                 self.events.append(SendUpdateEvent(self.ne.current_time + ps.aggr_time + ps.apply_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id, child.id))
                                 self.ne.send_msg(ps.id, child.id, self.msg_size, self.ne.current_time + ps.aggr_time + ps.apply_time)
@@ -271,7 +281,7 @@ class NetworkSequenceGenerator:
             worker = self.nodes[msg.to_id]
 
             # Add receive and step events
-            self.events.append(ReceiveUpdateEvent(msg.start_time, msg.end_time, msg.from_id, msg.to_id))
+            self.events.append(ReceiveUpdateEvent(msg.start_time, msg.end_time, msg.from_id, msg.to_id, msg.metadata))
 
             step_time = worker.step_time - worker.st_variation + random.uniform(0, worker.st_variation*2)
             self.events.append(WorkerStepEvent(self.ne.current_time, self.ne.current_time + step_time, worker.id))
@@ -286,22 +296,32 @@ class NetworkSequenceGenerator:
                 if ps.sync_style == 'sync':
                     if ps.n_param_sets_received == len(ps.children):
 
-                        # Add aggr and apply events
-                        if msg.metadata == UpdateType.PARAMS:
-                            self.events.append(PSAggrParamsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
-                            self.events.append(PSApplyParamsEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id))
-                        else:
-                            self.events.append(PSAggrGradsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
-                            self.events.append(PSApplyGradsEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id))
-
                         # If this is a mid level ps, send up to parent
                         if ps.parent is not None:
-                            self.events.append(SendUpdateEvent(self.ne.current_time + ps.aggr_time + ps.apply_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id, ps.parent.id))
-                            self.ne.send_msg(ps.id, ps.parent.id, self.msg_size, self.ne.current_time + ps.aggr_time + ps.apply_time)
+
+                            # Aggregate but don't apply
+                            if msg.metadata == UpdateType.PARAMS:
+                                self.events.append(PSAggrParamsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
+                                # TODO Zero-time apply event for easier control
+                                self.events.append(PSApplyParamsEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time, ps.id))
+                            else:
+                                self.events.append(PSAggrGradsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
+
+                            self.events.append(SendUpdateEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time, ps.id, ps.parent.id))
+                            self.ne.send_msg(ps.id, ps.parent.id, self.msg_size, self.ne.current_time + ps.aggr_time)
                             ps.waiting_for_parent = True
 
                         # Otherwise, send down to children
                         else:
+
+                            # Aggregate and apply
+                            if msg.metadata == UpdateType.PARAMS:
+                                self.events.append(PSAggrParamsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
+                                self.events.append(PSApplyParamsEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id))
+                            else:
+                                self.events.append(PSAggrGradsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
+                                self.events.append(PSApplyGradsEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id))
+
                             for child in ps.children:
                                 self.events.append(SendUpdateEvent(self.ne.current_time + ps.aggr_time + ps.apply_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id, child.id))
                                 self.ne.send_msg(ps.id, child.id, self.msg_size, self.ne.current_time + ps.aggr_time + ps.apply_time)

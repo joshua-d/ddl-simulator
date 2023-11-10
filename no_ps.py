@@ -15,7 +15,7 @@ target_acc = 0.95
 
 
 if __name__ == '__main__':
-    model, params, forward_pass, build_optimizer, _ = model_builder()
+    model, params, forward_pass, build_optimizer, _, _ = model_builder()
     dataset = dataset_fn(num_train_samples).shuffle(1024)
     di = DatasetIterator(dataset, batch_size, None)
 

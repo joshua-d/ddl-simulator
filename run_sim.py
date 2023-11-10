@@ -46,12 +46,15 @@ def run(configs, stamp):
             cluster = TwoPassCluster(model_builder, dataset_fn, config)
             new_stamp = stamp + '_' + str(run_i)
             # TODO model and stuff gets built event on trainless - inefficient, but doesn't take that much time
-            try:
-                result_row = cluster.train(new_stamp) if not config['trainless'] else cluster.trainless(new_stamp)
-                result_row_list = [result_row[key] for key in keys]
-            except Exception as e:
-                print(e)
-                result_row_list = []
+            # try:
+            #     result_row = cluster.train(new_stamp) if not config['trainless'] else cluster.trainless(new_stamp)
+            #     result_row_list = [result_row[key] for key in keys]
+            # except Exception as e:
+            #     print(e)
+            #     result_row_list = []
+
+            result_row = cluster.train(new_stamp) if not config['trainless'] else cluster.trainless(new_stamp)
+            result_row_list = [result_row[key] for key in keys]
 
             with open(result_filename, 'a') as resfile:
                 resfile.write(make_row(result_row_list) + '\n')

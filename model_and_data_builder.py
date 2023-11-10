@@ -25,18 +25,20 @@ def model_builder():
         p_idx += 1
 
     loss_type = tf.keras.losses.CategoricalCrossentropy()
+    train_acc_metric = tf.keras.metrics.CategoricalAccuracy()
 
-    def forward_pass(batch):
+    def forward_pass(batch, acc_metric):
         batch_inputs, batch_targets = batch
         with tf.GradientTape() as tape:
             predictions = model(batch_inputs, training=True)
             loss = loss_type(batch_targets, predictions)
 
         grads_list = tape.gradient(loss, model.trainable_variables)
+        acc_metric.update_state(batch_targets, predictions)
         
         return grads_list, loss
 
     def build_optimizer(learning_rate):
         return tf.keras.optimizers.SGD(learning_rate=learning_rate, decay=1e-6)
 
-    return model, params, forward_pass, build_optimizer, loss_type
+    return model, params, forward_pass, build_optimizer, loss_type, train_acc_metric

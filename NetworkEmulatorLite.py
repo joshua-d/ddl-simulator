@@ -178,8 +178,8 @@ class NetworkEmulatorLite:
             msg.amt_sent_at_dsr_reach = msg.amt_sent + (msg.send_rate * t + msg.lgr * t * t) / 2  # amount sent function = amt_sent + 1/2(sr_fn)t
 
 
-    def send_msg(self, from_id, to_id, msg_size, in_time):
-        msg = Message(from_id, to_id, msg_size, in_time)
+    def send_msg(self, from_id, to_id, msg_size, in_time, metadata=None):
+        msg = Message(from_id, to_id, msg_size, in_time, metadata)
 
         self.future_msgs.append(msg)
 

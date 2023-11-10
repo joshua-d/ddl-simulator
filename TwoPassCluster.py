@@ -5,17 +5,19 @@ from NetworkSequenceGenerator import NetworkSequenceGenerator, WorkerStepEvent, 
 import keras_model
 from math import ceil
 from time import perf_counter
+import tensorflow as tf
 
 # TODO class Node with shared attrs of Worker and PS
 
 class Worker:
-    def __init__(self, id, params, forward_pass, dataset_iterator, optimizer):
+    def __init__(self, id, params, forward_pass, dataset_iterator, optimizer, train_acc_metric):
         self.id = id
 
         self.params = params
         self.forward_pass = forward_pass
         self.dataset_iterator = dataset_iterator
         self.optimizer = optimizer
+        self.train_acc_metric = train_acc_metric
 
         # List of param sets
         self.incoming_parent_params = []
@@ -35,7 +37,7 @@ class Worker:
         return batch
 
     def train_step(self):
-        outgoing_grad, loss = self.forward_pass(self.get_next_batch())
+        outgoing_grad, loss = self.forward_pass(self.get_next_batch(), self.train_acc_metric)
         self.outgoing_grads = [outgoing_grad]
         # self.optimizer.apply_gradients(zip(gradients, self.params.values()))
         self.steps_complete += 1
@@ -102,9 +104,16 @@ class ParameterServer:
                 param_value = (self.params[param_id].value() + param_set[param_id]) / 2
                 self.params[param_id].assign(param_value)
 
-    # TODO implement
     def aggr_grads(self, grads_sets):
-        pass
+        out_grads = []
+
+        for i in range(len(grads_sets[0])):
+            curr_grads = []
+            for grads in grads_sets:
+                curr_grads.append(grads[i])
+            out_grads.append(tf.reduce_mean(curr_grads, axis=0))
+
+        return out_grads
 
     def apply_grads(self, grad):
         self.optimizer.apply_gradients(zip(grad, self.params.values()))
@@ -127,8 +136,8 @@ class TwoPassCluster:
 
         self._parse_config(config)
 
-        self.test_model, self.test_model_params, _, build_optimizer, loss_type = model_builder()
-        self.test_model.compile(build_optimizer(self.learning_rate), loss_type, metrics=['accuracy'])
+        self.test_model, self.test_model_params, _, build_optimizer, loss_type, self.train_acc_metric = model_builder()
+        self.test_model.compile(build_optimizer(self.learning_rate), loss_type, metrics=[self.train_acc_metric])
 
 
         self._create_nodes()
@@ -149,16 +158,16 @@ class TwoPassCluster:
 
         for node_desc in self.node_descs:
 
-            _, params, forward_pass, build_optimizer, _ = self.model_builder()
+            _, params, forward_pass, build_optimizer, _, _ = self.model_builder()
 
             if node_desc['node_type'] == 'ps':
-                ps = ParameterServer(node_desc['id'], node_desc['parent'], node_desc['sync_style'], params)
+                ps = ParameterServer(node_desc['id'], node_desc['parent'], node_desc['sync_style'], params, build_optimizer(self.learning_rate))
                 self.nodes[ps.id] = ps
                 if node_desc['sync_style'] == 'async' and node_desc['parent'] is not None:
                     self.nodes[node_desc['parent']].has_async_child = True
 
             elif node_desc['node_type'] == 'worker':
-                worker = Worker(node_desc['id'], params, forward_pass, dataset_iterator, build_optimizer(self.learning_rate))
+                worker = Worker(node_desc['id'], params, forward_pass, dataset_iterator, build_optimizer(self.learning_rate), self.train_acc_metric)
                 self.nodes[worker.id] = worker
                 self.num_workers += 1
 
@@ -212,15 +221,17 @@ class TwoPassCluster:
     def process_event(self, event):
 
         if type(event) == SendUpdateEvent:
-            receiver = self.receivers[event.receiver_id]
+            receiver = self.nodes[event.receiver_id]
             sender = self.nodes[event.sender_id]
 
             if type(receiver) == Worker or receiver.parent == event.sender_id:
                 params = sender.get_params()
                 receiver.incoming_parent_params.append(params)
             else:
+                # TODO currently assuming all upward updates are GRADS updates
                 for grad in sender.outgoing_grads:
                     receiver.incoming_child_grads.append(grad)
+                    sender.outgoing_grads = []
 
         elif type(event) == ReceiveUpdateEvent:
             receiver = self.nodes[event.receiver_id]
@@ -243,32 +254,42 @@ class TwoPassCluster:
             elif ps.sync_style == 'sync':
                 param_sets = ps.incoming_child_params
                 ps.incoming_child_params = []
-                ps.aggr_and_apply_params(param_sets)
+                ps.aggr_and_apply_params(param_sets) # Params PS currently never has to aggregate without applying, so we do this. PSAggrParamsEvent not considered in this fn.
 
         elif type(event) == PSApplyParamsFromParentEvent:
             ps = self.nodes[event.ps_id]
             params = ps.incoming_parent_params.pop(0)
             ps.apply_params(params)
 
+        elif type(event) == PSAggrGradsEvent:
+            ps = self.nodes[event.ps_id]
+
+            # Only Sync PS. Should only ever have 1 set of grads in outgoing_grads.
+            grads_sets = ps.incoming_child_grads
+            ps.incoming_child_grads = []
+            ps.outgoing_grads = [ps.aggr_grads(grads_sets)]
+
         elif type(event) == PSApplyGradsEvent:
             ps = self.nodes[event.ps_id]
 
-            # TODO this part is hacky
-            # If this is a zero-time event, this is a mid level PS and should relay grads to parent
-            if event.start_time == event.end_time:
-                grads_sets = ps.incoming_child_grads
-                ps.incoming_child_grads = []
-                for grad in grads_sets:
-                    ps.parent.incoming_child_grads.append(grad)
-
             if ps.sync_style == 'async':
-                grad = ps.incoming_child_grads.pop(0)
-                ps.apply_grads(grad)
+
+                # TODO this part is hacky
+                # If this is a zero-time event, this is a mid level PS and should relay grads to parent, not apply
+                if event.start_time == event.end_time:
+                    grads_sets = ps.incoming_child_grads
+                    ps.incoming_child_grads = []
+                    for grad in grads_sets:
+                        ps.outgoing_grads.append(grad)
+                else:
+                    grad = ps.incoming_child_grads.pop(0)
+                    ps.apply_grads(grad)
+
             elif ps.sync_style == 'sync':
-                grads_sets = ps.incoming_child_grads
-                ps.incoming_child_grads = []
-                for grad in grads_sets:
-                    ps.apply_grads(grad) # TODO currently no aggregation, just applied in order
+                # Grads are already aggregated, sitting in outgoing_grads
+                grads = ps.outgoing_grads[0]
+                ps.outgoing_grads = []
+                ps.apply_grads(grads)
 
     # considers nsg.events
     def get_results(self, stamp, trainless, wc_time, end_time=None, avg_tsync=None, final_acc=None, e_to_target=None, t_to_target=None):
@@ -366,6 +387,7 @@ class TwoPassCluster:
 
             avg_loss = 0
             losses_gathered = 0
+            self.train_acc_metric.reset_states()
 
             # Process events until next steps milestone
             while self.steps_complete < next_steps_milestone:
@@ -388,14 +410,17 @@ class TwoPassCluster:
             next_steps_milestone += self.eval_interval
             avg_loss /= losses_gathered
 
+            print("------------------------------------------------------------------")
             print(stamp + '\tFinished %d steps (%f epochs)' % (self.steps_complete, self.steps_complete / batches_per_epoch))
             eval_time = perf_counter() - start_eval_time
-            print(stamp + f'\t{round(eval_time, 1)}s, {round(eval_time * (batches_per_epoch/self.eval_interval), 1)}s per epoch')
+            print(stamp + f'\t{round(eval_time, 1)}s, {round(eval_time * (batches_per_epoch/self.eval_interval), 1)}s per epoch\n')
             print(stamp + f'\tAverage loss: {avg_loss}')
+            print(stamp + f"\tTrain accuracy: {self.train_acc_metric.result()}\n")
 
             # Evaluate model
             loss, test_accuracy = self.get_test_model().evaluate(x_test, y_test)
             print(stamp + '\tTest accuracy: %f' % test_accuracy)
+            print("------------------------------------------------------------------")
 
             accuracies.append(test_accuracy)
 
