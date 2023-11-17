@@ -229,9 +229,10 @@ class TwoPassCluster:
                 receiver.incoming_parent_params.append(params)
             else:
                 # TODO currently assuming all upward updates are GRADS updates
-                for grad in sender.outgoing_grads:
-                    receiver.incoming_child_grads.append(grad)
-                    sender.outgoing_grads = []
+                # TODO this should really be in receive actually
+                # TODO currently, outgoing_grads should only ever contain 1 grad set
+                receiver.incoming_child_grads.append(sender.outgoing_grads[0])
+                sender.outgoing_grads = []
 
         elif type(event) == ReceiveUpdateEvent:
             receiver = self.nodes[event.receiver_id]
@@ -277,10 +278,8 @@ class TwoPassCluster:
                 # TODO this part is hacky
                 # If this is a zero-time event, this is a mid level PS and should relay grads to parent, not apply
                 if event.start_time == event.end_time:
-                    grads_sets = ps.incoming_child_grads
-                    ps.incoming_child_grads = []
-                    for grad in grads_sets:
-                        ps.outgoing_grads.append(grad)
+                    grads = ps.incoming_child_grads.pop(0)
+                    ps.outgoing_grads = [grads]
                 else:
                     grad = ps.incoming_child_grads.pop(0)
                     ps.apply_grads(grad)
