@@ -98,10 +98,11 @@ class ParameterServer:
 
 class NetworkSequenceGenerator:
 
-    def __init__(self, node_descs, msg_size, half_duplex):
+    def __init__(self, node_descs, msg_size, half_duplex, update_type):
 
         # In bits
         self.msg_size = msg_size
+        self.update_type = update_type
 
         self.nodes = []
         self.workers = []
@@ -157,7 +158,7 @@ class NetworkSequenceGenerator:
             self.events.append(WorkerStepEvent(0, step_time, worker.id))
             self.n_batches += 1
             self.events.append(SendUpdateEvent(step_time, step_time, worker.id, worker.parent.id))
-            self.ne.send_msg(worker.id, worker.parent.id, self.msg_size, step_time, worker.update_type) # send update type as msg metadata
+            self.ne.send_msg(worker.id, worker.parent.id, self.msg_size, step_time, self.update_type) # send update type as msg metadata
 
         
 
@@ -300,7 +301,7 @@ class NetworkSequenceGenerator:
                         if ps.parent is not None:
 
                             # Aggregate but don't apply
-                            if ps.update_type == UpdateType.PARAMS:
+                            if self.update_type == UpdateType.PARAMS:
                                 self.events.append(PSAggrParamsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
                                 # TODO Zero-time apply event for easier control
                                 self.events.append(PSApplyParamsEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time, ps.id))
@@ -308,14 +309,14 @@ class NetworkSequenceGenerator:
                                 self.events.append(PSAggrGradsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
 
                             self.events.append(SendUpdateEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time, ps.id, ps.parent.id))
-                            self.ne.send_msg(ps.id, ps.parent.id, self.msg_size, self.ne.current_time + ps.aggr_time, ps.update_type)
+                            self.ne.send_msg(ps.id, ps.parent.id, self.msg_size, self.ne.current_time + ps.aggr_time, self.update_type)
                             ps.waiting_for_parent = True
 
                         # Otherwise, send down to children
                         else:
 
                             # Aggregate and apply
-                            if ps.update_type == UpdateType.PARAMS:
+                            if self.update_type == UpdateType.PARAMS:
                                 self.events.append(PSAggrParamsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
                                 self.events.append(PSApplyParamsEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id))
                             else:
@@ -331,7 +332,7 @@ class NetworkSequenceGenerator:
             else:
                 # Send params to parent
                 self.events.append(SendUpdateEvent(self.ne.current_time + step_time, self.ne.current_time + step_time, worker.id, worker.parent.id))
-                self.ne.send_msg(worker.id, worker.parent.id, self.msg_size, self.ne.current_time + step_time, worker.update_type)
+                self.ne.send_msg(worker.id, worker.parent.id, self.msg_size, self.ne.current_time + step_time, self.update_type)
 
 
     def generate(self, end_time=None, end_batch=None, eff_start=None, eff_end=None):

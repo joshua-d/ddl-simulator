@@ -1,10 +1,11 @@
-from model_and_data_builder import model_builder, dataset_fn
 from TwoPassCluster import TwoPassCluster
 from csv_to_configs import load_configs_csv, make_config, keys
 import datetime
 from format_csv import make_row
 from math import ceil
 import sys
+from importlib import import_module
+from multiprocessing import Process
 
 
 global_config_json = """
@@ -26,43 +27,31 @@ global_config_json = """
 # keys = keys + ps_tsync_keys + w_tsync_keys
 
 
-def run(configs, stamp):
-    # Write key row to result file
-    result_filename = f"eval_logs/results_{stamp}.csv"
+def run(config, stamp):
+    # Import model and data builder file
+    madb = import_module(config['madb_file'])
 
-    with open(result_filename, 'w') as resfile:
-        resfile.write(make_row(keys) + '\n')
-        resfile.close()
+    # Begin sim
+    for i in range(config['n_runs']):
+        cluster = TwoPassCluster(madb.model_builder, madb.dataset_fn, madb.test_dataset, config)
+        new_stamp = stamp + '_' + str(i)
+        
+        # TODO model and stuff gets built event on trainless - inefficient, but doesn't take that much time
+        # try:
+        #     result_row = cluster.train(new_stamp) if not config['trainless'] else cluster.trainless(new_stamp)
+        #     result_row_list = [result_row[key] for key in keys]
+        # except Exception as e:
+        #     print(e)
+        #     result_row_list = []
 
-    # Count total runs (for logging)
-    total_runs = 0
-    for config in configs:
-        total_runs += config['n_runs']
+        result_row = cluster.train(new_stamp) if not config['trainless'] else cluster.trainless(new_stamp)
+        result_row_list = [result_row[key] for key in keys]
 
-    # Begin sims
-    run_i = 0
-    for config in configs:
-        for _ in range(config['n_runs']):
-            cluster = TwoPassCluster(model_builder, dataset_fn, config)
-            new_stamp = stamp + '_' + str(run_i)
-            # TODO model and stuff gets built event on trainless - inefficient, but doesn't take that much time
-            # try:
-            #     result_row = cluster.train(new_stamp) if not config['trainless'] else cluster.trainless(new_stamp)
-            #     result_row_list = [result_row[key] for key in keys]
-            # except Exception as e:
-            #     print(e)
-            #     result_row_list = []
+        with open(result_filename, 'a') as resfile:
+            resfile.write(make_row(result_row_list) + '\n')
+            resfile.close()
 
-            result_row = cluster.train(new_stamp) if not config['trainless'] else cluster.trainless(new_stamp)
-            result_row_list = [result_row[key] for key in keys]
-
-            with open(result_filename, 'a') as resfile:
-                resfile.write(make_row(result_row_list) + '\n')
-                resfile.close()
-
-            run_i += 1
-
-            print(stamp + f'\tCompleted run {run_i} out of {total_runs}')
+        print(f'> Completed run {i} out of {config["n_runs"]}')
 
 
 if __name__ == '__main__':
@@ -71,11 +60,27 @@ if __name__ == '__main__':
     else:
         configs_csv_filename = 'configs.csv'
 
-    configs = [make_config(global_config_json, raw_config) for raw_config in load_configs_csv(configs_csv_filename)]
+    configs = [make_config(raw_config) for raw_config in load_configs_csv(configs_csv_filename)]
 
     # Make time stamp
     now = datetime.datetime.now()
     time_str = str(now.time())
     time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
 
-    run(configs, time_stamp)
+    # Write key row to result file
+    result_filename = f"eval_logs/results_{time_stamp}.csv"
+
+    with open(result_filename, 'w') as resfile:
+        resfile.write(make_row(keys) + '\n')
+        resfile.close()
+
+    sim_i = 0
+    for config in configs:
+        p = Process(target=run, args=(config, time_stamp + '_' + str(sim_i)))
+        p.start()
+        p.join()
+        del p
+        # close() terminate()
+
+        sim_i += 1
+        print(time_stamp + f'\tCompleted sim {sim_i} out of {len(configs)}')

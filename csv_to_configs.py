@@ -4,6 +4,7 @@ delimiter = '\t'
 
 raw_config_keys = [
     'topology',
+    'update_type',
     'sync-config',
     'bw',
     'w-step-time',
@@ -16,7 +17,18 @@ raw_config_keys = [
     'stop-at-target',
     'generate-gantt',
     'trainless',
-    'n-runs'
+    'n-runs',
+
+    "bypass_NI",
+    "learning_rate",
+    "batch_size",
+    "num_train_samples",
+    "num_test_samples",
+	"network_style",
+    "data_chunk_size",
+    "eval_interval",
+
+    'madb_file'
 ]
 
 non_raw_config_keys = [
@@ -59,8 +71,20 @@ def load_configs_csv(infilename, delimiter=delimiter):
     return raw_configs
 
 
-def make_config(global_config_json, raw_config):
-    config = json.loads(global_config_json)
+def make_config(raw_config):
+    config = {}
+
+    # TODO consolidate - vs _
+    config['bypass_NI'] = bool(int(raw_config['bypass_NI']))
+    config['learning_rate'] = float(raw_config['learning_rate'])
+    config['batch_size'] = int(raw_config['batch_size'])
+    config['num_train_samples'] = int(raw_config['num_train_samples'])
+    config['num_test_samples'] = int(raw_config['num_test_samples'])
+    config['network_style'] = raw_config['network_style']
+    config['data_chunk_size'] = int(raw_config['data_chunk_size'])
+    config['eval_interval'] = int(raw_config['eval_interval'])
+
+    config['madb_file'] = raw_config['madb_file']
 
     config['raw_config'] = raw_config
     config['target_acc'] = float(raw_config['target-acc'])
@@ -70,13 +94,17 @@ def make_config(global_config_json, raw_config):
     config['trainless'] = bool(int(raw_config['trainless']))
     config['n_runs'] = int(raw_config['n-runs'])
 
+    config['update_type'] = raw_config['update_type']
+
+
+    config['nodes'] = []
+
     # Top level PS
     # TODO currently no support for different inbound/outbound bw
     config['nodes'].append({
         "node_type": "ps",
         "id": 0,
         "parent": None,
-        "update_policy": "average",
         "sync_style": "sync" if raw_config['sync-config'][0] == 'S' else 'async',
 
         "aggr_time": 0,
@@ -94,7 +122,6 @@ def make_config(global_config_json, raw_config):
             "node_type": "ps",
             "id": node_id,
             "parent": 0,
-            "update_policy": "average",
             "sync_style": "sync" if raw_config['sync-config'][2] == 'S' else 'async',
 
             "aggr_time": 0,

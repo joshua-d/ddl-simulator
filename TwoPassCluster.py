@@ -2,7 +2,6 @@ import datetime
 import numpy as np
 from DatasetIterator import DatasetIterator
 from NetworkSequenceGenerator import NetworkSequenceGenerator, WorkerStepEvent, SendUpdateEvent, ReceiveUpdateEvent, PSAggrParamsEvent, PSApplyParamsEvent, PSApplyParamsFromParentEvent, PSAggrGradsEvent, PSApplyGradsEvent, UpdateType
-import keras_model
 from math import ceil
 from time import perf_counter
 import tensorflow as tf
@@ -131,9 +130,10 @@ class ParameterServer:
             
 class TwoPassCluster:
 
-    def __init__(self, model_builder, dataset_fn, config):
+    def __init__(self, model_builder, dataset_fn, test_dataset_fn, config):
         self.model_builder = model_builder
         self.dataset_fn = dataset_fn
+        self.test_dataset_fn = test_dataset_fn
         self.config = config
 
         self.nodes = {}
@@ -149,7 +149,7 @@ class TwoPassCluster:
         self.steps_complete = 0
 
         msg_size = self._get_model_size()
-        self.nsg = NetworkSequenceGenerator(self.node_descs, msg_size, self.network_style == 'hd')
+        self.nsg = NetworkSequenceGenerator(self.node_descs, msg_size, self.network_style == 'hd', self.update_type)
         self.gen_buf = 1000
 
     def _create_nodes(self):
@@ -180,7 +180,7 @@ class TwoPassCluster:
         self.learning_rate = self._get_config_item(config, 'learning_rate')
         self.batch_size = self._get_config_item(config, 'batch_size')
 
-        self.bypass_NI = self._get_config_item(config, 'bypass_NI')
+        self.bypass_NI = self._get_config_item(config, 'bypass_NI') # TODO removed functionality
         
         # Num train samples per epoch - passed into dataset_fn
         self.num_train_samples = self._get_config_item(config, 'num_train_samples')
@@ -192,7 +192,7 @@ class TwoPassCluster:
 
         self.ps_return_threshold = 0 # TODO removed functionality
 
-        self.data_chunk_size = self._get_config_item(config, 'data_chunk_size')
+        self.data_chunk_size = self._get_config_item(config, 'data_chunk_size') # TODO remove this stuff
 
         self.target_acc = self._get_config_item(config, 'target_acc')
         self.stop_at_target = self._get_config_item(config, 'stop_at_target')
@@ -378,7 +378,7 @@ class TwoPassCluster:
             saved_events = []
 
         # Eval vars
-        x_test, y_test = keras_model.test_dataset(self.num_test_samples)
+        x_test, y_test = self.test_dataset_fn(self.num_test_samples)
         accuracies = []
         threshold_results = []
         target_reached = False
