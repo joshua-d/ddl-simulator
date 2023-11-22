@@ -157,7 +157,7 @@ class NetworkSequenceGenerator:
             self.events.append(WorkerStepEvent(0, step_time, worker.id))
             self.n_batches += 1
             self.events.append(SendUpdateEvent(step_time, step_time, worker.id, worker.parent.id))
-            self.ne.send_msg(worker.id, worker.parent.id, self.msg_size, step_time, UpdateType.GRADS) # send update type as msg metadata
+            self.ne.send_msg(worker.id, worker.parent.id, self.msg_size, step_time, worker.update_type) # send update type as msg metadata
 
         
 
@@ -179,11 +179,11 @@ class NetworkSequenceGenerator:
                     # Immediately send to child(ren)
                     if ps.sync_style == 'async':
                         self.events.append(SendUpdateEvent(self.ne.current_time, self.ne.current_time, ps.id, ps.waiting_child_id))
-                        self.ne.send_msg(ps.id, ps.waiting_child_id, self.msg_size, self.ne.current_time)
+                        self.ne.send_msg(ps.id, ps.waiting_child_id, self.msg_size, self.ne.current_time, UpdateType.PARAMS)
                     elif ps.sync_style == 'sync':
                         for child in ps.children:
                             self.events.append(SendUpdateEvent(self.ne.current_time, self.ne.current_time, ps.id, child.id))
-                            self.ne.send_msg(ps.id, child.id, self.msg_size, self.ne.current_time)
+                            self.ne.send_msg(ps.id, child.id, self.msg_size, self.ne.current_time, UpdateType.PARAMS)
 
                     ps.waiting_for_parent = False
 
@@ -234,7 +234,7 @@ class NetworkSequenceGenerator:
 
                         ps.next_available_work_time = apply_start_time + ps.apply_time
                         self.events.append(SendUpdateEvent(ps.next_available_work_time, ps.next_available_work_time, ps.id, msg.from_id))
-                        self.ne.send_msg(ps.id, msg.from_id, self.msg_size, ps.next_available_work_time)
+                        self.ne.send_msg(ps.id, msg.from_id, self.msg_size, ps.next_available_work_time, UpdateType.PARAMS)
 
                 elif ps.sync_style == 'sync':
                     # Only process if all param sets are in
@@ -250,13 +250,13 @@ class NetworkSequenceGenerator:
                             # Aggregate but don't apply
                             if msg.metadata == UpdateType.PARAMS:
                                 self.events.append(PSAggrParamsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
-                                # TODO Zero-time apply event for easier control
+                                # TODO Zero-time apply event for easier control - SendUpdateEvent pulls from the current params
                                 self.events.append(PSApplyParamsEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time, ps.id))
                             else:
                                 self.events.append(PSAggrGradsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
 
                             self.events.append(SendUpdateEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time, ps.id, ps.parent.id))
-                            self.ne.send_msg(ps.id, ps.parent.id, self.msg_size, self.ne.current_time + ps.aggr_time)
+                            self.ne.send_msg(ps.id, ps.parent.id, self.msg_size, self.ne.current_time + ps.aggr_time, msg.metadata)
                             ps.waiting_for_parent = True
 
                         # Otherwise, send down to children
@@ -272,7 +272,7 @@ class NetworkSequenceGenerator:
 
                             for child in ps.children:
                                 self.events.append(SendUpdateEvent(self.ne.current_time + ps.aggr_time + ps.apply_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id, child.id))
-                                self.ne.send_msg(ps.id, child.id, self.msg_size, self.ne.current_time + ps.aggr_time + ps.apply_time)
+                                self.ne.send_msg(ps.id, child.id, self.msg_size, self.ne.current_time + ps.aggr_time + ps.apply_time, UpdateType.PARAMS)
 
                         ps.n_param_sets_received = 0
 
@@ -300,7 +300,7 @@ class NetworkSequenceGenerator:
                         if ps.parent is not None:
 
                             # Aggregate but don't apply
-                            if msg.metadata == UpdateType.PARAMS:
+                            if ps.update_type == UpdateType.PARAMS:
                                 self.events.append(PSAggrParamsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
                                 # TODO Zero-time apply event for easier control
                                 self.events.append(PSApplyParamsEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time, ps.id))
@@ -308,14 +308,14 @@ class NetworkSequenceGenerator:
                                 self.events.append(PSAggrGradsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
 
                             self.events.append(SendUpdateEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time, ps.id, ps.parent.id))
-                            self.ne.send_msg(ps.id, ps.parent.id, self.msg_size, self.ne.current_time + ps.aggr_time)
+                            self.ne.send_msg(ps.id, ps.parent.id, self.msg_size, self.ne.current_time + ps.aggr_time, ps.update_type)
                             ps.waiting_for_parent = True
 
                         # Otherwise, send down to children
                         else:
 
                             # Aggregate and apply
-                            if msg.metadata == UpdateType.PARAMS:
+                            if ps.update_type == UpdateType.PARAMS:
                                 self.events.append(PSAggrParamsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
                                 self.events.append(PSApplyParamsEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id))
                             else:
@@ -324,14 +324,14 @@ class NetworkSequenceGenerator:
 
                             for child in ps.children:
                                 self.events.append(SendUpdateEvent(self.ne.current_time + ps.aggr_time + ps.apply_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id, child.id))
-                                self.ne.send_msg(ps.id, child.id, self.msg_size, self.ne.current_time + ps.aggr_time + ps.apply_time)
+                                self.ne.send_msg(ps.id, child.id, self.msg_size, self.ne.current_time + ps.aggr_time + ps.apply_time, UpdateType.PARAMS)
 
                         ps.n_param_sets_received = 0
 
             else:
                 # Send params to parent
                 self.events.append(SendUpdateEvent(self.ne.current_time + step_time, self.ne.current_time + step_time, worker.id, worker.parent.id))
-                self.ne.send_msg(worker.id, worker.parent.id, self.msg_size, self.ne.current_time + step_time, UpdateType.GRADS)
+                self.ne.send_msg(worker.id, worker.parent.id, self.msg_size, self.ne.current_time + step_time, worker.update_type)
 
 
     def generate(self, end_time=None, end_batch=None, eff_start=None, eff_end=None):

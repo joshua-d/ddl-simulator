@@ -1,7 +1,7 @@
 import datetime
 import numpy as np
 from DatasetIterator import DatasetIterator
-from NetworkSequenceGenerator import NetworkSequenceGenerator, WorkerStepEvent, SendUpdateEvent, ReceiveUpdateEvent, PSAggrParamsEvent, PSApplyParamsEvent, PSApplyParamsFromParentEvent, PSAggrGradsEvent, PSApplyGradsEvent
+from NetworkSequenceGenerator import NetworkSequenceGenerator, WorkerStepEvent, SendUpdateEvent, ReceiveUpdateEvent, PSAggrParamsEvent, PSApplyParamsEvent, PSApplyParamsFromParentEvent, PSAggrGradsEvent, PSApplyGradsEvent, UpdateType
 import keras_model
 from math import ceil
 from time import perf_counter
@@ -10,13 +10,14 @@ import tensorflow as tf
 # TODO class Node with shared attrs of Worker and PS
 
 class Worker:
-    def __init__(self, id, params, forward_pass, dataset_iterator, optimizer, train_acc_metric):
+    def __init__(self, id, params, forward_pass, dataset_iterator, optimizer, update_type, train_acc_metric):
         self.id = id
 
         self.params = params
         self.forward_pass = forward_pass
         self.dataset_iterator = dataset_iterator
         self.optimizer = optimizer
+        self.update_type = update_type
         self.train_acc_metric = train_acc_metric
 
         # List of param sets
@@ -37,9 +38,11 @@ class Worker:
         return batch
 
     def train_step(self):
-        outgoing_grad, loss = self.forward_pass(self.get_next_batch(), self.train_acc_metric)
-        self.outgoing_grads = [outgoing_grad]
-        # self.optimizer.apply_gradients(zip(gradients, self.params.values()))
+        gradients, loss = self.forward_pass(self.get_next_batch(), self.train_acc_metric)
+        if self.update_type == UpdateType.GRADS:
+            self.outgoing_grads = [gradients]
+        else:
+            self.optimizer.apply_gradients(zip(gradients, self.params.values()))
         self.steps_complete += 1
         return loss
 
@@ -55,12 +58,13 @@ class Worker:
 
 
 class ParameterServer:
-    def __init__(self, id, parent, sync_style, params, optimizer):
+    def __init__(self, id, parent, sync_style, params, optimizer, update_type):
         self.id = id
         self.parent = parent
         self.sync_style = sync_style
         self.params = params
         self.optimizer = optimizer
+        self.update_type = update_type
 
         # Lists of param sets
         self.incoming_child_params = []
@@ -161,13 +165,13 @@ class TwoPassCluster:
             _, params, forward_pass, build_optimizer, _, _ = self.model_builder()
 
             if node_desc['node_type'] == 'ps':
-                ps = ParameterServer(node_desc['id'], node_desc['parent'], node_desc['sync_style'], params, build_optimizer(self.learning_rate))
+                ps = ParameterServer(node_desc['id'], node_desc['parent'], node_desc['sync_style'], params, build_optimizer(self.learning_rate), self.update_type)
                 self.nodes[ps.id] = ps
                 if node_desc['sync_style'] == 'async' and node_desc['parent'] is not None:
                     self.nodes[node_desc['parent']].has_async_child = True
 
             elif node_desc['node_type'] == 'worker':
-                worker = Worker(node_desc['id'], params, forward_pass, dataset_iterator, build_optimizer(self.learning_rate), self.train_acc_metric)
+                worker = Worker(node_desc['id'], params, forward_pass, dataset_iterator, build_optimizer(self.learning_rate), self.update_type, self.train_acc_metric)
                 self.nodes[worker.id] = worker
                 self.num_workers += 1
 
@@ -196,6 +200,14 @@ class TwoPassCluster:
         self.epochs = self._get_config_item(config, 'epochs')
 
         self.generate_gantt = self._get_config_item(config, 'generate_gantt')
+
+        update_type = self._get_config_item(config, 'update_type')
+        if update_type == 'grads':
+            self.update_type = UpdateType.GRADS
+        elif update_type == 'params':
+            self.update_type = UpdateType.PARAMS
+        else:
+            raise Exception('invalid update_type in config')
 
     def _get_config_item(self, config, item):
         if item not in config:
@@ -228,11 +240,13 @@ class TwoPassCluster:
                 params = sender.get_params()
                 receiver.incoming_parent_params.append(params)
             else:
-                # TODO currently assuming all upward updates are GRADS updates
-                # TODO this should really be in receive actually
-                # TODO currently, outgoing_grads should only ever contain 1 grad set
-                receiver.incoming_child_grads.append(sender.outgoing_grads[0])
-                sender.outgoing_grads = []
+                if sender.update_type == UpdateType.PARAMS:
+                    params = sender.get_params()
+                    receiver.incoming_child_params.append(params)
+                else:
+                    # TODO currently, outgoing_grads should only ever contain 1 grad set
+                    receiver.incoming_child_grads.append(sender.outgoing_grads[0])
+                    sender.outgoing_grads = []
 
         elif type(event) == ReceiveUpdateEvent:
             receiver = self.nodes[event.receiver_id]
