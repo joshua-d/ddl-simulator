@@ -16,11 +16,11 @@ def train_dataset():
   return x_train, y_train
 
 
-def test_dataset(num_samples):
+def test_dataset():
     _, (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
     x_test = x_test.astype('float32') / 255.0
     y_test = tf.keras.utils.to_categorical(y_test, 10) # comment in for no_ps
-    return x_test[0:num_samples], y_test[0:num_samples]
+    return x_test, y_test
 
 
 def build_model_with_seed(seed):

@@ -1,6 +1,5 @@
-from model_and_data_builder import model_builder, dataset_fn
+from madb.mobilenetv2_cifar10 import model_builder, dataset_fn, train_dataset, test_dataset
 from DatasetIterator import DatasetIterator
-import keras_model
 import tensorflow as tf
 
 
@@ -16,12 +15,15 @@ target_acc = 0.95
 
 if __name__ == '__main__':
     model, params, forward_pass, build_optimizer, _, _ = model_builder()
-    dataset = dataset_fn(num_train_samples).shuffle(1024)
-    di = DatasetIterator(dataset, batch_size, None)
+    # dataset = dataset_fn(num_train_samples).shuffle(1024)
+    # di = DatasetIterator(dataset, batch_size, None)
+
+    print(model.summary())
+    print(model.trainable_variables)
 
     optimizer = build_optimizer(learning_rate)
 
-    x_train, y_train = keras_model.train_dataset()
+    x_train, y_train = train_dataset()
     datagen_train = tf.keras.preprocessing.image.ImageDataGenerator(
         width_shift_range=0.1,
         height_shift_range=0.1,
@@ -33,14 +35,16 @@ if __name__ == '__main__':
 
     # datagen_train.fit(x_train)
 
-    x_test, y_test = keras_model.test_dataset(num_test_samples)
+    x_test, y_test = test_dataset()
     test_dataset = tf.data.Dataset.from_tensor_slices((x_test, y_test))
 
     fit = True
 
     if fit:
         model.compile(optimizer=optimizer, loss=tf.keras.losses.CategoricalCrossentropy(), metrics=['accuracy'])
-        model.fit(tf.data.Dataset.from_tensor_slices((x_train, y_train)).batch(batch_size), validation_data=(x_test, y_test), epochs=50) # datagen_train.flow(x_train, y_train, batch_size=batch_size)
+        model.fit(datagen_train.flow(x_train, y_train, batch_size=batch_size), validation_data=(x_test, y_test), epochs=10) # datagen_train.flow(x_train, y_train, batch_size=batch_size)
+        model.evaluate(x_test, y_test)
+        model.evaluate(x_test, y_test)
 
     else:
         print('Beginning training')

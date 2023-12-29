@@ -1,7 +1,7 @@
 from math import inf, isclose, sqrt
 
 # If True, all messages are sent IMMEDIATELY
-SKIP_NETWORK = True
+SKIP_NETWORK = False
 
 # Linear growth coefficient, factor multiplied with (dsr - sr) to get lgr
 base_lgc = 1

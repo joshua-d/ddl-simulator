@@ -2,8 +2,9 @@ import tensorflow as tf
 
 # lr 0.045
 # bs 96
+# lr decay 0.98 per epoch
 
-optimizer_constructor = tf.keras.optimizers.RMSprop
+optimizer_constructor = tf.keras.optimizers.Adam
 loss_constructor = tf.keras.losses.CategoricalCrossentropy
 train_acc_metric_constructor = tf.keras.metrics.CategoricalAccuracy
 
@@ -18,11 +19,11 @@ def train_dataset():
   return x_train, y_train
 
 
-def test_dataset(num_samples):
+def test_dataset():
     _, (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
     x_test = x_test.astype('float32') / 255.0
     y_test = tf.keras.utils.to_categorical(y_test, 10)
-    return x_test[0:num_samples], y_test[0:num_samples]
+    return x_test, y_test
 
 
 def build_model_with_seed(seed):
@@ -44,6 +45,22 @@ def build_model_with_seed(seed):
 
 
 # In dataset-rework, this just gives the master dataset which is automatically "sharded" by thread-safe DatasetIterator
+# def dataset_fn(batch_size):
+#     x_train, y_train = train_dataset()
+
+#     datagen_train = tf.keras.preprocessing.image.ImageDataGenerator(
+#         width_shift_range=0.1,
+#         height_shift_range=0.1,
+#         horizontal_flip=True,
+#         vertical_flip=False,
+#         rotation_range=10,
+#         zoom_range=0.1
+#     )
+
+#     datagen_train.fit(x_train)
+
+#     return datagen_train.flow(x_train, y_train, batch_size=batch_size)
+
 def dataset_fn(num_train_samples):
     x_train, y_train = train_dataset()
     cifar10_dataset = tf.data.Dataset.from_tensor_slices(
@@ -76,6 +93,11 @@ def model_builder():
         return grads_list, loss
 
     def build_optimizer(learning_rate):
-        return optimizer_constructor(learning_rate=learning_rate, decay=0.9, momentum=0.9)
+        # lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
+        #     learning_rate,
+        #     decay_steps=1562,
+        #     decay_rate=0.98,
+        #     staircase=True)
+        return optimizer_constructor(learning_rate=learning_rate)
 
     return model, params, forward_pass, build_optimizer, loss_constructor(), train_acc_metric

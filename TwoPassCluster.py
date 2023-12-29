@@ -25,10 +25,10 @@ class Worker:
         self.outgoing_grads = []
 
         # Dataset stuff
-        chunk = next(dataset_iterator)
-        self.data_chunk_size = len(chunk)
-        self.data_chunk_iterator = iter(chunk)
-        self.batch_idx = 0
+        # chunk = next(dataset_iterator)
+        # self.data_chunk_size = len(chunk)
+        # self.data_chunk_iterator = iter(chunk)
+        # self.batch_idx = 0
 
         self.steps_complete = 0
 
@@ -114,7 +114,7 @@ class ParameterServer:
             curr_grads = []
             for grads in grads_sets:
                 curr_grads.append(grads[i])
-            out_grads.append(tf.reduce_mean(curr_grads, axis=0))
+            out_grads.append(tf.reduce_sum(curr_grads, axis=0))
 
         return out_grads
 
@@ -140,8 +140,8 @@ class TwoPassCluster:
 
         self._parse_config(config)
 
-        self.test_model, self.test_model_params, _, build_optimizer, loss_type, self.train_acc_metric = model_builder()
-        self.test_model.compile(build_optimizer(self.learning_rate), loss_type, metrics=[self.train_acc_metric])
+        self.test_model, self.test_model_params, _, self.build_optimizer, loss_type, self.train_acc_metric = model_builder()
+        self.test_model.compile(self.build_optimizer(self.learning_rate), loss_type, metrics=[self.train_acc_metric])
 
 
         self._create_nodes()
@@ -157,6 +157,7 @@ class TwoPassCluster:
         # Build dataset_iterator
         dataset = self.dataset_fn(self.num_train_samples)
         dataset_iterator = DatasetIterator(dataset, self.batch_size, self.data_chunk_size)
+        # dataset_iterator = self.dataset_fn(self.num_train_samples)
 
         self.num_workers = 0
 
@@ -378,7 +379,7 @@ class TwoPassCluster:
             saved_events = []
 
         # Eval vars
-        x_test, y_test = self.test_dataset_fn(self.num_test_samples)
+        x_test, y_test = self.test_dataset_fn()
         accuracies = []
         threshold_results = []
         target_reached = False
@@ -420,6 +421,10 @@ class TwoPassCluster:
                     avg_loss += loss
                     losses_gathered += 1
 
+            # self.learning_rate = 0.98 * self.learning_rate
+            # for node in self.nodes.values():
+            #     node.optimizer = self.build_optimizer(self.learning_rate)
+
             next_steps_milestone += self.eval_interval
             avg_loss /= losses_gathered
 
@@ -431,7 +436,18 @@ class TwoPassCluster:
             print(stamp + f"\tTrain accuracy: {self.train_acc_metric.result()}\n")
 
             # Evaluate model
-            loss, test_accuracy = self.get_test_model().evaluate(x_test, y_test)
+            loss, test_accuracy = self.get_test_model().evaluate(x_test, y_test, verbose=0)
+            # test_model = self.get_test_model()
+            # test_accuracy_metric = tf.keras.metrics.CategoricalAccuracy()
+
+            # test_ds_iter = iter(tf.data.Dataset.from_tensor_slices((x_test, y_test)).batch(64))
+
+            # for x, y in test_ds_iter:
+            #     test_accuracy_metric.update_state(y, test_model(x, training=True))
+            
+            # test_accuracy = test_accuracy_metric.result()
+            # test_accuracy_metric.reset_states()
+
             print(stamp + '\tTest accuracy: %f' % test_accuracy)
             print("------------------------------------------------------------------")
 
@@ -454,6 +470,7 @@ class TwoPassCluster:
 
             # TODO if not trainless and stop at target is on, TPE will be "unfair"
             if (self.stop_at_target and test_accuracy >= self.target_acc) or eval_num >= max_eval_intervals:
+                # final_acc = float(str(test_accuracy.numpy()))
                 final_acc = test_accuracy
                 break
 
