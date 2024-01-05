@@ -76,13 +76,20 @@ class PSApplyGradsEvent(Event):
 
 
 class DropoutEvent(Event):
-    def __init__(self, start_time, end_time):
+    def __init__(self, start_time, end_time, worker_id, parent_id, breakdown):
         super().__init__(start_time, end_time)
+        self.worker_id = worker_id
+        self.parent_id = parent_id
+        self.breakdown = breakdown
 
 
 class RebalanceEvent(Event):
-    def __init__(self, start_time, end_time):
+    def __init__(self, start_time, end_time, worker_id, old_parent_id, new_parent_id, breakdown):
         super().__init__(start_time, end_time)
+        self.worker_id = worker_id
+        self.old_parent_id = old_parent_id
+        self.new_parent_id = new_parent_id
+        self.breakdown = breakdown
 
 
 
@@ -344,6 +351,7 @@ class NetworkSequenceGenerator:
                 ps = worker.parent
                 ps.children.remove(worker)
                 worker.dropped_out = True
+                self.events.append(DropoutEvent(msg.end_time, msg.end_time, worker.id, worker.parent.id, self.get_topology_breakdown()))
 
                 rebalanced = False
 
@@ -368,6 +376,7 @@ class NetworkSequenceGenerator:
                         l_ps.children.append(h_ps.children.pop())
                         rebalanced = True
                         print(f'REBALANCE worker {l_ps.children[-1].id}, ps {h_ps.id} -> {l_ps.id}')
+                        self.events.append(RebalanceEvent(msg.end_time, msg.end_time, l_ps.children[-1].id, h_ps.id, l_ps.id, self.get_topology_breakdown()))
 
                 elif RB_Strategy == RebalancingStrategy.PPBBL:
                     # Calculate summed proc pow score for each cluster
@@ -409,6 +418,7 @@ class NetworkSequenceGenerator:
                             rebalanced = True
                             print(f'REBALANCE worker {l_ps.children[-1].id}, ps {h_ps.id} -> {l_ps.id}')
                             print(f'h: {highest_score} l: {lowest_score} w: {closest_worker.proc_pow_score}')
+                            self.events.append(RebalanceEvent(msg.end_time, msg.end_time, l_ps.children[-1].id, h_ps.id, l_ps.id, self.get_topology_breakdown()))
 
                 # Check each sync PS for sync round completion
                 for ps in self.parameter_servers:
@@ -629,6 +639,36 @@ class NetworkSequenceGenerator:
                         current_time = event.end_time
                     
         return timing
+
+    def get_topology_breakdown(self):
+        # res = ''
+        # for ps in self.parameter_servers:
+        #     score = 0
+        #     for child in ps.children:
+        #         if type(child) != Worker:
+        #             break
+        #         score += child.proc_pow_score
+
+        #     res += f'PS ID: {ps.id}, \tSc: {score}, \tN: {len(ps.children)}, \tC: '
+
+        #     for child in ps.children:
+        #         res += f'{child.id}, '
+        #     res = res[0:-2] + '\n'
+
+        # return res
+
+        res = ''
+        for ps in self.parameter_servers:
+            score = 0
+            for child in ps.children:
+                if type(child) != Worker:
+                    break
+                score += child.proc_pow_score
+
+            res += f'P{ps.id}: {len(ps.children)}, {score}\t'
+
+        return res
+
 
 
 if __name__ == '__main__':

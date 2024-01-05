@@ -1,7 +1,7 @@
 import datetime
 import numpy as np
 from DatasetIterator import DatasetIterator
-from NetworkSequenceGenerator import NetworkSequenceGenerator, WorkerStepEvent, SendUpdateEvent, ReceiveUpdateEvent, PSAggrParamsEvent, PSApplyParamsEvent, PSApplyParamsFromParentEvent, PSAggrGradsEvent, PSApplyGradsEvent, UpdateType
+from NetworkSequenceGenerator import NetworkSequenceGenerator, WorkerStepEvent, SendUpdateEvent, ReceiveUpdateEvent, PSAggrParamsEvent, PSApplyParamsEvent, PSApplyParamsFromParentEvent, PSAggrGradsEvent, PSApplyGradsEvent, UpdateType, DropoutEvent, RebalanceEvent
 from math import ceil
 from time import perf_counter
 import tensorflow as tf
@@ -151,6 +151,8 @@ class TwoPassCluster:
         msg_size = self._get_model_size()
         self.nsg = NetworkSequenceGenerator(self.node_descs, msg_size, self.network_style == 'hd', self.update_type, self.rb_strat)
         self.gen_buf = 1000
+
+        self.dropout_log = []
 
     def _create_nodes(self):
 
@@ -306,6 +308,12 @@ class TwoPassCluster:
                 grads = ps.outgoing_grads[0]
                 ps.outgoing_grads = []
                 ps.apply_grads(grads)
+
+        elif type(event) == DropoutEvent:
+            self.dropout_log.append(f"Epoch {ceil(self.steps_complete / (self.num_train_samples / self.batch_size))} \tDROPOUT \tW: {event.worker_id}, P: {event.parent_id} \t{event.breakdown}\n")
+
+        elif type(event) == RebalanceEvent:
+            self.dropout_log.append(f"\nEpoch {ceil(self.steps_complete / (self.num_train_samples / self.batch_size))} \tREBALANCE \tW: {event.worker_id}, P: {event.old_parent_id} -> {event.new_parent_id} \t{event.breakdown}\n\n")
 
     # considers nsg.events
     def get_results(self, stamp, trainless, wc_time, end_time=None, avg_tsync=None, final_acc=None, e_to_target=None, t_to_target=None):
@@ -535,6 +543,14 @@ class TwoPassCluster:
         if self.generate_gantt:
             self.nsg.events = saved_events
             self.nsg.generate_gantt(stamp)
+
+        # Log dropout
+        if len(self.dropout_log) > 0:
+            fname = f'eval_logs/dropout_{stamp}.txt'
+            f = open(fname, 'w')
+            for e in self.dropout_log:
+                f.write(e)
+            f.close()
 
         # Return row for results csv
         return self.get_results(stamp, False, wc_time, end_time, total_tsync_time/n_receive_events, final_acc, e_to_target, t_to_target)
