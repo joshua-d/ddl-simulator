@@ -28,7 +28,8 @@ raw_config_keys = [
     "data_chunk_size",
     "eval_interval",
 
-    'madb_file'
+    'madb_file',
+    'rb_strat'
 ]
 
 non_raw_config_keys = [
@@ -95,6 +96,7 @@ def make_config(raw_config):
     config['n_runs'] = int(raw_config['n-runs'])
 
     config['update_type'] = raw_config['update_type']
+    config['rb_strat'] = raw_config['rb_strat']
 
 
     config['nodes'] = []

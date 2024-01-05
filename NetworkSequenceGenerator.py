@@ -2,6 +2,14 @@ import datetime, random
 from NetworkEmulatorLite import NetworkEmulatorLite
 import json
 from enum import Enum
+from math import inf
+
+
+class RebalancingStrategy(Enum):
+    NBBL = 0
+
+
+RB_Strategy = None
 
 
 class UpdateType(Enum):
@@ -76,6 +84,8 @@ class Worker:
         self.st_variation = st_variation
         self.dropout_chance = dropout_chance
 
+        self.dropped_out = False
+
 
 class ParameterServer:
     def __init__(self, id, sync_style, aggr_time, apply_time):
@@ -98,7 +108,7 @@ class ParameterServer:
 
 class NetworkSequenceGenerator:
 
-    def __init__(self, node_descs, msg_size, half_duplex, update_type):
+    def __init__(self, node_descs, msg_size, half_duplex, update_type, rb_strat):
 
         # In bits
         self.msg_size = msg_size
@@ -114,6 +124,10 @@ class NetworkSequenceGenerator:
         outbound_max = {}
 
         self.n_batches = 0
+
+        if rb_strat == 'nbbl':
+            global RB_Strategy
+            RB_Strategy = RebalancingStrategy.NBBL
 
         # Build node objs from config
         for node_desc in node_descs:
@@ -167,6 +181,10 @@ class NetworkSequenceGenerator:
         if type(self.nodes[msg.to_id]) == ParameterServer:
 
             ps = self.nodes[msg.to_id]
+
+            # Disregard msg if it is from Worker who is not a child
+            if type(self.nodes[msg.from_id]) == Worker and self.nodes[msg.from_id] not in ps.children:
+                return 
 
             if ps.waiting_for_parent:
                 if msg.from_id == ps.parent.id:
@@ -243,7 +261,7 @@ class NetworkSequenceGenerator:
                     ps.n_param_sets_received += 1
                     self.events.append(ReceiveUpdateEvent(msg.start_time, msg.end_time, msg.from_id, msg.to_id, msg.metadata))
 
-                    if ps.n_param_sets_received == len(ps.children):
+                    if ps.n_param_sets_received >= len(ps.children):
 
                         # If this is a mid level ps, send up to parent
                         if ps.parent is not None:
@@ -281,56 +299,95 @@ class NetworkSequenceGenerator:
         elif type(self.nodes[msg.to_id]) == Worker:
             worker = self.nodes[msg.to_id]
 
+            # If not from my parent, don't read
+            if msg.from_id != worker.parent.id:
+                return
+
             # Add receive and step events
             self.events.append(ReceiveUpdateEvent(msg.start_time, msg.end_time, msg.from_id, msg.to_id, msg.metadata))
 
-            step_time = worker.step_time - worker.st_variation + random.uniform(0, worker.st_variation*2)
-            self.events.append(WorkerStepEvent(self.ne.current_time, self.ne.current_time + step_time, worker.id))
-            self.n_batches += 1
-
             # Check for dropout
             if random.uniform(0, 1) < worker.dropout_chance and len(worker.parent.children) > 1: # TODO second case is just for now - last worker in a cluster can't drop out
+                
+                print(f'DROPOUT: worker {worker.id}, parent {worker.parent.id}')
                 ps = worker.parent
                 ps.children.remove(worker)
+                worker.dropped_out = True
 
-                # If PS is sync and only waiting on this worker, continue
-                if ps.sync_style == 'sync':
-                    if ps.n_param_sets_received == len(ps.children):
+                rebalanced = False
 
-                        # If this is a mid level ps, send up to parent
-                        if ps.parent is not None:
+                # TODO - assumes balanced at beginning - moves 1 worker per dropout
+                # assumes cluster that a worker gets moved to is the one that was just dropped out of (worker.parent)
+                if RB_Strategy == RebalancingStrategy.NBBL:
+                    # Load relevant PSs
+                    least_children = -1
+                    most_children = -1
 
-                            # Aggregate but don't apply
-                            if self.update_type == UpdateType.PARAMS:
-                                self.events.append(PSAggrParamsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
-                                # TODO Zero-time apply event for easier control
-                                self.events.append(PSApplyParamsEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time, ps.id))
+                    for worker in self.workers:
+                        if len(worker.parent.children) < least_children or least_children == -1:
+                            least_children = len(worker.parent.children)
+                            lc_ps = worker.parent
+                        if len(worker.parent.children) > most_children or most_children == -1:
+                            most_children = len(worker.parent.children)
+                            mc_ps = worker.parent
+
+                    if most_children - least_children > 1:
+                        # Transfer 1 worker from mc to lc
+                        mc_ps.children[-1].parent = lc_ps
+                        lc_ps.children.append(mc_ps.children.pop())
+                        rebalanced = True
+                        print(f'REBALANCE worker {lc_ps.children[-1].id}, ps {mc_ps.id} -> {lc_ps.id}')
+
+                # Check each sync PS for sync round completion
+                for ps in self.parameter_servers:
+                    if ps.sync_style == 'sync':
+                        if ps.n_param_sets_received >= len(ps.children): # TODO I think this is the same code copied from above
+
+                            # If this is a mid level ps, send up to parent
+                            if ps.parent is not None:
+
+                                # Aggregate but don't apply
+                                if self.update_type == UpdateType.PARAMS:
+                                    self.events.append(PSAggrParamsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
+                                    # TODO Zero-time apply event for easier control
+                                    self.events.append(PSApplyParamsEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time, ps.id))
+                                else:
+                                    self.events.append(PSAggrGradsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
+
+                                self.events.append(SendUpdateEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time, ps.id, ps.parent.id))
+                                self.ne.send_msg(ps.id, ps.parent.id, self.msg_size, self.ne.current_time + ps.aggr_time, self.update_type)
+                                ps.waiting_for_parent = True
+
+                            # Otherwise, send down to children
                             else:
-                                self.events.append(PSAggrGradsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
 
-                            self.events.append(SendUpdateEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time, ps.id, ps.parent.id))
-                            self.ne.send_msg(ps.id, ps.parent.id, self.msg_size, self.ne.current_time + ps.aggr_time, self.update_type)
-                            ps.waiting_for_parent = True
+                                # Aggregate and apply
+                                if self.update_type == UpdateType.PARAMS:
+                                    self.events.append(PSAggrParamsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
+                                    self.events.append(PSApplyParamsEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id))
+                                else:
+                                    self.events.append(PSAggrGradsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
+                                    self.events.append(PSApplyGradsEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id))
 
-                        # Otherwise, send down to children
-                        else:
+                                for child in ps.children:
+                                    self.events.append(SendUpdateEvent(self.ne.current_time + ps.aggr_time + ps.apply_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id, child.id))
+                                    self.ne.send_msg(ps.id, child.id, self.msg_size, self.ne.current_time + ps.aggr_time + ps.apply_time, UpdateType.PARAMS)
 
-                            # Aggregate and apply
-                            if self.update_type == UpdateType.PARAMS:
-                                self.events.append(PSAggrParamsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
-                                self.events.append(PSApplyParamsEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id))
-                            else:
-                                self.events.append(PSAggrGradsEvent(self.ne.current_time, self.ne.current_time + ps.aggr_time, ps.id))
-                                self.events.append(PSApplyGradsEvent(self.ne.current_time + ps.aggr_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id))
+                            ps.n_param_sets_received = 0
 
-                            for child in ps.children:
-                                self.events.append(SendUpdateEvent(self.ne.current_time + ps.aggr_time + ps.apply_time, self.ne.current_time + ps.aggr_time + ps.apply_time, ps.id, child.id))
-                                self.ne.send_msg(ps.id, child.id, self.msg_size, self.ne.current_time + ps.aggr_time + ps.apply_time, UpdateType.PARAMS)
-
-                        ps.n_param_sets_received = 0
+                if rebalanced:
+                    worker = lc_ps.children[-1]
+                    step_time = worker.step_time - worker.st_variation + random.uniform(0, worker.st_variation*2)
+                    self.events.append(WorkerStepEvent(self.ne.current_time, self.ne.current_time + step_time, worker.id))
+                    self.n_batches += 1
+                    self.events.append(SendUpdateEvent(self.ne.current_time + step_time, self.ne.current_time + step_time, worker.id, worker.parent.id))
+                    self.ne.send_msg(worker.id, worker.parent.id, self.msg_size, self.ne.current_time + step_time, self.update_type)
 
             else:
                 # Send params to parent
+                step_time = worker.step_time - worker.st_variation + random.uniform(0, worker.st_variation*2)
+                self.events.append(WorkerStepEvent(self.ne.current_time, self.ne.current_time + step_time, worker.id))
+                self.n_batches += 1
                 self.events.append(SendUpdateEvent(self.ne.current_time + step_time, self.ne.current_time + step_time, worker.id, worker.parent.id))
                 self.ne.send_msg(worker.id, worker.parent.id, self.msg_size, self.ne.current_time + step_time, self.update_type)
 

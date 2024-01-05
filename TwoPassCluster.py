@@ -149,7 +149,7 @@ class TwoPassCluster:
         self.steps_complete = 0
 
         msg_size = self._get_model_size()
-        self.nsg = NetworkSequenceGenerator(self.node_descs, msg_size, self.network_style == 'hd', self.update_type)
+        self.nsg = NetworkSequenceGenerator(self.node_descs, msg_size, self.network_style == 'hd', self.update_type, self.rb_strat)
         self.gen_buf = 1000
 
     def _create_nodes(self):
@@ -209,6 +209,8 @@ class TwoPassCluster:
             self.update_type = UpdateType.PARAMS
         else:
             raise Exception('invalid update_type in config')
+        
+        self.rb_strat = self._get_config_item(config, 'rb_strat')
 
     def _get_config_item(self, config, item):
         if item not in config:
