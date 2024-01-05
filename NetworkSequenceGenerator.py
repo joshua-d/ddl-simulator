@@ -7,6 +7,7 @@ from math import inf
 
 class RebalancingStrategy(Enum):
     NBBL = 0
+    PPBBL = 1
 
 
 RB_Strategy = None
@@ -74,6 +75,17 @@ class PSApplyGradsEvent(Event):
         self.ps_id = ps_id
 
 
+class DropoutEvent(Event):
+    def __init__(self, start_time, end_time):
+        super().__init__(start_time, end_time)
+
+
+class RebalanceEvent(Event):
+    def __init__(self, start_time, end_time):
+        super().__init__(start_time, end_time)
+
+
+
 
 class Worker:
     def __init__(self, id, step_time, st_variation, dropout_chance):
@@ -85,6 +97,7 @@ class Worker:
         self.dropout_chance = dropout_chance
 
         self.dropped_out = False
+        self.proc_pow_score = None
 
 
 class ParameterServer:
@@ -125,9 +138,11 @@ class NetworkSequenceGenerator:
 
         self.n_batches = 0
 
+        global RB_Strategy
         if rb_strat == 'nbbl':
-            global RB_Strategy
             RB_Strategy = RebalancingStrategy.NBBL
+        elif rb_strat == 'ppbbl':
+            RB_Strategy = RebalancingStrategy.PPBBL
 
         # Build node objs from config
         for node_desc in node_descs:
@@ -165,6 +180,22 @@ class NetworkSequenceGenerator:
 
         # Build NE
         self.ne = NetworkEmulatorLite((inbound_max, outbound_max), half_duplex)
+
+        # Calculate processing power scores for workers
+        max_inbound_bw = 0
+        max_outbound_bw = 0
+        min_step_time = -1
+        for worker in self.workers:
+            if inbound_max[worker.id] > max_inbound_bw:
+                max_inbound_bw = inbound_max[worker.id]
+            if outbound_max[worker.id] > max_outbound_bw:
+                max_outbound_bw = outbound_max[worker.id]
+            if worker.step_time < min_step_time or min_step_time == -1:
+                min_step_time = worker.step_time
+
+        for worker in self.workers:
+            # TODO a multiplier should be given to the 3 factors here
+            worker.proc_pow_score = inbound_max[worker.id] / max_inbound_bw + outbound_max[worker.id] / max_outbound_bw - worker.step_time / min_step_time
 
         # Set up starting events
         for worker in self.workers:
@@ -326,17 +357,58 @@ class NetworkSequenceGenerator:
                     for worker in self.workers:
                         if len(worker.parent.children) < least_children or least_children == -1:
                             least_children = len(worker.parent.children)
-                            lc_ps = worker.parent
+                            l_ps = worker.parent
                         if len(worker.parent.children) > most_children or most_children == -1:
                             most_children = len(worker.parent.children)
-                            mc_ps = worker.parent
+                            h_ps = worker.parent
 
                     if most_children - least_children > 1:
-                        # Transfer 1 worker from mc to lc
-                        mc_ps.children[-1].parent = lc_ps
-                        lc_ps.children.append(mc_ps.children.pop())
+                        # Transfer 1 worker from h to l
+                        h_ps.children[-1].parent = l_ps
+                        l_ps.children.append(h_ps.children.pop())
                         rebalanced = True
-                        print(f'REBALANCE worker {lc_ps.children[-1].id}, ps {mc_ps.id} -> {lc_ps.id}')
+                        print(f'REBALANCE worker {l_ps.children[-1].id}, ps {h_ps.id} -> {l_ps.id}')
+
+                elif RB_Strategy == RebalancingStrategy.PPBBL:
+                    # Calculate summed proc pow score for each cluster
+                    scores = {}
+                    highest_score = -1
+                    lowest_score = -1
+                    for worker in self.workers:
+                        if worker.parent.id not in scores:
+                            score = 0
+                            for child in worker.parent.children:
+                                score += child.proc_pow_score
+                            scores[worker.parent.id] = score
+                            if score > highest_score or highest_score == -1:
+                                highest_score = score
+                                h_ps = worker.parent
+                            if score < lowest_score or lowest_score == -1:
+                                lowest_score = score
+                                l_ps = worker.parent
+
+                    if highest_score != lowest_score:
+
+                        threshold = (highest_score - lowest_score) / 2
+
+                        # Get h_ps worker whose score is closest to threshold
+                        closest_val = -1
+                        for child in h_ps.children:
+                            v = (child.proc_pow_score - threshold)*(child.proc_pow_score - threshold)
+                            if v < closest_val or closest_val == -1:
+                                closest_val = v
+                                closest_worker = child
+
+                        # If the move would be beneficial, do it
+                        old_diff = highest_score - lowest_score
+                        new_diff = (highest_score - closest_worker.proc_pow_score) - (lowest_score + closest_worker.proc_pow_score)
+                        if new_diff*new_diff < old_diff*old_diff:
+                            # Transfer 1 worker from mc to lc
+                            h_ps.children[-1].parent = l_ps
+                            l_ps.children.append(h_ps.children.pop())
+                            rebalanced = True
+                            print(f'REBALANCE worker {l_ps.children[-1].id}, ps {h_ps.id} -> {l_ps.id}')
+                            print(f'h: {highest_score} l: {lowest_score} w: {closest_worker.proc_pow_score}')
 
                 # Check each sync PS for sync round completion
                 for ps in self.parameter_servers:
@@ -375,8 +447,9 @@ class NetworkSequenceGenerator:
 
                             ps.n_param_sets_received = 0
 
+                # Moved worker does step
                 if rebalanced:
-                    worker = lc_ps.children[-1]
+                    worker = l_ps.children[-1]
                     step_time = worker.step_time - worker.st_variation + random.uniform(0, worker.st_variation*2)
                     self.events.append(WorkerStepEvent(self.ne.current_time, self.ne.current_time + step_time, worker.id))
                     self.n_batches += 1
