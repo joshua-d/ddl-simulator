@@ -4,46 +4,41 @@ delimiter = '\t'
 
 raw_config_keys = [
     'topology',
-    'update_type',
-    'sync-config',
+    'sync_config',
     'bw',
-    'w-step-time',
-    'w-step-var',
-    'ps-sync-time',
-    'ps-async-time',
-    'global-dropout-chance',
+    'w_step_time',
+    'w_step_var',
+    'ps_sync_time',
+    'ps_async_time',
+    'global_dropout_chance',
+
     'epochs',
-    'target-acc',
-    'stop-at-target',
-    'generate-gantt',
+    'target_acc',
+    'stop_at_target',
+    'eval_interval',
+    'generate_gantt',
     'trainless',
-    'n-runs',
+    'bypass_NI',
+    'n_runs',
+    'node_config_file'
 
-    "bypass_NI",
-    "learning_rate",
-    "batch_size",
-    "num_train_samples",
-    "num_test_samples",
-	"network_style",
-    "data_chunk_size",
-    "eval_interval",
-
+    'network_style',
+    'update_type',
     'madb_file',
     'rb_strat'
 ]
 
 non_raw_config_keys = [
-    'n-workers',
-    'n-mid-ps',
+    'n_workers',
+    'n_mid_ps',
 
     'tpe',
-    'final-acc',
-    'e-to-target',
-    't-to-target',
-    'total-time',
-    'avg-tsync',
-    'wc-time',
-    # TODO 'wc-time-pe',
+    'final_acc',
+    'e_to_target',
+    't_to_target',
+    'total_time',
+    'avg_tsync',
+    'wc_time',
     'stamp'
 ]
 
@@ -75,93 +70,91 @@ def load_configs_csv(infilename, delimiter=delimiter):
 def make_config(raw_config):
     config = {}
 
-    # TODO consolidate - vs _
-    config['bypass_NI'] = bool(int(raw_config['bypass_NI']))
-    config['learning_rate'] = float(raw_config['learning_rate'])
-    config['batch_size'] = int(raw_config['batch_size'])
-    config['num_train_samples'] = int(raw_config['num_train_samples'])
-    config['num_test_samples'] = int(raw_config['num_test_samples'])
-    config['network_style'] = raw_config['network_style']
-    config['data_chunk_size'] = int(raw_config['data_chunk_size'])
-    config['eval_interval'] = int(raw_config['eval_interval'])
-
-    config['madb_file'] = raw_config['madb_file']
-
     config['raw_config'] = raw_config
-    config['target_acc'] = float(raw_config['target-acc'])
-    config['stop_at_target'] = bool(int(raw_config['stop-at-target']))
+
+    # Topology-independent sim controls
     config['epochs'] = int(raw_config['epochs'])
-    config['generate_gantt'] = bool(int(raw_config['generate-gantt']))
+    config['target_acc'] = float(raw_config['target_acc'])
+    config['stop_at_target'] = bool(int(raw_config['stop_at_target']))
+    config['eval_interval'] = int(raw_config['eval_interval'])
+    config['generate_gantt'] = bool(int(raw_config['generate_gantt']))
     config['trainless'] = bool(int(raw_config['trainless']))
-    config['n_runs'] = int(raw_config['n-runs'])
-
+    config['bypass_NI'] = bool(int(raw_config['bypass_NI']))
+    config['n_runs'] = int(raw_config['n_runs'])
+    
+    
     config['update_type'] = raw_config['update_type']
-    config['rb_strat'] = raw_config['rb_strat']
+    config['network_style'] = raw_config['network_style']
+    config['madb_file'] = raw_config['madb_file']
+    config['rb_strat'] = raw_config['rb_strat']    
 
 
-    config['nodes'] = []
+    if 'node_config_file' in raw_config and raw_config['node_config_file'] not in ['none', '']:
+        config['nodes'] = json.load(open(raw_config['node_config_file']))
+    else:
+        config['nodes'] = []
 
-    # Top level PS
-    # TODO currently no support for different inbound/outbound bw
-    config['nodes'].append({
-        "node_type": "ps",
-        "id": 0,
-        "parent": None,
-        "sync_style": "sync" if raw_config['sync-config'][0] == 'S' else 'async',
-
-        "aggr_time": 0,
-        "apply_time": float(raw_config['ps-sync-time']) if raw_config['sync-config'][0] == 'S' else float(raw_config['ps-async-time']),
-
-        "inbound_bw": float(raw_config['bw']),
-        "outbound_bw": float(raw_config['bw'])
-    })
-
-    # Mid level PSs
-    node_id = 1
-    n_mid = raw_config['topology'].count('-') + 1 if raw_config['topology'].count('-') != 0 else 0
-    for _ in range(n_mid):
+        # Top level PS
+        # TODO currently no support for different inbound/outbound bw
         config['nodes'].append({
             "node_type": "ps",
-            "id": node_id,
-            "parent": 0,
-            "sync_style": "sync" if raw_config['sync-config'][2] == 'S' else 'async',
+            "id": 0,
+            "parent": None,
+            "sync_style": "sync" if raw_config['sync_config'][0] == 'S' else 'async',
 
             "aggr_time": 0,
-            "apply_time": float(raw_config['ps-sync-time']) if raw_config['sync-config'][2] == 'S' else float(raw_config['ps-async-time']),
+            "apply_time": float(raw_config['ps_sync_time']) if raw_config['sync_config'][0] == 'S' else float(raw_config['ps_async_time']),
 
             "inbound_bw": float(raw_config['bw']),
             "outbound_bw": float(raw_config['bw'])
         })
-        node_id += 1
 
-    # Workers
-    cluster_nums = []
-    top = raw_config['topology']
-
-    parent_ps = 0 # 1lvl
-
-    while top.count('-') > 0: # 2lvl
-        cluster_nums.append(int(top[0:top.find('-')]))
-        top = top[top.find('-')+1:]
-        parent_ps = 1
-
-    cluster_nums.append(int(top))
-    
-    for n_cluster_workers in cluster_nums:
-        for _ in range(n_cluster_workers):
+        # Mid level PSs
+        node_id = 1
+        n_mid = raw_config['topology'].count('-') + 1 if raw_config['topology'].count('-') != 0 else 0
+        for _ in range(n_mid):
             config['nodes'].append({
-                "node_type": "worker",
+                "node_type": "ps",
                 "id": node_id,
-                "parent": parent_ps,
+                "parent": 0,
+                "sync_style": "sync" if raw_config['sync_config'][2] == 'S' else 'async',
 
-                "step_time": float(raw_config['w-step-time']),
-                "st_variation": float(raw_config['w-step-var']),
-                "dropout_chance": float(raw_config['global-dropout-chance']),
+                "aggr_time": 0,
+                "apply_time": float(raw_config['ps_sync_time']) if raw_config['sync_config'][2] == 'S' else float(raw_config['ps_async_time']),
 
                 "inbound_bw": float(raw_config['bw']),
                 "outbound_bw": float(raw_config['bw'])
             })
             node_id += 1
-        parent_ps += 1
+
+        # Workers
+        cluster_nums = []
+        top = raw_config['topology']
+
+        parent_ps = 0 # 1lvl
+
+        while top.count('-') > 0: # 2lvl
+            cluster_nums.append(int(top[0:top.find('-')]))
+            top = top[top.find('-')+1:]
+            parent_ps = 1
+
+        cluster_nums.append(int(top))
+        
+        for n_cluster_workers in cluster_nums:
+            for _ in range(n_cluster_workers):
+                config['nodes'].append({
+                    "node_type": "worker",
+                    "id": node_id,
+                    "parent": parent_ps,
+
+                    "step_time": float(raw_config['w_step_time']),
+                    "st_variation": float(raw_config['w_step_var']),
+                    "dropout_chance": float(raw_config['global_dropout_chance']),
+
+                    "inbound_bw": float(raw_config['bw']),
+                    "outbound_bw": float(raw_config['bw'])
+                })
+                node_id += 1
+            parent_ps += 1
 
     return config
