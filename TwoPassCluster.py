@@ -24,12 +24,6 @@ class Worker:
 
         self.outgoing_grads = []
 
-        # Dataset stuff
-        # chunk = next(dataset_iterator)
-        # self.data_chunk_size = len(chunk)
-        # self.data_chunk_iterator = iter(chunk)
-        # self.batch_idx = 0
-
         self.steps_complete = 0
 
     def get_next_batch(self):
@@ -140,7 +134,7 @@ class TwoPassCluster:
 
         self._parse_config(config)
 
-        self.test_model, self.test_model_params, _, self.build_optimizer, loss_type, self.train_acc_metric = model_builder()
+        self.test_model, self.test_model_params, _, self.build_optimizer, loss_type, self.train_acc_metric, self.batch_size, self.learning_rate = model_builder()
         self.test_model.compile(self.build_optimizer(self.learning_rate), loss_type, metrics=[self.train_acc_metric])
 
 
@@ -157,15 +151,16 @@ class TwoPassCluster:
     def _create_nodes(self):
 
         # Build dataset_iterator
-        dataset = self.dataset_fn(self.num_train_samples)
-        dataset_iterator = DatasetIterator(dataset, self.batch_size, self.data_chunk_size)
+        dataset = self.dataset_fn()
+        self.num_train_samples = len(dataset)
+        dataset_iterator = DatasetIterator(dataset, self.batch_size)
         # dataset_iterator = self.dataset_fn(self.num_train_samples)
 
         self.num_workers = 0
 
         for node_desc in self.node_descs:
 
-            _, params, forward_pass, build_optimizer, _, _ = self.model_builder()
+            _, params, forward_pass, build_optimizer, _, _, _, _ = self.model_builder()
 
             if node_desc['node_type'] == 'ps':
                 ps = ParameterServer(node_desc['id'], node_desc['parent'], node_desc['sync_style'], params, build_optimizer(self.learning_rate), self.update_type)
@@ -180,22 +175,11 @@ class TwoPassCluster:
 
     def _parse_config(self, config):
 
-        self.learning_rate = self._get_config_item(config, 'learning_rate')
-        self.batch_size = self._get_config_item(config, 'batch_size')
-
         self.bypass_NI = self._get_config_item(config, 'bypass_NI') # TODO removed functionality
-        
-        # Num train samples per epoch - passed into dataset_fn
-        self.num_train_samples = self._get_config_item(config, 'num_train_samples')
-        self.num_test_samples = self._get_config_item(config, 'num_test_samples')
 
         self.network_style = self._get_config_item(config, 'network_style')
 
         self.node_descs = self._get_config_item(config, 'nodes')
-
-        self.ps_return_threshold = 0 # TODO removed functionality
-
-        self.data_chunk_size = self._get_config_item(config, 'data_chunk_size') # TODO remove this stuff
 
         self.target_acc = self._get_config_item(config, 'target_acc')
         self.stop_at_target = self._get_config_item(config, 'stop_at_target')

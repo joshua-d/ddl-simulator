@@ -5,10 +5,13 @@ from tensorflow.keras import initializers
 
 # TODO currently won't work - need to update with train_acc_metric & loss_type stuff
 
+# TODO not sure what these should be
+batch_size = 64
+learning_rate = 0.001
 
 optimizer_constructor = tf.keras.optimizers.Adam
 loss_constructor = tf.keras.losses.SparseCategoricalCrossentropy
-
+train_acc_metric_constructor = tf.keras.metrics.SparseCategoricalAccuracy
 
 model_seed = 1  # model seed and shuffle seed (in dataset_fn) for consistent tests
 
@@ -45,9 +48,9 @@ def build_model_with_seed(seed):
 
 
 # In dataset-rework, this just gives the master dataset which is automatically "sharded" by thread-safe DatasetIterator
-def dataset_fn(num_train_samples):
+def dataset_fn():
     mnist_dataset = mnist_dataset()
-    dataset = mnist_dataset.shuffle(len(mnist_dataset), seed=model_seed, reshuffle_each_iteration=False).take(num_train_samples)
+    dataset = mnist_dataset.shuffle(len(mnist_dataset), seed=model_seed, reshuffle_each_iteration=False)
     return dataset
 
 
@@ -61,6 +64,8 @@ def model_builder():
         params[p_idx] = param
         p_idx += 1
 
+        train_acc_metric = train_acc_metric_constructor()
+
     def forward_pass(batch):
         batch_inputs, batch_targets = batch
         with tf.GradientTape() as tape:
@@ -71,10 +76,11 @@ def model_builder():
             )(batch_targets, predictions)
 
         grads_list = tape.gradient(loss, model.trainable_variables)
+        train_acc_metric.update_state(batch_targets, predictions)
         
         return grads_list
 
     def build_optimizer(learning_rate):
         return optimizer_constructor(learning_rate=learning_rate)
 
-    return model, params, forward_pass, build_optimizer
+    return model, params, forward_pass, build_optimizer, loss_constructor(), train_acc_metric, batch_size, learning_rate

@@ -8,20 +8,6 @@ from importlib import import_module
 from multiprocessing import Process
 
 
-global_config_json = """
-{
-    "bypass_NI": false,
-    "learning_rate": 0.001,
-    "batch_size": 64,
-    "num_train_samples": 50000,
-    "num_test_samples": 50000,
-	"network_style": "hd",
-    "data_chunk_size": 64,
-    "eval_interval": 782,
-    "nodes": []
-}
-"""
-
 # ps_tsync_keys = [(f"ps-{node['id']}-tsync") for node in list(filter(lambda n: n['node_type'] == 'ps', config['nodes']))]
 # w_tsync_keys = [(f"w-{node['id']}-tsync") for node in list(filter(lambda n: n['node_type'] == 'worker', config['nodes']))]
 # keys = keys + ps_tsync_keys + w_tsync_keys
@@ -76,6 +62,7 @@ if __name__ == '__main__':
 
     sim_i = 0
     for config in configs:
+        # run(config, time_stamp + '_' + str(sim_i))
         p = Process(target=run, args=(config, time_stamp + '_' + str(sim_i)))
         p.start()
         p.join()

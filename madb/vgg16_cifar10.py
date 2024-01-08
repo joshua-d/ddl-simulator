@@ -1,6 +1,10 @@
 import tensorflow as tf
 
 
+batch_size = 64
+learning_rate = 0.001
+
+
 optimizer_constructor = tf.keras.optimizers.SGD
 loss_constructor = tf.keras.losses.CategoricalCrossentropy
 train_acc_metric_constructor = tf.keras.metrics.CategoricalAccuracy
@@ -43,11 +47,11 @@ def build_model_with_seed(seed):
 
 
 # In dataset-rework, this just gives the master dataset which is automatically "sharded" by thread-safe DatasetIterator
-def dataset_fn(num_train_samples):
+def dataset_fn():
     x_train, y_train = train_dataset()
     cifar10_dataset = tf.data.Dataset.from_tensor_slices(
       (x_train, y_train))
-    dataset = cifar10_dataset.shuffle(len(cifar10_dataset), seed=model_seed, reshuffle_each_iteration=False).take(num_train_samples)
+    dataset = cifar10_dataset.shuffle(len(cifar10_dataset), seed=model_seed, reshuffle_each_iteration=False)
     return dataset
 
 
@@ -77,4 +81,4 @@ def model_builder():
     def build_optimizer(learning_rate):
         return optimizer_constructor(learning_rate=learning_rate, decay=1e-6)
 
-    return model, params, forward_pass, build_optimizer, loss_constructor(), train_acc_metric
+    return model, params, forward_pass, build_optimizer, loss_constructor(), train_acc_metric, batch_size, learning_rate

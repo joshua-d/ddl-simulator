@@ -4,6 +4,9 @@ import tensorflow as tf
 # bs 96
 # lr decay 0.98 per epoch
 
+batch_size = 96
+learning_rate = 0.045
+
 optimizer_constructor = tf.keras.optimizers.Adam
 loss_constructor = tf.keras.losses.CategoricalCrossentropy
 train_acc_metric_constructor = tf.keras.metrics.CategoricalAccuracy
@@ -61,11 +64,11 @@ def build_model_with_seed(seed):
 
 #     return datagen_train.flow(x_train, y_train, batch_size=batch_size)
 
-def dataset_fn(num_train_samples):
+def dataset_fn():
     x_train, y_train = train_dataset()
     cifar10_dataset = tf.data.Dataset.from_tensor_slices(
       (x_train, y_train))
-    dataset = cifar10_dataset.shuffle(len(cifar10_dataset), seed=model_seed, reshuffle_each_iteration=False).take(num_train_samples)
+    dataset = cifar10_dataset.shuffle(len(cifar10_dataset), seed=model_seed, reshuffle_each_iteration=False)
     return dataset
 
 
@@ -100,4 +103,4 @@ def model_builder():
         #     staircase=True)
         return optimizer_constructor(learning_rate=learning_rate)
 
-    return model, params, forward_pass, build_optimizer, loss_constructor(), train_acc_metric
+    return model, params, forward_pass, build_optimizer, loss_constructor(), train_acc_metric, batch_size, learning_rate
