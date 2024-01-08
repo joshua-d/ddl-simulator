@@ -13,14 +13,16 @@ raw_config_keys = [
     'global_dropout_chance',
 
     'epochs',
-    'target_acc',
-    'stop_at_target',
+    'target_acc_test',
+    'target_acc_train',
+    'stop_at_target_test',
+    'stop_at_target_train',
     'eval_interval',
     'generate_gantt',
     'trainless',
     'bypass_NI',
     'n_runs',
-    'node_config_file'
+    'node_config_file',
 
     'network_style',
     'update_type',
@@ -33,11 +35,16 @@ non_raw_config_keys = [
     'n_mid_ps',
 
     'tpe',
-    'final_acc',
-    'e_to_target',
-    't_to_target',
-    'total_time',
-    'avg_tsync',
+    'final_acc_test',
+    'final_acc_train',
+    'highest_acc_test',
+    'highest_acc_train',
+    'ep_to_target_test',
+    'ep_to_target_train',
+    't_to_target_test',
+    't_to_target_train',
+    'total_sim_time',
+    'avg_trans_time',
     'wc_time',
     'stamp'
 ]
@@ -74,8 +81,10 @@ def make_config(raw_config):
 
     # Topology-independent sim controls
     config['epochs'] = int(raw_config['epochs'])
-    config['target_acc'] = float(raw_config['target_acc'])
-    config['stop_at_target'] = bool(int(raw_config['stop_at_target']))
+    config['target_acc_test'] = float(raw_config['target_acc_test'])
+    config['target_acc_train'] = float(raw_config['target_acc_train'])
+    config['stop_at_target_test'] = bool(int(raw_config['stop_at_target_test']))
+    config['stop_at_target_train'] = bool(int(raw_config['stop_at_target_train']))
     config['eval_interval'] = int(raw_config['eval_interval'])
     config['generate_gantt'] = bool(int(raw_config['generate_gantt']))
     config['trainless'] = bool(int(raw_config['trainless']))
