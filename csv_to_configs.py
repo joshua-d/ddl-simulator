@@ -95,7 +95,6 @@ def make_config(raw_config):
         config['nodes'] = []
 
         # Top level PS
-        # TODO currently no support for different inbound/outbound bw
         config['nodes'].append({
             "node_type": "ps",
             "id": 0,

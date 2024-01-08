@@ -7,7 +7,7 @@ SKIP_NETWORK = False
 base_lgc = 1
 
 # Starting send rate, b/s
-starting_sr = 0 # TODO
+starting_sr = 0 # TODO should this be zero? I think
 
 # How often to increment sr, s
 sr_update_period = 0.002
@@ -46,7 +46,7 @@ class Message:
 
 class NetworkEmulatorLite:
 
-    def __init__(self, node_bws, half_duplex):
+    def __init__(self, node_bws, half_duplex, bypass_NI):
 
         self.inbound_max, self.outbound_max = node_bws
         self.half_duplex = half_duplex
@@ -76,6 +76,10 @@ class NetworkEmulatorLite:
         for node_id in self.nodes:
             self.eff_in[node_id] = []
             self.eff_out[node_id] = []
+
+        if bypass_NI:
+            global SKIP_NETWORK
+            SKIP_NETWORK = True
 
 
     def _update_dsg_send_rates(self):

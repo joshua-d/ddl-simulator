@@ -3,8 +3,6 @@ import numpy as np
 from tensorflow.keras import initializers
 
 
-# TODO currently won't work - need to update with train_acc_metric & loss_type stuff
-
 # TODO not sure what these should be
 batch_size = 64
 learning_rate = 0.001

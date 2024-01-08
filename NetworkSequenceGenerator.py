@@ -128,7 +128,7 @@ class ParameterServer:
 
 class NetworkSequenceGenerator:
 
-    def __init__(self, node_descs, msg_size, half_duplex, update_type, rb_strat):
+    def __init__(self, node_descs, msg_size, half_duplex, update_type, rb_strat, bypass_NI):
 
         # In bits
         self.msg_size = msg_size
@@ -186,7 +186,7 @@ class NetworkSequenceGenerator:
                 node.parent.children.append(node)
 
         # Build NE
-        self.ne = NetworkEmulatorLite((inbound_max, outbound_max), half_duplex)
+        self.ne = NetworkEmulatorLite((inbound_max, outbound_max), half_duplex, bypass_NI)
 
         # Calculate processing power scores for workers
         max_inbound_bw = 0
