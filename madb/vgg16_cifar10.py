@@ -1,11 +1,11 @@
 import tensorflow as tf
 
 
-batch_size = 64
-learning_rate = 0.001
+batch_size = 128
+learning_rate = 0.0001
 
 
-optimizer_constructor = tf.keras.optimizers.SGD
+optimizer_constructor = tf.keras.optimizers.Adam
 loss_constructor = tf.keras.losses.CategoricalCrossentropy
 train_acc_metric_constructor = tf.keras.metrics.CategoricalAccuracy
 
@@ -79,6 +79,6 @@ def model_builder():
         return grads_list, loss
 
     def build_optimizer(learning_rate):
-        return optimizer_constructor(learning_rate=learning_rate, decay=1e-6)
+        return optimizer_constructor(learning_rate=learning_rate)
 
     return model, params, forward_pass, build_optimizer, loss_constructor(), train_acc_metric, batch_size, learning_rate

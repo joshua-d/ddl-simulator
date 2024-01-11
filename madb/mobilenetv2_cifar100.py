@@ -16,16 +16,16 @@ model_seed = 1  # model seed and shuffle seed (in dataset_fn) for consistent tes
 
 
 def train_dataset():
-  (x_train, y_train), _ = tf.keras.datasets.cifar10.load_data()
+  (x_train, y_train), _ = tf.keras.datasets.cifar100.load_data()
   x_train = x_train.astype('float32') / 255.0
-  y_train = tf.keras.utils.to_categorical(y_train, 10)
+  y_train = tf.keras.utils.to_categorical(y_train, 100)
   return x_train, y_train
 
 
 def test_dataset():
-    _, (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
+    _, (x_test, y_test) = tf.keras.datasets.cifar100.load_data()
     x_test = x_test.astype('float32') / 255.0
-    y_test = tf.keras.utils.to_categorical(y_test, 10)
+    y_test = tf.keras.utils.to_categorical(y_test, 100)
     return x_test, y_test
 
 
@@ -39,7 +39,7 @@ def build_model_with_seed(seed):
     # Add custom top layers for CIFAR-10 classification
     x = tf.keras.layers.GlobalAveragePooling2D()(base_model.output)
     x = tf.keras.layers.Dense(256, activation='relu')(x)
-    predictions = tf.keras.layers.Dense(10, activation='softmax')(x)
+    predictions = tf.keras.layers.Dense(100, activation='softmax')(x)
 
     # Combine the base model and custom top layers to create the final model
     model = tf.keras.Model(inputs=base_model.input, outputs=predictions)
@@ -98,7 +98,7 @@ def model_builder():
     def build_optimizer(learning_rate):
         # lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
         #     learning_rate,
-        #     decay_steps=1562,
+        #     decay_steps=521,
         #     decay_rate=0.98,
         #     staircase=True)
         return optimizer_constructor(learning_rate=learning_rate)

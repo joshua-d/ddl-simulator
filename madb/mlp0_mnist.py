@@ -5,7 +5,7 @@ from tensorflow.keras import initializers
 
 # TODO not sure what these should be
 batch_size = 64
-learning_rate = 0.001
+learning_rate = 0.0001
 
 optimizer_constructor = tf.keras.optimizers.Adam
 loss_constructor = tf.keras.losses.SparseCategoricalCrossentropy
@@ -14,20 +14,18 @@ train_acc_metric_constructor = tf.keras.metrics.SparseCategoricalAccuracy
 model_seed = 1  # model seed and shuffle seed (in dataset_fn) for consistent tests
 
 
-def mnist_dataset():
+def train_dataset():
   (x_train, y_train), _ = tf.keras.datasets.mnist.load_data()
   x_train = x_train / np.float32(255)
   y_train = y_train.astype(np.int64)
-  train_dataset = tf.data.Dataset.from_tensor_slices(
-      (x_train, y_train))
-  return train_dataset
+  return x_train, y_train
 
 
-def test_dataset(num_samples):
+def test_dataset():
     _, (x_test, y_test) = tf.keras.datasets.mnist.load_data()
     x_test = x_test / np.float32(255)
     y_test = y_test.astype(np.int64)
-    return (x_test[0:num_samples], y_test[0:num_samples])
+    return x_test, y_test
 
 
 def build_model_with_seed(seed):
