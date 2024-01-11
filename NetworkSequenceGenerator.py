@@ -6,8 +6,10 @@ from math import inf
 
 
 class RebalancingStrategy(Enum):
-    NBBL = 0
-    OABBL = 1
+    SBBL = 0  # These numbers are important because they are used as indices in worker score array
+    BWBBL = 1
+    OABBL = 2
+    NBBL = 3
 
 
 RB_Strategy = None
@@ -104,7 +106,7 @@ class Worker:
         self.dropout_chance = dropout_chance
 
         self.dropped_out = False
-        self.oa_score = None
+        self.score = [0, 0, 0]
 
 
 class ParameterServer:
@@ -150,6 +152,10 @@ class NetworkSequenceGenerator:
             RB_Strategy = RebalancingStrategy.NBBL
         elif rb_strat == 'oabbl':
             RB_Strategy = RebalancingStrategy.OABBL
+        elif rb_strat == 'sbbl':
+            RB_Strategy = RebalancingStrategy.SBBL
+        elif rb_strat == 'bwbbl':
+            RB_Strategy = RebalancingStrategy.BWBBL
 
         # Build node objs from config
         for node_desc in node_descs:
@@ -201,8 +207,13 @@ class NetworkSequenceGenerator:
                 min_step_time = worker.step_time
 
         for worker in self.workers:
-            # TODO a multiplier should be given to the 3 factors here
-            worker.oa_score = inbound_max[worker.id] / max_inbound_bw + outbound_max[worker.id] / max_outbound_bw - worker.step_time / min_step_time
+            # Score formulas here TODO
+            # Speed score
+            worker.score[0] = min_step_time / worker.step_time
+            # BW Score
+            worker.score[1] = inbound_max[worker.id] / max_inbound_bw + outbound_max[worker.id] / max_outbound_bw
+            # OA Score
+            worker.score[2] = worker.score[0] + worker.score[1]
 
         # Set up starting events
         for worker in self.workers:
@@ -212,6 +223,53 @@ class NetworkSequenceGenerator:
             self.events.append(SendUpdateEvent(step_time, step_time, worker.id, worker.parent.id))
             self.ne.send_msg(worker.id, worker.parent.id, self.msg_size, step_time, self.update_type) # send update type as msg metadata
 
+
+    # Checks if the system should be rebalanced, then performs the rebalance if it should. Returns (bool - whether or not rebalance occurred, moved worker)
+    def _score_rebalance(self, msg, score_idx):
+        rebalanced = False
+
+        # Calculate summed proc pow score for each cluster
+        scores = {}
+        highest_score = -1
+        lowest_score = -1
+        for worker in self.workers:
+            if worker.parent.id not in scores:
+                score = 0
+                for child in worker.parent.children:
+                    score += child.score[score_idx]
+                scores[worker.parent.id] = score
+                if score > highest_score or highest_score == -1:
+                    highest_score = score
+                    h_ps = worker.parent
+                if score < lowest_score or lowest_score == -1:
+                    lowest_score = score
+                    l_ps = worker.parent
+
+        if highest_score != lowest_score:
+
+            threshold = (highest_score - lowest_score) / 2
+
+            # Get h_ps worker whose score is closest to threshold
+            closest_val = -1
+            for child in h_ps.children:
+                v = (child.score[score_idx] - threshold)*(child.score[score_idx] - threshold)
+                if v < closest_val or closest_val == -1:
+                    closest_val = v
+                    closest_worker = child
+
+            # If the move would be beneficial, do it
+            old_diff = highest_score - lowest_score
+            new_diff = (highest_score - closest_worker.score[score_idx]) - (lowest_score + closest_worker.score[score_idx])
+            if new_diff*new_diff < old_diff*old_diff:
+                # Transfer 1 worker from mc to lc
+                h_ps.children[-1].parent = l_ps
+                l_ps.children.append(h_ps.children.pop())
+                rebalanced = True
+                print(f'REBALANCE worker {l_ps.children[-1].id}, ps {h_ps.id} -> {l_ps.id}')
+                print(f'h: {highest_score} l: {lowest_score} w: {closest_worker.score[score_idx]}')
+                self.events.append(RebalanceEvent(msg.end_time, msg.end_time, l_ps.children[-1].id, h_ps.id, l_ps.id, self.get_topology_breakdown()))
+
+        return rebalanced, l_ps.children[-1]
         
 
     def _process_msg(self, msg):
@@ -355,6 +413,7 @@ class NetworkSequenceGenerator:
 
                 rebalanced = False
 
+                # Rebalance
                 # TODO - assumes balanced at beginning - moves 1 worker per dropout
                 # assumes cluster that a worker gets moved to is the one that was just dropped out of (worker.parent)
                 if RB_Strategy == RebalancingStrategy.NBBL:
@@ -375,50 +434,12 @@ class NetworkSequenceGenerator:
                         h_ps.children[-1].parent = l_ps
                         l_ps.children.append(h_ps.children.pop())
                         rebalanced = True
+                        moved_worker = l_ps.children[-1]
                         print(f'REBALANCE worker {l_ps.children[-1].id}, ps {h_ps.id} -> {l_ps.id}')
                         self.events.append(RebalanceEvent(msg.end_time, msg.end_time, l_ps.children[-1].id, h_ps.id, l_ps.id, self.get_topology_breakdown()))
 
-                elif RB_Strategy == RebalancingStrategy.OABBL:
-                    # Calculate summed proc pow score for each cluster
-                    scores = {}
-                    highest_score = -1
-                    lowest_score = -1
-                    for worker in self.workers:
-                        if worker.parent.id not in scores:
-                            score = 0
-                            for child in worker.parent.children:
-                                score += child.oa_score
-                            scores[worker.parent.id] = score
-                            if score > highest_score or highest_score == -1:
-                                highest_score = score
-                                h_ps = worker.parent
-                            if score < lowest_score or lowest_score == -1:
-                                lowest_score = score
-                                l_ps = worker.parent
-
-                    if highest_score != lowest_score:
-
-                        threshold = (highest_score - lowest_score) / 2
-
-                        # Get h_ps worker whose score is closest to threshold
-                        closest_val = -1
-                        for child in h_ps.children:
-                            v = (child.oa_score - threshold)*(child.oa_score - threshold)
-                            if v < closest_val or closest_val == -1:
-                                closest_val = v
-                                closest_worker = child
-
-                        # If the move would be beneficial, do it
-                        old_diff = highest_score - lowest_score
-                        new_diff = (highest_score - closest_worker.oa_score) - (lowest_score + closest_worker.oa_score)
-                        if new_diff*new_diff < old_diff*old_diff:
-                            # Transfer 1 worker from mc to lc
-                            h_ps.children[-1].parent = l_ps
-                            l_ps.children.append(h_ps.children.pop())
-                            rebalanced = True
-                            print(f'REBALANCE worker {l_ps.children[-1].id}, ps {h_ps.id} -> {l_ps.id}')
-                            print(f'h: {highest_score} l: {lowest_score} w: {closest_worker.oa_score}')
-                            self.events.append(RebalanceEvent(msg.end_time, msg.end_time, l_ps.children[-1].id, h_ps.id, l_ps.id, self.get_topology_breakdown()))
+                elif RB_Strategy == RebalancingStrategy.SBBL or RB_Strategy == RebalancingStrategy.BWBBL or RB_Strategy == RebalancingStrategy.OABBL:
+                    rebalanced, moved_worker = self._score_rebalance(msg, RB_Strategy.value)
 
                 # Check each sync PS for sync round completion
                 for ps in self.parameter_servers:
@@ -459,7 +480,7 @@ class NetworkSequenceGenerator:
 
                 # Moved worker does step
                 if rebalanced:
-                    worker = l_ps.children[-1]
+                    worker = moved_worker
                     step_time = worker.step_time - worker.st_variation + random.uniform(0, worker.st_variation*2)
                     self.events.append(WorkerStepEvent(self.ne.current_time, self.ne.current_time + step_time, worker.id))
                     self.n_batches += 1
@@ -663,7 +684,7 @@ class NetworkSequenceGenerator:
             for child in ps.children:
                 if type(child) != Worker:
                     break
-                score += child.oa_score
+                score += child.score[2]
 
             res += f'P{ps.id}: {len(ps.children)}, {score}\t'
 
