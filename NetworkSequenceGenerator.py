@@ -7,7 +7,7 @@ from math import inf
 
 class RebalancingStrategy(Enum):
     NBBL = 0
-    PPBBL = 1
+    OABBL = 1
 
 
 RB_Strategy = None
@@ -104,7 +104,7 @@ class Worker:
         self.dropout_chance = dropout_chance
 
         self.dropped_out = False
-        self.proc_pow_score = None
+        self.oa_score = None
 
 
 class ParameterServer:
@@ -148,8 +148,8 @@ class NetworkSequenceGenerator:
         global RB_Strategy
         if rb_strat == 'nbbl':
             RB_Strategy = RebalancingStrategy.NBBL
-        elif rb_strat == 'ppbbl':
-            RB_Strategy = RebalancingStrategy.PPBBL
+        elif rb_strat == 'oabbl':
+            RB_Strategy = RebalancingStrategy.OABBL
 
         # Build node objs from config
         for node_desc in node_descs:
@@ -202,7 +202,7 @@ class NetworkSequenceGenerator:
 
         for worker in self.workers:
             # TODO a multiplier should be given to the 3 factors here
-            worker.proc_pow_score = inbound_max[worker.id] / max_inbound_bw + outbound_max[worker.id] / max_outbound_bw - worker.step_time / min_step_time
+            worker.oa_score = inbound_max[worker.id] / max_inbound_bw + outbound_max[worker.id] / max_outbound_bw - worker.step_time / min_step_time
 
         # Set up starting events
         for worker in self.workers:
@@ -378,7 +378,7 @@ class NetworkSequenceGenerator:
                         print(f'REBALANCE worker {l_ps.children[-1].id}, ps {h_ps.id} -> {l_ps.id}')
                         self.events.append(RebalanceEvent(msg.end_time, msg.end_time, l_ps.children[-1].id, h_ps.id, l_ps.id, self.get_topology_breakdown()))
 
-                elif RB_Strategy == RebalancingStrategy.PPBBL:
+                elif RB_Strategy == RebalancingStrategy.OABBL:
                     # Calculate summed proc pow score for each cluster
                     scores = {}
                     highest_score = -1
@@ -387,7 +387,7 @@ class NetworkSequenceGenerator:
                         if worker.parent.id not in scores:
                             score = 0
                             for child in worker.parent.children:
-                                score += child.proc_pow_score
+                                score += child.oa_score
                             scores[worker.parent.id] = score
                             if score > highest_score or highest_score == -1:
                                 highest_score = score
@@ -403,21 +403,21 @@ class NetworkSequenceGenerator:
                         # Get h_ps worker whose score is closest to threshold
                         closest_val = -1
                         for child in h_ps.children:
-                            v = (child.proc_pow_score - threshold)*(child.proc_pow_score - threshold)
+                            v = (child.oa_score - threshold)*(child.oa_score - threshold)
                             if v < closest_val or closest_val == -1:
                                 closest_val = v
                                 closest_worker = child
 
                         # If the move would be beneficial, do it
                         old_diff = highest_score - lowest_score
-                        new_diff = (highest_score - closest_worker.proc_pow_score) - (lowest_score + closest_worker.proc_pow_score)
+                        new_diff = (highest_score - closest_worker.oa_score) - (lowest_score + closest_worker.oa_score)
                         if new_diff*new_diff < old_diff*old_diff:
                             # Transfer 1 worker from mc to lc
                             h_ps.children[-1].parent = l_ps
                             l_ps.children.append(h_ps.children.pop())
                             rebalanced = True
                             print(f'REBALANCE worker {l_ps.children[-1].id}, ps {h_ps.id} -> {l_ps.id}')
-                            print(f'h: {highest_score} l: {lowest_score} w: {closest_worker.proc_pow_score}')
+                            print(f'h: {highest_score} l: {lowest_score} w: {closest_worker.oa_score}')
                             self.events.append(RebalanceEvent(msg.end_time, msg.end_time, l_ps.children[-1].id, h_ps.id, l_ps.id, self.get_topology_breakdown()))
 
                 # Check each sync PS for sync round completion
@@ -647,7 +647,7 @@ class NetworkSequenceGenerator:
         #     for child in ps.children:
         #         if type(child) != Worker:
         #             break
-        #         score += child.proc_pow_score
+        #         score += child.oa_score
 
         #     res += f'PS ID: {ps.id}, \tSc: {score}, \tN: {len(ps.children)}, \tC: '
 
@@ -663,7 +663,7 @@ class NetworkSequenceGenerator:
             for child in ps.children:
                 if type(child) != Worker:
                     break
-                score += child.proc_pow_score
+                score += child.oa_score
 
             res += f'P{ps.id}: {len(ps.children)}, {score}\t'
 
