@@ -400,7 +400,8 @@ class TwoPassCluster:
 
         # Eval vars
         x_test, y_test = self.test_dataset_fn()
-        accuracies = []
+        train_accuracies = []
+        test_accuracies = []
         threshold_results = []
 
         target_reached_test = False
@@ -482,15 +483,17 @@ class TwoPassCluster:
             print(stamp + '\tTest accuracy: %f' % test_accuracy)
             print("------------------------------------------------------------------")
 
-            accuracies.append(test_accuracy)
+            train_accuracies.append(train_accuracy)
+            test_accuracies.append(test_accuracy)
 
             # Log
             if eval_num % log_interval == 0:
                 with open(logging_filename, 'a') as outfile:
-                    for accuracy in accuracies:
-                        outfile.write('%f\n' % accuracy)
+                    for train_acc, test_acc in zip(train_accuracies, test_accuracies):
+                        outfile.write('%f\t%f\n' % (train_acc, test_acc))
                     outfile.close()
-                accuracies = []
+                train_accuracies = []
+                test_accuracies = []
 
             # STOPPING CONDITIONS
             if not target_reached_test and test_accuracy >= self.target_acc_test:
@@ -523,8 +526,8 @@ class TwoPassCluster:
         wc_time = perf_counter() - start_wc_time
         
         with open(logging_filename, 'a') as outfile:
-            for accuracy in accuracies:
-                outfile.write('%f\n' % accuracy)
+            for train_acc, test_acc in zip(train_accuracies, test_accuracies):
+                outfile.write('%f\t%f\n' % (train_acc, test_acc))
             outfile.close()
 
         with open(logging_filename, 'r+') as outfile:
