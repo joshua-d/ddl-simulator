@@ -153,7 +153,7 @@ def examine_1d(csv_data, hor_keys=None, isolates=None, first_key=None, first_key
 
 
 """
-Consolidates rows with same "consolidate keys" into one row by averaging avg_keys based on n-runs
+Consolidates rows with same "consolidate keys" into one row by averaging avg_keys based on n_runs
 Behavior of keys not in consolidate_keys or avg_keys and not the same val is undefined
 """
 def consolidate(csv_data, consolidate_keys, avg_keys, **kwargs):
@@ -184,11 +184,11 @@ def consolidate(csv_data, consolidate_keys, avg_keys, **kwargs):
         cons_vals = {}
         total_n_runs = 0
         for cons_row_idx in rows_to_consolidate:
-            total_n_runs += int(csv_data['n-runs'][cons_row_idx])
+            total_n_runs += int(csv_data['n_runs'][cons_row_idx])
             for avg_key in avg_keys:
                 if avg_key not in cons_vals:
                     cons_vals[avg_key] = 0
-                cons_vals[avg_key] += float(csv_data[avg_key][cons_row_idx]) * int(csv_data['n-runs'][cons_row_idx])
+                cons_vals[avg_key] += float(csv_data[avg_key][cons_row_idx]) * int(csv_data['n_runs'][cons_row_idx])
             
             consolidated_row_idxs.append(cons_row_idx)
 
@@ -200,7 +200,7 @@ def consolidate(csv_data, consolidate_keys, avg_keys, **kwargs):
                 new_data[key].append(csv_data[key][row_idx])
             elif key in avg_keys:
                 new_data[key].append(cons_vals[key])
-            elif key == 'n-runs':
+            elif key == 'n_runs':
                 new_data[key].append(total_n_runs)
             else:
                 new_data[key].append(csv_data[key][row_idx])
@@ -224,7 +224,7 @@ if __name__ == '__main__':
     csv_data = load_csv(config['infile'])
 
     if config['args']['consolidate_keys'] is None:
-        raw_config_keys.remove('n-runs')
+        raw_config_keys.remove('n_runs')
         consolidate_keys = raw_config_keys
     else:
         consolidate_keys = config['args']['consolidate_keys']

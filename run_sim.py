@@ -13,7 +13,7 @@ from multiprocessing import Process
 # keys = keys + ps_tsync_keys + w_tsync_keys
 
 
-def run(config, stamp):
+def run(config, stamp, out_keys):
     # Import model and data builder file
     madb = import_module(config['madb_file'])
 
@@ -31,7 +31,8 @@ def run(config, stamp):
         #     result_row_list = []
 
         result_row = cluster.train(new_stamp) if not config['trainless'] else cluster.trainless(new_stamp)
-        result_row_list = [result_row[key] for key in keys]
+        result_row_list = [result_row[key] for key in out_keys]
+
 
         with open(result_filename, 'a') as resfile:
             resfile.write(make_row(result_row_list) + '\n')
@@ -54,16 +55,21 @@ if __name__ == '__main__':
     time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
 
     # Write key row to result file
+    out_keys = keys.copy()
+    for key in configs[0]['raw_config']:
+        if key not in out_keys:
+            out_keys.append(key)
+
     result_filename = f"eval_logs/results_{time_stamp}.csv"
 
     with open(result_filename, 'w') as resfile:
-        resfile.write(make_row(keys) + '\n')
+        resfile.write(make_row(out_keys) + '\n')
         resfile.close()
 
     sim_i = 0
     for config in configs:
-        # run(config, time_stamp + '_' + str(sim_i))
-        p = Process(target=run, args=(config, time_stamp + '_' + str(sim_i)))
+        # run(config, time_stamp + '_' + str(sim_i), out_keys)
+        p = Process(target=run, args=(config, time_stamp + '_' + str(sim_i), out_keys))
         p.start()
         p.join()
         del p
