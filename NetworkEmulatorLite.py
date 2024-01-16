@@ -179,7 +179,7 @@ class NetworkEmulatorLite:
                 msg.time_to_reach_dsr = (msg.dsg_send_rate - msg.send_rate) / msg.lgr
 
             t = msg.time_to_reach_dsr
-            msg.amt_sent_at_dsr_reach = msg.amt_sent + (msg.send_rate * t + msg.lgr * t * t) / 2  # amount sent function = amt_sent + 1/2(sr_fn)t
+            msg.amt_sent_at_dsr_reach = msg.amt_sent + msg.send_rate * t + msg.lgr * t * t / 2  # area under curve 
 
 
     def send_msg(self, from_id, to_id, msg_size, in_time, metadata=None):
@@ -194,7 +194,7 @@ class NetworkEmulatorLite:
 
         # Requested time is during rampup
         if t < msg.time_to_reach_dsr:
-            return msg.amt_sent + (msg.send_rate * t + msg.lgr * t * t) / 2
+            return msg.amt_sent + msg.send_rate * t + msg.lgr * t * t / 2
         
         # Msg has already reached dsr
         elif msg.time_to_reach_dsr == 0:
@@ -214,7 +214,7 @@ class NetworkEmulatorLite:
         
         # Msg will complete during rampup
         if msg.amt_sent_at_dsr_reach > msg.size:
-            a = msg.lgr
+            a = msg.lgr / 2
             b = msg.send_rate
             c = -(msg.size - msg.amt_sent)
 
