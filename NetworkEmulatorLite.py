@@ -43,6 +43,9 @@ class Message:
         self.time_to_reach_dsr = 0
         self.amt_sent_at_dsr_reach = 0 # only valid if dsr has not been reached
 
+    def __str__(self):
+        return f'Msg from {self.from_id}, to {self.to_id}, size {self.size}, amt_sent {self.amt_sent}, in_time {self.in_time}, sr {self.send_rate}, dsr {self.dsg_send_rate}, lgr {self.lgr}, prosp {self.prospective_amt_sent}, t_to_dsr {self.time_to_reach_dsr}, a_at_dsr { self.amt_sent_at_dsr_reach}'
+
 
 class NetworkEmulatorLite:
 
@@ -251,6 +254,8 @@ class NetworkEmulatorLite:
                 earliest_in_time = msg.in_time
                 next_in_msg = msg
 
+        print(f'earliest in time: {earliest_in_time}')
+
         # Get amt sent at next earliest in time for each msg, and check for completion
         earliest_completion_time = inf
         next_completed_msg = None
@@ -264,6 +269,12 @@ class NetworkEmulatorLite:
                     earliest_completion_time = comp_time
                     next_completed_msg = msg
 
+        print(f'earliest completion time: {earliest_completion_time}')
+
+        print(f'Before move: {self.current_time}')
+        for msg in self.sending_msgs:
+            print(msg)
+        print()
 
         # Write prospective amt sents, update SRs, and move to in time
         if next_completed_msg is None:
@@ -303,6 +314,7 @@ class NetworkEmulatorLite:
                     self.sending_msgs.pop(msg_idx)
                     msg_idx -= 1
                     msg.end_time = earliest_completion_time
+                    print(f'Msg end: {msg.end_time}, {msg}')
 
                 else:
                     msg.amt_sent = self._predict_amt_sent(msg, earliest_completion_time)
@@ -323,6 +335,11 @@ class NetworkEmulatorLite:
             # Advance current time
             self.current_time = earliest_completion_time
 
+
+        print(f'After move: {self.current_time}')
+        for msg in self.sending_msgs:
+            print(msg)
+        print()
 
         # Return sent msgs
         return [next_completed_msg] if next_completed_msg is not None else []

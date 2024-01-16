@@ -1,0 +1,3 @@
+Documentation needed for NetworkEmulatorLite node_bws param - bits/s
+
+Rename dsg_send_rate to dsr
