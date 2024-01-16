@@ -8,8 +8,8 @@ raw_config_keys = [
     'bw',
     'w_step_time',
     'w_step_var',
-    'ps_sync_time',
-    'ps_async_time',
+    'ps_aggr_time', # PARAMS - time for both sync & async ps to average & save params, GRADS - time for sync ps to sum grads
+    'ps_apply_time', # GRADS - time for both sync & async ps to apply grads (backward pass)
     'global_dropout_chance',
 
     'epochs',
@@ -110,8 +110,8 @@ def make_config(raw_config):
             "parent": None,
             "sync_style": "sync" if raw_config['sync_config'][0] == 'S' else 'async',
 
-            "aggr_time": 0,
-            "apply_time": float(raw_config['ps_sync_time']) if raw_config['sync_config'][0] == 'S' else float(raw_config['ps_async_time']),
+            "aggr_time": float(raw_config['ps_aggr_time']),
+            "apply_time": float(raw_config['ps_apply_time']),
 
             "inbound_bw": float(raw_config['bw']),
             "outbound_bw": float(raw_config['bw'])
@@ -127,9 +127,9 @@ def make_config(raw_config):
                 "parent": 0,
                 "sync_style": "sync" if raw_config['sync_config'][2] == 'S' else 'async',
 
-                "aggr_time": 0,
-                "apply_time": float(raw_config['ps_sync_time']) if raw_config['sync_config'][2] == 'S' else float(raw_config['ps_async_time']),
-
+                "aggr_time": float(raw_config['ps_aggr_time']),
+                "apply_time": float(raw_config['ps_apply_time']),
+                
                 "inbound_bw": float(raw_config['bw']),
                 "outbound_bw": float(raw_config['bw'])
             })

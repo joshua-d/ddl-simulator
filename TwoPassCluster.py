@@ -1,7 +1,7 @@
 import datetime
 import numpy as np
 from DatasetIterator import DatasetIterator
-from NetworkSequenceGenerator import NetworkSequenceGenerator, WorkerStepEvent, SendUpdateEvent, ReceiveUpdateEvent, PSAggrParamsEvent, PSApplyParamsEvent, PSApplyParamsFromParentEvent, PSAggrGradsEvent, PSApplyGradsEvent, UpdateType, DropoutEvent, RebalanceEvent
+from NetworkSequenceGenerator import NetworkSequenceGenerator, WorkerStepEvent, SendUpdateEvent, ReceiveUpdateEvent, PSAggrParamsEvent, PSSaveParamsEvent, PSSaveParamsFromParentEvent, PSAggrGradsEvent, PSApplyGradsEvent, UpdateType, DropoutEvent, RebalanceEvent, PSSaveGradsEvent
 from math import ceil
 from time import perf_counter
 import tensorflow as tf
@@ -19,10 +19,10 @@ class Worker:
         self.update_type = update_type
         self.train_acc_metric = train_acc_metric
 
-        # List of param sets
-        self.incoming_parent_params = []
+        # Map of to_id -> data
+        self.msgs = []
 
-        self.outgoing_grads = []
+        self.outgoing_grads = None
 
         self.steps_complete = 0
 
@@ -33,14 +33,14 @@ class Worker:
     def train_step(self):
         gradients, loss = self.forward_pass(self.get_next_batch(), self.train_acc_metric)
         if self.update_type == UpdateType.GRADS:
-            self.outgoing_grads = [gradients]
+            self.outgoing_grads = gradients
         else:
             self.optimizer.apply_gradients(zip(gradients, self.params.values()))
         self.steps_complete += 1
         return loss
 
-    def replace_params(self, param_set):
-        for param_id in param_set:
+    def save_params(self, param_set):
+        for param_id in self.params:
             self.params[param_id].assign(param_set[param_id])
 
     def get_params(self):
@@ -59,18 +59,19 @@ class ParameterServer:
         self.optimizer = optimizer
         self.update_type = update_type
 
-        # Lists of param sets
-        self.incoming_child_params = []
-        self.incoming_parent_params = []
+        # Map of to_id -> data
+        self.msgs = []
 
+        self.incoming_child_params = []
         self.incoming_child_grads = []
-        self.outgoing_grads = []
+
+        self.outgoing_grads = None
 
         self.received_first_update = False
         self.has_async_child = False
 
     # Sync
-    def aggr_and_apply_params(self, param_sets):
+    def sync_aggr_and_save_params(self, param_sets):
         # Average and assign params
         for param_id in self.params:
             param_value = 0
@@ -87,12 +88,9 @@ class ParameterServer:
                 self.params[param_id].assign((param_value + self.params[param_id].value()) / 2)
 
     # Async
-    def apply_params(self, param_set):
-        if self.parent is not None or not self.received_first_update:
-            # Assign params for relay (up or down!)
-            for param_id in self.params:
-                self.params[param_id].assign(param_set[param_id])
-
+    def async_aggr_and_save_params(self, param_set):
+        if not self.received_first_update:
+            self.save_params(param_set)
             self.received_first_update = True
         else:
             # Average params into current (async only works on one set of params at a time)
@@ -100,6 +98,10 @@ class ParameterServer:
             for param_id in self.params:
                 param_value = (self.params[param_id].value() + param_set[param_id]) / 2
                 self.params[param_id].assign(param_value)
+
+    def save_params(self, param_set):
+        for param_id in self.params:
+            self.params[param_id].assign(param_set[param_id])
 
     def aggr_grads(self, grads_sets):
         out_grads = []
@@ -167,11 +169,15 @@ class TwoPassCluster:
                 self.nodes[ps.id] = ps
                 if node_desc['sync_style'] == 'async' and node_desc['parent'] is not None:
                     self.nodes[node_desc['parent']].has_async_child = True
+                for _ in range(len(self.node_descs)):
+                    ps.msgs.append(None)
 
             elif node_desc['node_type'] == 'worker':
                 worker = Worker(node_desc['id'], params, forward_pass, dataset_iterator, build_optimizer(self.learning_rate), self.update_type, self.train_acc_metric)
                 self.nodes[worker.id] = worker
                 self.num_workers += 1
+                for _ in range(len(self.node_descs)):
+                    worker.msgs.append(None) 
 
     def _parse_config(self, config):
 
@@ -228,72 +234,75 @@ class TwoPassCluster:
             receiver = self.nodes[event.receiver_id]
             sender = self.nodes[event.sender_id]
 
-            if type(receiver) == Worker or receiver.parent == event.sender_id:
-                params = sender.get_params()
-                receiver.incoming_parent_params.append(params)
+            if sender.update_type == UpdateType.PARAMS:
+                sender.msgs[receiver.id] = sender.get_params()
             else:
-                if sender.update_type == UpdateType.PARAMS:
-                    params = sender.get_params()
-                    receiver.incoming_child_params.append(params)
-                else:
-                    # TODO currently, outgoing_grads should only ever contain 1 grad set
-                    receiver.incoming_child_grads.append(sender.outgoing_grads[0])
-                    sender.outgoing_grads = []
+                sender.msgs[receiver.id] = sender.outgoing_grads
+                sender.outgoing_grads = None
 
         elif type(event) == ReceiveUpdateEvent:
             receiver = self.nodes[event.receiver_id]
-            if type(receiver) == Worker:
-                # Worker should only have 1 param set in incoming params
-                params = receiver.incoming_parent_params[0]
-                receiver.incoming_parent_params = []
-                receiver.replace_params(params)
+            sender = self.nodes[event.sender_id]
+
+            if type(receiver) == Worker or sender == receiver.parent:
+                params = sender.msgs[receiver.id]
+                sender.msgs[receiver.id] = None
+                receiver.save_params(params)
+
+            else:
+                # PS update from child
+                if sender.update_type == UpdateType.PARAMS: # Different update types among different nodes currently not supported
+                    receiver.incoming_child_params.append(sender.msgs[receiver.id])
+                else:
+                    receiver.incoming_child_grads.append(sender.msgs[receiver.id])
+
+                sender.msgs[receiver.id] = None
 
         elif type(event) == WorkerStepEvent:
             loss = self.nodes[event.worker_id].train_step()
             self.steps_complete += 1
             return loss
 
-        elif type(event) == PSApplyParamsEvent:
+        elif type(event) == PSAggrParamsEvent:
             ps = self.nodes[event.ps_id]
             if ps.sync_style == 'async':
                 params = ps.incoming_child_params.pop(0)
-                ps.apply_params(params)
+                ps.async_aggr_and_save_params(params)
             elif ps.sync_style == 'sync':
                 param_sets = ps.incoming_child_params
                 ps.incoming_child_params = []
-                ps.aggr_and_apply_params(param_sets) # Params PS currently never has to aggregate without applying, so we do this. PSAggrParamsEvent not considered in this fn.
+                ps.sync_aggr_and_apply_params(param_sets)
 
-        elif type(event) == PSApplyParamsFromParentEvent:
+        elif type(event) == PSSaveParamsEvent:
+            # Async mid-level PS save params from child for relay up
             ps = self.nodes[event.ps_id]
-            params = ps.incoming_parent_params.pop(0)
-            ps.apply_params(params)
+            params = ps.incoming_child_params.pop(0)
+            ps.async_save_params(params)
+
+        elif type(event) == PSSaveGradsEvent:
+            # Async mid-level PS save grads from child for relay up
+            grads = ps.incoming_child_grads.pop(0)
+            ps.outgoing_grads = grads
 
         elif type(event) == PSAggrGradsEvent:
             ps = self.nodes[event.ps_id]
 
-            # Only Sync PS. Should only ever have 1 set of grads in outgoing_grads.
+            # Only Sync PS
             grads_sets = ps.incoming_child_grads
             ps.incoming_child_grads = []
-            ps.outgoing_grads = [ps.aggr_grads(grads_sets)]
+            ps.outgoing_grads = ps.aggr_grads(grads_sets)
 
         elif type(event) == PSApplyGradsEvent:
             ps = self.nodes[event.ps_id]
 
             if ps.sync_style == 'async':
-
-                # TODO this part is hacky
-                # If this is a zero-time event, this is a mid level PS and should relay grads to parent, not apply
-                if event.start_time == event.end_time:
-                    grads = ps.incoming_child_grads.pop(0)
-                    ps.outgoing_grads = [grads]
-                else:
-                    grad = ps.incoming_child_grads.pop(0)
-                    ps.apply_grads(grad)
+                grad = ps.incoming_child_grads.pop(0)
+                ps.apply_grads(grad)
 
             elif ps.sync_style == 'sync':
                 # Grads are already aggregated, sitting in outgoing_grads
-                grads = ps.outgoing_grads[0]
-                ps.outgoing_grads = []
+                grads = ps.outgoing_grads
+                ps.outgoing_grads = None
                 ps.apply_grads(grads)
 
         elif type(event) == DropoutEvent:
