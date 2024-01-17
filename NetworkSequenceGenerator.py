@@ -294,7 +294,7 @@ class NetworkSequenceGenerator:
 
                     self.events.append(ReceiveUpdateEvent(msg.start_time, msg.end_time, msg.from_id, msg.to_id, msg.metadata))
 
-                    # Params are saved immediately on ReceiveUpdateEvent from parent
+                    # Params are saved immediately on ReceiveUpdateEvent from parent in TwoPassCluster.process_event, so don't need this event
                     # self.events.append(PSSaveParamsFromParentEvent(msg.end_time, msg.end_time, ps.id))
 
                     # Immediately send to child(ren)
@@ -530,7 +530,7 @@ class NetworkSequenceGenerator:
         for event in self.events:
             if type(event) == WorkerStepEvent:
                 gantts[event.worker_id].append(event)
-            elif type(event) == PSAggrParamsEvent or type(event) == PSSaveParamsEvent:
+            elif type(event) == PSAggrParamsEvent or type(event) == PSAggrGradsEvent or type(event) == PSApplyGradsEvent:
                 gantts[event.ps_id].append(event)
             elif type(event) == ReceiveUpdateEvent:
                 if type(self.nodes[event.receiver_id]) == Worker or event.sender_id == 0: # TODO need to change this logic for > 2 levels
@@ -561,7 +561,7 @@ class NetworkSequenceGenerator:
                     block_label_str = ', "label": {0}'.format(step_num)
                     step_num += 1
                     color = '#5da5c9'
-                elif type(event) == PSAggrParamsEvent or type(event) == PSSaveParamsEvent:
+                elif type(event) == PSAggrParamsEvent or type(event) == PSAggrGradsEvent or type(event) == PSApplyGradsEvent:
                     raw_str = "Updating params - S: {0}, E: {1}, D: {2}".format(event.start_time, event.end_time, event.end_time - event.start_time)
                     color = '#003366'
                 elif type(event) == ReceiveUpdateEvent and event.sender_id == node.id:

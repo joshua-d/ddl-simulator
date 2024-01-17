@@ -234,11 +234,14 @@ class TwoPassCluster:
             receiver = self.nodes[event.receiver_id]
             sender = self.nodes[event.sender_id]
 
-            if sender.update_type == UpdateType.PARAMS:
+            if sender == receiver.parent:
                 sender.msgs[receiver.id] = sender.get_params()
             else:
-                sender.msgs[receiver.id] = sender.outgoing_grads
-                sender.outgoing_grads = None
+                if sender.update_type == UpdateType.PARAMS:
+                    sender.msgs[receiver.id] = sender.get_params()
+                else:
+                    sender.msgs[receiver.id] = sender.outgoing_grads
+                    sender.outgoing_grads = None
 
         elif type(event) == ReceiveUpdateEvent:
             receiver = self.nodes[event.receiver_id]
