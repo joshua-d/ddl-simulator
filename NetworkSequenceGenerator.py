@@ -114,6 +114,8 @@ class Worker:
         self.dropped_out = False
         self.score = [0, 0, 0]
 
+        self.should_dropout = False
+
 
 class ParameterServer:
     def __init__(self, id, sync_style, aggr_time, apply_time):
@@ -409,7 +411,7 @@ class NetworkSequenceGenerator:
             self.events.append(ReceiveUpdateEvent(msg.start_time, msg.end_time, msg.from_id, msg.to_id, msg.metadata))
 
             # Check for dropout
-            if random.uniform(0, 1) < worker.dropout_chance and len(worker.parent.children) > 1: # TODO second case is just for now - last worker in a cluster can't drop out
+            if worker.should_dropout: # TODO second case is just for now - last worker in a cluster can't drop out
                 
                 print(f'DROPOUT: worker {worker.id}, parent {worker.parent.id}')
                 ps = worker.parent

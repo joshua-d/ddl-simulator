@@ -236,12 +236,15 @@ class TwoPassCluster:
 
             if type(receiver) == Worker or sender.id == receiver.parent:
                 sender.msgs[receiver.id] = sender.get_params()
+                print(f'SendUpdateEvent ({round(event.start_time, 1)}, {round(event.end_time, 1)}): {sender.id} (parent) sending params to {receiver.id}')
             else:
                 if sender.update_type == UpdateType.PARAMS:
                     sender.msgs[receiver.id] = sender.get_params()
+                    print(f'SendUpdateEvent ({round(event.start_time, 1)}, {round(event.end_time, 1)}): {sender.id} sending params to {receiver.id}')
                 else:
                     sender.msgs[receiver.id] = sender.outgoing_grads
                     sender.outgoing_grads = None
+                    print(f'SendUpdateEvent ({round(event.start_time, 1)}, {round(event.end_time, 1)}): {sender.id} sending grads to {receiver.id}')
 
         elif type(event) == ReceiveUpdateEvent:
             receiver = self.nodes[event.receiver_id]
@@ -251,19 +254,23 @@ class TwoPassCluster:
                 params = sender.msgs[receiver.id]
                 sender.msgs[receiver.id] = None
                 receiver.save_params(params)
+                print(f'ReceiveUpdateEvent ({round(event.start_time, 1)}, {round(event.end_time, 1)}): {receiver.id} received params from parent {sender.id}, saved')
 
             else:
                 # PS update from child
                 if sender.update_type == UpdateType.PARAMS: # Different update types among different nodes currently not supported
                     receiver.incoming_child_params.append(sender.msgs[receiver.id])
+                    print(f'ReceiveUpdateEvent ({round(event.start_time, 1)}, {round(event.end_time, 1)}): {receiver.id} received params (len {len(receiver.incoming_child_params)}) from child {sender.id}')
                 else:
                     receiver.incoming_child_grads.append(sender.msgs[receiver.id])
+                    print(f'ReceiveUpdateEvent ({round(event.start_time, 1)}, {round(event.end_time, 1)}): {receiver.id} received grads (len {len(receiver.incoming_child_grads)}) from child {sender.id}')
 
                 sender.msgs[receiver.id] = None
 
         elif type(event) == WorkerStepEvent:
             loss = self.nodes[event.worker_id].train_step()
             self.steps_complete += 1
+            print(f'WorkerStepEvent ({round(event.start_time, 1)}, {round(event.end_time, 1)}): {event.worker_id}')
             return loss
 
         elif type(event) == PSAggrParamsEvent:
@@ -271,22 +278,26 @@ class TwoPassCluster:
             if ps.sync_style == 'async':
                 params = ps.incoming_child_params.pop(0)
                 ps.async_aggr_and_save_params(params)
+                print(f'PSAggrParamsEvent ({round(event.start_time, 1)}, {round(event.end_time, 1)}): {ps.id}, new len {len(ps.incoming_child_params)}')
             elif ps.sync_style == 'sync':
                 param_sets = ps.incoming_child_params
                 ps.incoming_child_params = []
                 ps.sync_aggr_and_save_params(param_sets)
+                print(f'PSAggrParamsEvent ({round(event.start_time, 1)}, {round(event.end_time, 1)}): {ps.id}')
 
         elif type(event) == PSSaveParamsEvent:
             # Async mid-level PS save params from child for relay up
             ps = self.nodes[event.ps_id]
             params = ps.incoming_child_params.pop(0)
             ps.save_params(params)
+            print(f'PSSaveParamsEvent ({round(event.start_time, 1)}, {round(event.end_time, 1)}): {ps.id}, new len {len(ps.incoming_child_params)}')
 
         elif type(event) == PSSaveGradsEvent:
             # Async mid-level PS save grads from child for relay up
             ps = self.nodes[event.ps_id]
             grads = ps.incoming_child_grads.pop(0)
             ps.outgoing_grads = grads
+            print(f'PSSaveGradsEvent ({round(event.start_time, 1)}, {round(event.end_time, 1)}): {ps.id}, new len {len(ps.incoming_child_grads)}')
 
         elif type(event) == PSAggrGradsEvent:
             ps = self.nodes[event.ps_id]
@@ -295,6 +306,7 @@ class TwoPassCluster:
             grads_sets = ps.incoming_child_grads
             ps.incoming_child_grads = []
             ps.outgoing_grads = ps.aggr_grads(grads_sets)
+            print(f'PSAggrGradsEvent ({round(event.start_time, 1)}, {round(event.end_time, 1)}): {ps.id}')
 
         elif type(event) == PSApplyGradsEvent:
             ps = self.nodes[event.ps_id]
@@ -302,12 +314,14 @@ class TwoPassCluster:
             if ps.sync_style == 'async':
                 grad = ps.incoming_child_grads.pop(0)
                 ps.apply_grads(grad)
+                print(f'PSApplyGradsEvent ({round(event.start_time, 1)}, {round(event.end_time, 1)}): {ps.id}, new len {len(ps.incoming_child_grads)}')
 
             elif ps.sync_style == 'sync':
                 # Grads are already aggregated, sitting in outgoing_grads
                 grads = ps.outgoing_grads
                 ps.outgoing_grads = None
                 ps.apply_grads(grads)
+                print(f'PSApplyGradsEvent ({round(event.start_time, 1)}, {round(event.end_time, 1)}): {ps.id}')
 
         elif type(event) == DropoutEvent:
             self.dropout_log.append(f"Epoch {ceil(self.steps_complete / (self.num_train_samples / self.batch_size))} \tDROPOUT \tW: {event.worker_id}, P: {event.parent_id} \t{event.breakdown}\n")
