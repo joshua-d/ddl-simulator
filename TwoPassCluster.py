@@ -234,7 +234,7 @@ class TwoPassCluster:
             receiver = self.nodes[event.receiver_id]
             sender = self.nodes[event.sender_id]
 
-            if sender == receiver.parent:
+            if type(receiver) == Worker or sender.id == receiver.parent:
                 sender.msgs[receiver.id] = sender.get_params()
             else:
                 if sender.update_type == UpdateType.PARAMS:
@@ -247,7 +247,7 @@ class TwoPassCluster:
             receiver = self.nodes[event.receiver_id]
             sender = self.nodes[event.sender_id]
 
-            if type(receiver) == Worker or sender == receiver.parent:
+            if type(receiver) == Worker or sender.id == receiver.parent:
                 params = sender.msgs[receiver.id]
                 sender.msgs[receiver.id] = None
                 receiver.save_params(params)
@@ -274,16 +274,17 @@ class TwoPassCluster:
             elif ps.sync_style == 'sync':
                 param_sets = ps.incoming_child_params
                 ps.incoming_child_params = []
-                ps.sync_aggr_and_apply_params(param_sets)
+                ps.sync_aggr_and_save_params(param_sets)
 
         elif type(event) == PSSaveParamsEvent:
             # Async mid-level PS save params from child for relay up
             ps = self.nodes[event.ps_id]
             params = ps.incoming_child_params.pop(0)
-            ps.async_save_params(params)
+            ps.save_params(params)
 
         elif type(event) == PSSaveGradsEvent:
             # Async mid-level PS save grads from child for relay up
+            ps = self.nodes[event.ps_id]
             grads = ps.incoming_child_grads.pop(0)
             ps.outgoing_grads = grads
 
