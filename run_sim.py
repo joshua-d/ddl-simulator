@@ -13,7 +13,7 @@ from multiprocessing import Process
 # keys = keys + ps_tsync_keys + w_tsync_keys
 
 
-def run(config, stamp, out_keys):
+def run(config, stamp, out_keys, result_filename):
     # Import model and data builder file
     madb = import_module(config['madb_file'])
 
@@ -68,8 +68,8 @@ if __name__ == '__main__':
 
     sim_i = 0
     for config in configs:
-        # run(config, time_stamp + '_' + str(sim_i), out_keys)
-        p = Process(target=run, args=(config, time_stamp + '_' + str(sim_i), out_keys))
+        # run(config, time_stamp + '_' + str(sim_i), out_keys, result_filename)
+        p = Process(target=run, args=(config, time_stamp + '_' + str(sim_i), out_keys, result_filename))
         p.start()
         p.join()
         del p
