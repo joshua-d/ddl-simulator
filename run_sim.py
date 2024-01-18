@@ -1,5 +1,5 @@
 from TwoPassCluster import TwoPassCluster
-from csv_to_configs import load_configs_csv, make_config, keys
+from csv_to_configs import load_configs_csv, make_config, non_raw_config_keys
 import datetime
 from format_csv import make_row
 from math import ceil
@@ -55,8 +55,8 @@ if __name__ == '__main__':
     time_stamp = str(now.date()) + '_' + time_str[0:time_str.find('.')].replace(':', '-')
 
     # Write key row to result file
-    out_keys = keys.copy()
-    for key in configs[0]['raw_config']:
+    out_keys = list(configs[0]['raw_config'].keys())
+    for key in non_raw_config_keys:
         if key not in out_keys:
             out_keys.append(key)
 

@@ -80,7 +80,7 @@ def make_config(raw_config):
     config['raw_config'] = raw_config
 
     # Topology-independent sim controls
-    config['epochs'] = int(raw_config['epochs'])
+    config['epochs'] = float(raw_config['epochs'])
     config['target_acc_test'] = float(raw_config['target_acc_test'])
     config['target_acc_train'] = float(raw_config['target_acc_train'])
     config['stop_at_target_test'] = bool(int(raw_config['stop_at_target_test']))

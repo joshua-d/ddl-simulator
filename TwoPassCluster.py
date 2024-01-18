@@ -316,7 +316,7 @@ class TwoPassCluster:
             self.dropout_log.append(f"\nEpoch {ceil(self.steps_complete / (self.num_train_samples / self.batch_size))} \tREBALANCE \tW: {event.worker_id}, P: {event.old_parent_id} -> {event.new_parent_id} \t{event.breakdown}\n\n")
 
     # considers nsg.events
-    def get_results(self, stamp, trainless, wc_time, end_time=None, avg_tsync=None, final_acc_test=None, ep_to_target_test=None, t_to_target_test=None, highest_acc_test=None, final_acc_train=None, ep_to_target_train=None, t_to_target_train=None, highest_acc_train=None):
+    def get_results(self, stamp, trainless, wc_time, end_time=None, avg_tsync=None, final_acc_test=None, ep_to_target_test=None, t_to_target_test=None, highest_acc_test=None, final_acc_train=None, ep_to_target_train=None, t_to_target_train=None, highest_acc_train=None, total_epochs=None):
         row = self.config['raw_config']
 
         row['n_runs'] = 1
@@ -363,17 +363,8 @@ class TwoPassCluster:
 
             row['tpe'] = round(end_time / self.epochs, 4)
 
-        elif ep_to_target_test is not None and ep_to_target_train is not None:
-            row['tpe'] = round(max(t_to_target_test, t_to_target_train) / max(ep_to_target_test, ep_to_target_train), 4)
-
-        elif ep_to_target_test is not None:
-            row['tpe'] = round(t_to_target_test / ep_to_target_test, 4)
-
-        elif ep_to_target_train is not None:
-            row['tpe'] = round(t_to_target_train / ep_to_target_train, 4)
-
         else:
-            row['tpe'] = round(end_time / self.epochs, 4)
+            row['tpe'] = round(end_time / total_epochs, 4)
         
         
         row['total_sim_time'] = round(end_time, 4)
@@ -526,7 +517,6 @@ class TwoPassCluster:
             if train_accuracy > highest_acc_train:
                 highest_acc_train = train_accuracy
 
-            # TODO if not trainless and stop at target is on, TPE will be "unfair"
             if (self.stop_at_target_test and target_reached_test) or (self.stop_at_target_train and target_reached_train) or eval_num >= max_eval_intervals:
                 # final_acc = float(str(test_accuracy.numpy()))
                 final_acc_test = test_accuracy
@@ -559,18 +549,9 @@ class TwoPassCluster:
             outfile.write(f'WC Time: {wc_time}')
             outfile.write('\n\n')
 
-
-            if self.generate_gantt: # TODO generate gantt must be on for tsync to be logged
-                total_time = 0
-                n_events = 0
-                for event in saved_events:
-                    if type(event) == ReceiveUpdateEvent:
-                        total_time += event.end_time - event.start_time
-                        n_events += 1
-
-                tsync = total_time / n_events
-                outfile.write('tsync: %f\n' % tsync)
-                outfile.write('BUC: %f\n' % (self.num_workers / tsync))
+            avg_tsync = total_tsync_time / n_receive_events
+            outfile.write('tsync: %f\n' % avg_tsync)
+            outfile.write('BUC: %f\n' % (self.num_workers / avg_tsync))
 
             outfile.write('\n')
             outfile.write(data)
@@ -602,7 +583,7 @@ class TwoPassCluster:
             f.close()
 
         # Return row for results csv
-        return self.get_results(stamp, False, wc_time, end_time, total_tsync_time/n_receive_events, final_acc_test, ep_to_target_test, t_to_target_test, highest_acc_test, final_acc_train, ep_to_target_train, t_to_target_train, highest_acc_train)
+        return self.get_results(stamp, False, wc_time, end_time, avg_tsync, final_acc_test, ep_to_target_test, t_to_target_test, highest_acc_test, final_acc_train, ep_to_target_train, t_to_target_train, highest_acc_train, self.steps_complete / batches_per_epoch)
 
     def trainless(self, stamp):
         batches_per_epoch = self.num_train_samples / self.batch_size # TODO num train samples should be divisible by batch size
