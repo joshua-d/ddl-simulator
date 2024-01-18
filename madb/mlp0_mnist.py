@@ -45,7 +45,9 @@ def build_model_with_seed(seed):
 
 # In dataset-rework, this just gives the master dataset which is automatically "sharded" by thread-safe DatasetIterator
 def dataset_fn():
-    mnist_dataset = mnist_dataset()
+    x_train, y_train = train_dataset()
+    mnist_dataset = tf.data.Dataset.from_tensor_slices(
+      (x_train, y_train))
     dataset = mnist_dataset.shuffle(len(mnist_dataset), seed=model_seed, reshuffle_each_iteration=False)
     return dataset
 

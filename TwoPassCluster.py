@@ -591,7 +591,7 @@ class TwoPassCluster:
 
         start_wc_time = perf_counter()
 
-        while not self.nsg.generate(ceil(self.epochs * batches_per_epoch)):
+        while not self.nsg.generate(end_batch=ceil(self.epochs * batches_per_epoch)):
             pass
 
         wc_time = perf_counter() - start_wc_time
