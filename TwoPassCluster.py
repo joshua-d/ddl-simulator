@@ -399,6 +399,7 @@ class TwoPassCluster:
 
         logging_filename = 'eval_logs/sim_%s.txt' % (stamp)
 
+        gantt_event_limit = 10000
         if self.generate_gantt:
             saved_events = []
 
@@ -447,7 +448,7 @@ class TwoPassCluster:
                 if type(current_event) == ReceiveUpdateEvent:
                     total_tsync_time += current_event.end_time - current_event.start_time
                     n_receive_events += 1
-                if self.generate_gantt:
+                if self.generate_gantt and len(saved_events) < gantt_event_limit:
                     saved_events.append(current_event)
                 loss = self.process_event(current_event)
 

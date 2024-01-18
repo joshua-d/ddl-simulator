@@ -146,3 +146,4 @@ comp/
 format_csv_config.json
 .vscode
 configs/
+results/
