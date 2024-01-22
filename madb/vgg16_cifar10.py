@@ -47,11 +47,11 @@ def build_model_with_seed(seed):
 
 
 # In dataset-rework, this just gives the master dataset which is automatically "sharded" by thread-safe DatasetIterator
-def dataset_fn():
+def dataset_fn(_):
     x_train, y_train = train_dataset()
     cifar10_dataset = tf.data.Dataset.from_tensor_slices(
       (x_train, y_train))
-    dataset = cifar10_dataset.shuffle(len(cifar10_dataset), seed=model_seed, reshuffle_each_iteration=False)
+    dataset = cifar10_dataset.shuffle(10000, seed=model_seed, reshuffle_each_iteration=False).batch(32)
     return dataset
 
 
@@ -71,7 +71,7 @@ def model_builder():
         batch_inputs, batch_targets = batch
         with tf.GradientTape() as tape:
             predictions = model(batch_inputs, training=True)
-            loss = loss_constructor()(batch_targets, predictions)
+            loss = loss_constructor(reduction=tf.keras.losses.Reduction.NONE)(batch_targets, predictions)
 
         grads_list = tape.gradient(loss, model.trainable_variables)
         acc_metric.update_state(batch_targets, predictions)
