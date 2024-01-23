@@ -4,10 +4,10 @@ from tensorflow.keras import initializers
 
 
 # TODO not sure what these should be
-batch_size = 64
-learning_rate = 0.0001
+batch_size = 32
+learning_rate = 0.01
 
-optimizer_constructor = tf.keras.optimizers.Adam
+optimizer_constructor = tf.keras.optimizers.SGD
 loss_constructor = tf.keras.losses.SparseCategoricalCrossentropy
 train_acc_metric_constructor = tf.keras.metrics.SparseCategoricalAccuracy
 
@@ -64,7 +64,7 @@ def model_builder():
 
         train_acc_metric = train_acc_metric_constructor()
 
-    def forward_pass(batch):
+    def forward_pass(batch, train_acc_metric):
         batch_inputs, batch_targets = batch
         with tf.GradientTape() as tape:
             predictions = model(batch_inputs, training=True)
@@ -76,7 +76,7 @@ def model_builder():
         grads_list = tape.gradient(loss, model.trainable_variables)
         train_acc_metric.update_state(batch_targets, predictions)
         
-        return grads_list
+        return grads_list, loss
 
     def build_optimizer(learning_rate):
         return optimizer_constructor(learning_rate=learning_rate)
