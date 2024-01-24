@@ -213,13 +213,15 @@ def consolidate(csv_data, consolidate_keys, avg_keys, **kwargs):
     return out_str
 
 
-if __name__ == '__main__':
+def format_csv(config):
     fns = {
         'examine_2d': examine_2d,
         'examine_1d': examine_1d,
         'consolidate': consolidate
     }
-    config = json.load(open(config_filename))
+    
+    if config is None:
+        config = json.load(open(config_filename))
 
     csv_data = load_csv(config['infile'])
 
@@ -252,6 +254,10 @@ if __name__ == '__main__':
             avg_keys=avg_keys,
             isolates=config['args']['isolates']
         ))
+
+
+if __name__ == '__main__':
+    format_csv(None)
 
 
 """
