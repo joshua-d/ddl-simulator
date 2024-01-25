@@ -563,6 +563,10 @@ class TwoPassCluster:
                     continue
                 outfile.write('%s: %s\n' % (k, self.config[k]))
 
+            outfile.write(f'batch_size: {self.batch_size}\n')
+            outfile.write(f'learning_rate: {self.learning_rate}\n')
+            outfile.write(f'optimizer: {type(self.build_optimizer(self.learning_rate))}\n')
+
             outfile.write('\n[\n')
 
             for node_desc in self.node_descs:
