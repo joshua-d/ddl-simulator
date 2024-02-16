@@ -145,8 +145,8 @@ class TwoPassCluster:
         self.steps_complete = 0
 
         msg_size = self._get_model_size()
-        self.nsg = NetworkSequenceGenerator(self.node_descs, msg_size, self.network_style == 'hd', self.update_type, self.rb_strat, self.bypass_NI)
-        self.gen_buf = 1000
+        self.nsg = NetworkSequenceGenerator(self.node_descs, msg_size, self.network_style == 'hd', self.update_type, self.rb_strat, self.bypass_NI, ceil(self.num_train_samples / self.batch_size))
+        self.gen_buf = 3000
 
         self.dropout_log = []
 

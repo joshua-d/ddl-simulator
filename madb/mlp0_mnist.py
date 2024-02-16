@@ -5,9 +5,9 @@ from tensorflow.keras import initializers
 
 # TODO not sure what these should be
 batch_size = 32
-learning_rate = 0.01
+learning_rate = 0.001
 
-optimizer_constructor = tf.keras.optimizers.SGD
+optimizer_constructor = tf.keras.optimizers.Adam
 loss_constructor = tf.keras.losses.SparseCategoricalCrossentropy
 train_acc_metric_constructor = tf.keras.metrics.SparseCategoricalAccuracy
 
