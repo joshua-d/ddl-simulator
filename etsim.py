@@ -13,13 +13,13 @@ from multiprocessing import Process
 # keys = keys + ps_tsync_keys + w_tsync_keys
 
 
-def run(config, stamp, out_keys, result_filename):
+def run(config, stamp, out_keys, result_filename, output_dir):
     # Import model and data builder file
     madb = import_module(config['madb_file'])
 
     # Begin sim
     for i in range(config['n_runs']):
-        cluster = TwoPassCluster(madb.model_builder, madb.dataset_fn, madb.test_dataset, config)
+        cluster = TwoPassCluster(madb.model_builder, madb.dataset_fn, madb.test_dataset, config, output_dir)
         new_stamp = stamp + '_' + str(i)
         
         # TODO model and stuff gets built event on trainless - inefficient, but doesn't take that much time
@@ -42,6 +42,11 @@ def run(config, stamp, out_keys, result_filename):
 
 
 if __name__ == '__main__':
+    if len(sys.argv) > 2:
+        output_dir = sys.argv[2]
+    else:
+        output_dir = 'eval_logs'
+
     if len(sys.argv) > 1:
         configs_csv_filename = sys.argv[1]
     else:
@@ -60,7 +65,7 @@ if __name__ == '__main__':
         if key not in out_keys:
             out_keys.append(key)
 
-    result_filename = f"eval_logs/results_{time_stamp}.csv"
+    result_filename = f"{output_dir}/results_{time_stamp}.csv"
 
     with open(result_filename, 'w') as resfile:
         resfile.write(make_row(out_keys) + '\n')
@@ -68,8 +73,8 @@ if __name__ == '__main__':
 
     sim_i = 0
     for config in configs:
-        # run(config, time_stamp + '_' + str(sim_i), out_keys, result_filename)
-        p = Process(target=run, args=(config, time_stamp + '_' + str(sim_i), out_keys, result_filename))
+        # run(config, time_stamp + '_' + str(sim_i), out_keys, result_filename, output_dir)
+        p = Process(target=run, args=(config, time_stamp + '_' + str(sim_i), out_keys, result_filename, output_dir))
         p.start()
         p.join()
         del p

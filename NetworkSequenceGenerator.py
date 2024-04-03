@@ -136,11 +136,13 @@ class ParameterServer:
 
 class NetworkSequenceGenerator:
 
-    def __init__(self, node_descs, msg_size, half_duplex, update_type, rb_strat, bypass_NI):
+    def __init__(self, node_descs, msg_size, half_duplex, update_type, rb_strat, bypass_NI, output_dir):
 
         # In bits
         self.msg_size = msg_size
         self.update_type = update_type
+
+        self.output_dir = output_dir
 
         self.nodes = []
         self.workers = []
@@ -614,7 +616,7 @@ class NetworkSequenceGenerator:
         }}
         """.format(timing_str, row_array_str)
 
-        outfile = open('gantt/gantt_datas/gantt_data_%s.json' % stamp, 'w')
+        outfile = open(f'{self.output_dir}/gantt_data_%s.json' % stamp, 'w')
         outfile.write(output)
         outfile.close()
 

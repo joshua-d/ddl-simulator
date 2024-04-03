@@ -126,11 +126,12 @@ class ParameterServer:
             
 class TwoPassCluster:
 
-    def __init__(self, model_builder, dataset_fn, test_dataset_fn, config):
+    def __init__(self, model_builder, dataset_fn, test_dataset_fn, config, output_dir):
         self.model_builder = model_builder
         self.dataset_fn = dataset_fn
         self.test_dataset_fn = test_dataset_fn
         self.config = config
+        self.output_dir = output_dir
 
         self.nodes = {}
 
@@ -145,7 +146,7 @@ class TwoPassCluster:
         self.steps_complete = 0
 
         msg_size = self._get_model_size()
-        self.nsg = NetworkSequenceGenerator(self.node_descs, msg_size, self.network_style == 'hd', self.update_type, self.rb_strat, self.bypass_NI, ceil(self.num_train_samples / self.batch_size))
+        self.nsg = NetworkSequenceGenerator(self.node_descs, msg_size, self.network_style == 'hd', self.update_type, self.rb_strat, self.bypass_NI, output_dir)
         self.gen_buf = 3000
 
         self.dropout_log = []
@@ -397,7 +398,7 @@ class TwoPassCluster:
         batches_per_epoch = self.num_train_samples / self.batch_size # TODO num train samples should be divisible by batch size
         max_eval_intervals = ceil((batches_per_epoch / self.eval_interval) * self.epochs)
 
-        logging_filename = 'eval_logs/sim_%s.txt' % (stamp)
+        logging_filename = f'{self.output_dir}/sim_%s.txt' % (stamp)
 
         gantt_event_limit = 10000
         if self.generate_gantt:
@@ -581,7 +582,7 @@ class TwoPassCluster:
 
         # Log dropout
         if len(self.dropout_log) > 0:
-            fname = f'eval_logs/dropout_{stamp}.txt'
+            fname = f'{self.output_dir}/dropout_{stamp}.txt'
             f = open(fname, 'w')
             for e in self.dropout_log:
                 f.write(e)
