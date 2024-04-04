@@ -19,7 +19,7 @@ def run(config, stamp, out_keys, result_filename, output_dir):
 
     # Begin sim
     for i in range(config['n_runs']):
-        cluster = TwoPassCluster(madb.model_builder, madb.dataset_fn, madb.test_dataset, config, output_dir)
+        cluster = TwoPassCluster(madb.model_builder, madb.train_dataset_fn, madb.test_dataset_fn, config, output_dir)
         new_stamp = stamp + '_' + str(i)
         
         # TODO model and stuff gets built event on trainless - inefficient, but doesn't take that much time

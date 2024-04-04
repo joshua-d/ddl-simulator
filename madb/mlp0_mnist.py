@@ -21,7 +21,7 @@ def train_dataset():
   return x_train, y_train
 
 
-def test_dataset():
+def test_dataset_fn():
     _, (x_test, y_test) = tf.keras.datasets.mnist.load_data()
     x_test = x_test / np.float32(255)
     y_test = y_test.astype(np.int64)
@@ -44,7 +44,7 @@ def build_model_with_seed(seed):
 
 
 # In dataset-rework, this just gives the master dataset which is automatically "sharded" by thread-safe DatasetIterator
-def dataset_fn():
+def train_dataset_fn():
     x_train, y_train = train_dataset()
     mnist_dataset = tf.data.Dataset.from_tensor_slices(
       (x_train, y_train))
