@@ -10,7 +10,7 @@ raw_config_keys = [
     'w_step_var',
     'ps_aggr_time', # PARAMS - time for both sync & async ps to average & save params, GRADS - time for sync ps to sum grads
     'ps_apply_time', # GRADS - time for both sync & async ps to apply grads (backward pass)
-    'global_dropout_chance',
+    'dropout_chance',
 
     'epochs',
     'target_acc_test',
@@ -170,7 +170,7 @@ def make_config(raw_config):
 
                     "step_time": float(raw_config['w_step_time']),
                     "st_variation": float(raw_config['w_step_var']),
-                    "dropout_chance": float(raw_config['global_dropout_chance']),
+                    "dropout_chance": float(raw_config['dropout_chance']),
 
                     "inbound_bw": float(raw_config['bw']),
                     "outbound_bw": float(raw_config['bw'])
