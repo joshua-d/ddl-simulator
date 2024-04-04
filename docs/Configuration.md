@@ -1,8 +1,8 @@
 # Configuration
 
 ETSim uses configuration files to determine the details of each simulation run. There are 3 types of configuration files: the Main Configuration CSV, the Model & Data Builder Module, and the Node Configuration JSON List.
-
-
+\
+&nbsp;
 ## Main Configuration CSV
 
 ### File Details 
@@ -140,3 +140,38 @@ Only relevant if `update_type` is `grads`. Specifies the time in `seconds` for a
 **Key**: `dropout_chance` \
 **Value Type**: `float` \
 Specifies, for each worker, the probability that it drops out after performing a step. For example, if `dropout_chance` is `0.1`, then each worker has a `10%` chance of dropping out each time it performs a step.
+\
+&nbsp;
+## Model & Data Builder Module
+
+The Model & Data Builder (MADB) Module is a Python module that exposes utilities to the simulator that allow it to set up the model and the dataset. Examples are provided in the `madb` directory of this repository.
+
+### Requirements
+
+#### Train Dataset Function
+
+The module must expose a function `train_dataset_fn()` that returns a TensorFlow Dataset that holds the training data and labels, like what's returned from `tf.data.Dataset.from_tensor_slices(...)`. The dataset should be shuffled. It will be batched, repeated, and reshuffled automatically later on.
+
+#### Test Dataset Function
+
+The module must expose a function `test_dataset_fn()` that returns a tuple `(x_test, y_test)`, where `x_test` is a tensor containing test data inputs, and `y_test` is a tensor containing test data labels, like what's returned from `tf.keras.datasets.[dataset name].load_data()`.
+
+#### Model Builder Function
+
+The module must expose a function `model_builder()`. This function returns a tuple containing:
+
+`model` - a keras model.
+
+`params` - a dictionary mapping IDs to each of the model's trainable variables. *Currently, must be created by adding elements from `model.trainable_variables` to the dictionary in order. IDs should just be numerical indices.*
+
+`forward_pass` - a function that takes a batch of data, performs a forward pass using the model, and returns the resulting gradients. See [Examples]().
+
+`build_optimizer` - a function that returns a `tf.keras.Optimizer` for performing a backward pass (i.e. applying gradients, optimizing).
+
+`loss_type` - a `tf.keras.Loss` object representing the type of loss measured for this model.
+
+`train_acc_metric` - a `tf.keras.Metric` used for measuring the train accuracy.
+
+`batch_size` &
+
+`learning_rate`.

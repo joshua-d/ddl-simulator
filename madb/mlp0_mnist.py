@@ -62,7 +62,7 @@ def model_builder():
         params[p_idx] = param
         p_idx += 1
 
-        train_acc_metric = train_acc_metric_constructor()
+    train_acc_metric = train_acc_metric_constructor()
 
     def forward_pass(batch, train_acc_metric):
         batch_inputs, batch_targets = batch
