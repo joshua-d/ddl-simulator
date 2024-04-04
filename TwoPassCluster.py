@@ -181,19 +181,19 @@ class TwoPassCluster:
                     worker.msgs.append(None) 
 
     def _parse_config(self, config):
-
+        # TODO key dependency logic is currently controlled by make_config in csv_to_configs - only required or not checked here
         self.bypass_NI = self._get_config_item(config, 'bypass_NI')
 
         self.network_style = self._get_config_item(config, 'network_style')
 
         self.node_descs = self._get_config_item(config, 'nodes')
 
-        self.target_acc_test = self._get_config_item(config, 'target_acc_test')
-        self.target_acc_train = self._get_config_item(config, 'target_acc_train')
+        self.target_acc_test = self._get_config_item(config, 'target_acc_test', False)
+        self.target_acc_train = self._get_config_item(config, 'target_acc_train', False)
 
-        self.stop_at_target_test = self._get_config_item(config, 'stop_at_target_test')
-        self.stop_at_target_train = self._get_config_item(config, 'stop_at_target_train')
-        self.eval_interval = self._get_config_item(config, 'eval_interval')
+        self.stop_at_target_test = self._get_config_item(config, 'stop_at_target_test', False)
+        self.stop_at_target_train = self._get_config_item(config, 'stop_at_target_train', False)
+        self.eval_interval = self._get_config_item(config, 'eval_interval', False)
         self.epochs = self._get_config_item(config, 'epochs')
 
         self.generate_gantt = self._get_config_item(config, 'generate_gantt')
@@ -208,9 +208,12 @@ class TwoPassCluster:
         
         self.rb_strat = self._get_config_item(config, 'rb_strat')
 
-    def _get_config_item(self, config, item):
+    def _get_config_item(self, config, item, required=True):
         if item not in config:
-            raise Exception('%s not in config' % item)
+            if required:
+                raise Exception('%s not in config' % item)
+            else:
+                return None
         else:
             return config[item]
 
@@ -502,13 +505,13 @@ class TwoPassCluster:
                 test_accuracies = []
 
             # STOPPING CONDITIONS
-            if not target_reached_test and test_accuracy >= self.target_acc_test:
+            if self.target_acc_test is not None and not target_reached_test and test_accuracy >= self.target_acc_test:
                 target_reached_test = True
                 ep_to_target_test = self.steps_complete / batches_per_epoch
                 t_to_target_test = current_event.end_time
                 threshold_results.append(('test', self.target_acc_test, ep_to_target_test, self.steps_complete, t_to_target_test))
 
-            if not target_reached_train and train_accuracy >= self.target_acc_train:
+            if self.target_acc_train is not None and not target_reached_train and train_accuracy >= self.target_acc_train:
                 target_reached_train = True
                 ep_to_target_train = self.steps_complete / batches_per_epoch
                 t_to_target_train = current_event.end_time

@@ -79,24 +79,37 @@ def make_config(raw_config):
 
     config['raw_config'] = raw_config
 
-    # Topology-independent sim controls
-    config['epochs'] = float(raw_config['epochs'])
-    config['target_acc_test'] = float(raw_config['target_acc_test'])
-    config['target_acc_train'] = float(raw_config['target_acc_train'])
-    config['stop_at_target_test'] = bool(int(raw_config['stop_at_target_test']))
-    config['stop_at_target_train'] = bool(int(raw_config['stop_at_target_train']))
-    config['eval_interval'] = int(raw_config['eval_interval'])
-    config['generate_gantt'] = bool(int(raw_config['generate_gantt']))
-    config['trainless'] = bool(int(raw_config['trainless']))
-    config['bypass_NI'] = bool(int(raw_config['bypass_NI']))
-    config['n_runs'] = int(raw_config['n_runs'])
-    
-    
-    config['update_type'] = raw_config['update_type']
-    config['network_style'] = raw_config['network_style']
-    config['madb_file'] = raw_config['madb_file']
-    config['rb_strat'] = raw_config['rb_strat']    
 
+    # Topology-independent sim controls
+
+    ## Required keys
+    config['epochs'] = float(raw_config['epochs'])
+    config['trainless'] = bool(int(raw_config['trainless']))
+    config['madb_file'] = raw_config['madb_file']
+    
+    ## Optional keys
+    if 'target_acc_test' in raw_config:
+        config['target_acc_test'] = float(raw_config['target_acc_test'])
+        config['stop_at_target_test'] = bool(int(raw_config['stop_at_target_test']))
+
+    if 'target_acc_train' in raw_config:
+        config['target_acc_train'] = float(raw_config['target_acc_train'])
+        config['stop_at_target_train'] = bool(int(raw_config['stop_at_target_train']))
+
+    if not config['trainless']:
+        config['eval_interval'] = int(raw_config['eval_interval'])
+
+    # Keys with default values
+    config['update_type'] = raw_config['update_type'] if 'update_type' in raw_config else 'params'
+    config['network_style'] = raw_config['network_style'] if 'network_style' in raw_config else 'hd'
+    config['rb_strat'] = raw_config['rb_strat']   if 'rb_strat' in raw_config else 'none'  
+    
+    config['generate_gantt'] = bool(int(raw_config['generate_gantt'])) if 'generate_gantt' in raw_config else False
+    config['bypass_NI'] = bool(int(raw_config['bypass_NI'])) if 'bypass_NI' in raw_config else False
+    config['n_runs'] = int(raw_config['n_runs']) if 'n_runs' in raw_config else 1
+    
+
+    # Topology
 
     if 'node_config_file' in raw_config and raw_config['node_config_file'] not in ['none', '']:
         config['nodes'] = json.load(open(raw_config['node_config_file']))
