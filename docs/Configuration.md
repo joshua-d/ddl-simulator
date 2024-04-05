@@ -1,6 +1,6 @@
 # Configuration
 
-ETSim uses configuration files to determine the details of each simulation run. There are 3 types of configuration files: the Main Configuration CSV, the Model & Data Builder Module, and the Node Configuration JSON List.
+ETSim uses configuration files to determine the details of each simulation run. There are 3 types of configuration files: the Main Configuration CSV, the Model & Data Builder Module, and the Node Configuration JSON.
 \
 &nbsp;
 ## Main Configuration CSV
@@ -98,9 +98,9 @@ Specifies rebalancing strategy. If worker dropout is enabled, and the topology i
 
 **Key**: `node_config_file` \
 **Value Type**: `str` \
-Specifies a [Node Configuration JSON List file]().
+Specifies a [Node Configuration JSON file]().
 
-##### *If `node_config_file` is not specified, then the following keys must be present:*
+#### *If `node_config_file` is not specified, then the following keys must be present. If it is specified, all of the following keys will be overridden if present.*
 
 **Key**: `topology` \
 **Value Type**: `str` \
@@ -144,7 +144,7 @@ Specifies, for each worker, the probability that it drops out after performing a
 &nbsp;
 ## Model & Data Builder Module
 
-The Model & Data Builder (MADB) Module is a Python module that exposes utilities to the simulator that allow it to set up the model and the dataset. Examples are provided in the `madb` directory of this repository.
+The Model & Data Builder (MADB) Module is a Python module that exposes utilities to the simulator that allow it to set up the model and the dataset. The path to the module must be specified in the [Main Configuration CSV](). Examples are provided in the `madb` directory of this repository.
 
 ### Requirements
 
@@ -175,3 +175,69 @@ The module must expose a function `model_builder()`. This function returns a tup
 `batch_size` &
 
 `learning_rate`.
+\
+&nbsp;
+## Node Configuration JSON
+
+A Node Configuration JSON file, though not required, allows for more control over the attributes of individual nodes in the system. To use one, it must be specified in the [Main Configuration CSV]() with the `node_config_file` key.
+
+This file contains a list of objects, each representing a node. There are 2 types of nodes: parameter servers and workers.
+
+### Shared Keys
+
+All node objects must have the following keys:
+
+**Key**: `node_type` \
+**Value Type**: `str - 'ps' or 'worker'` \
+Specifies if this node is a parameter server (`ps`) or a worker (`worker`)
+
+**Key**: `id` \
+**Value Type**: `int` \
+Numerical ID of this node. Must be equal to the index of this node in the list.
+
+**Key**: `parent` \
+**Value Type**: `int` \
+`id` of this node's parent.
+
+**Key**: `inbound_bw` \
+**Value Type**: `float` \
+Inbound bandwidth of this node in `Mbps`.
+
+**Key**: `outbound_bw` \
+**Value Type**: `float` \
+Outbound bandwidth of this node in `Mbps`.
+
+### Parameter Server Keys
+
+All node objects of type parameter server must have the following keys:
+
+**Key**: `sync_style` \
+**Value Type**: `str - 'sync' or 'async'` \
+Specifies whether this PS uses a `sync` or `async` update policy.
+
+**Key**: `aggr_time` \
+**Value Type**: `float` \
+If `update_type` is `params`: `aggr_time` specifies the time in `seconds` for a parameter server to aggregate and save params from its children. \
+If `update_type` is `grads`: `aggr_time` specifies the time in `seconds` for a `synchronous` parameter server to sum the gradients from its children.
+
+**Key**: `apply_time` \
+**Value Type**: `float` \
+Only relevant if `update_type` is `grads`. Specifies the time in `seconds` for a parameter server to apply gradients to its parameters (backward pass).
+
+### Worker Keys
+
+All node objects of type worker must have the following keys:
+
+**Key**: `step_time` \
+**Value Type**: `float` \
+Specifies the time in `seconds` for a worker to complete 1 step (the time from receiving parameters to having an update ready to send).
+
+**Key**: `step_var` \
+**Value Type**: `float` \
+Specifies a variation (in `seconds`) that will be applied to `step_time` to determine actual worker step time. \
+Actual worker step time =  `step_time` +- U(0, `step_var`) \
+In other words, a random number between 0 and `step_var` (of uniform distribution) will be added to or subtracted from `step_time`.
+
+**Key**: `dropout_chance` \
+**Value Type**: `float` \
+Specifies the probability that this worker drops out after performing a step. For example, if `dropout_chance` is `0.1`, then this worker has a `10%` chance of dropping out each time it performs a step.
