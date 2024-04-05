@@ -6,15 +6,22 @@
 
 ETSim requires [`Python 3.9.x`](https://www.python.org/downloads/release/python-390/).
 
-### 2. Clone ETSim repository
+### 2. Install required Python modules
 
-### 3. Install required Python modules
+ETSim requires [TensorFlow 2.6]() and [numpy]().
 
-See [Setup]() documentation for a list of dependencies, or run the included `install.sh` script.
+    $ python3.9 -m pip install numpy
+    $ python3.9 -m pip install tensorflow==2.6.0
+
+*To enable GPU use, install [CUDA 11]() and [cudnn]().*
+
+### 3. Clone the ETSim repo
+
+    $ git clone https://github.com/joshua-d/ddl-simulator.git
 
 ## Configure the Simulator
 
-ETSim uses configuration files to determine the details of each simulation run. There are 3 types of configuration files: the Main Configuration CSV, the Model & Data Builder Module, and the Node Configuration JSON List.
+ETSim uses configuration files to determine the details of each simulation run. There are 3 types of configuration files: the Main Configuration CSV, the Model & Data Builder Module, and the Node Configuration JSON.
 
 See [Configuration]() documentation for instructions on how to use these files. For now, you may use the included [example files]().
 
