@@ -63,5 +63,50 @@ The module must expose a function `model_builder()`. This function returns a tup
 
 A Node Configuration JSON file, though not required, allows for more control over the attributes of individual nodes in the system. To use one, it must be specified in the [Main Configuration CSV]() with the `node_config_file` key.
 
-This file contains a list of objects, each representing a node. There are 2 types of nodes: parameter servers and workers. [Node Configuration Keys]() contains a list of all required keys for each node and their documentation.
+This file contains a list of objects, each representing a node. There are 2 types of nodes: parameter servers and workers.
+
+Here is an example node config list representing a system with 1 PS and 2 workers:
+
+    [
+        {
+            "node_type": "ps",
+            "id": 0,
+            "parent": None,
+            "sync_style": "sync",
+
+            "aggr_time": 0.01,
+            "apply_time": 0.01,
+
+            "inbound_bw": 100,
+            "outbound_bw": 100
+        },
+
+        {
+            "node_type": "worker",
+            "id": 1,
+            "parent": 0,
+
+            "step_time": 0.05,
+            "st_variation": 0.02,
+            "dropout_chance": 0,
+
+            "inbound_bw": 50,
+            "outbound_bw": 50
+        },
+
+        {
+            "node_type": "worker",
+            "id": 2,
+            "parent": 0,
+
+            "step_time": 0.05,
+            "st_variation": 0.02,
+            "dropout_chance": 0,
+
+            "inbound_bw": 50,
+            "outbound_bw": 50
+        }
+    ]
+
+[Node Configuration Keys]() contains a list of all required keys for each node and their documentation.
 
