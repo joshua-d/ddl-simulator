@@ -170,7 +170,7 @@ def make_config(raw_config):
 
                     "step_time": float(raw_config['w_step_time']),
                     "st_variation": float(raw_config['w_step_var']),
-                    "dropout_chance": float(raw_config['dropout_chance']),
+                    "dropout_chance": float(raw_config['dropout_chance']) if 'dropout_chance' in raw_config else 0,
 
                     "inbound_bw": float(raw_config['bw']),
                     "outbound_bw": float(raw_config['bw'])

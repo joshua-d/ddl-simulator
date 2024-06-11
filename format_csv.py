@@ -182,21 +182,25 @@ def consolidate(csv_data, consolidate_keys, avg_keys, **kwargs):
                 rows_to_consolidate.append(aux_row_idx)
 
         cons_vals = {}
+        cons_counts = {}
         total_n_runs = 0
         for cons_row_idx in rows_to_consolidate:
             total_n_runs += int(csv_data['n_runs'][cons_row_idx])
             for avg_key in avg_keys:
                 if avg_key not in cons_vals:
                     cons_vals[avg_key] = 0
+                    cons_counts[avg_key] = 0
                 try:
                     cons_vals[avg_key] += float(csv_data[avg_key][cons_row_idx]) * int(csv_data['n_runs'][cons_row_idx])
+                    cons_counts[avg_key] += int(csv_data['n_runs'][cons_row_idx])
                 except ValueError:
                     pass
             
             consolidated_row_idxs.append(cons_row_idx)
 
         for avg_key in cons_vals:
-            cons_vals[avg_key] = round(cons_vals[avg_key] / total_n_runs, 4)
+            if cons_counts[avg_key] > 0:
+                cons_vals[avg_key] = round(cons_vals[avg_key] / cons_counts[avg_key], 4)
 
         for key in csv_data:
             if key in consolidate_keys:
