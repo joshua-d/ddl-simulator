@@ -4,6 +4,8 @@ A distributed deep learning simulator using discrete event simulation, built ato
 
 Independently developed by Joshua Daley, M.S. Computer Science; under supervision of Dr. Yifan Zhang, Binghamton University Computer Science Department.
 
+[Thesis](https://www.proquest.com/docview/3071668172)
+
 # Basic Usage
 
 ##  Setup
